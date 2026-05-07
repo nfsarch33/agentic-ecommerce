@@ -19,8 +19,9 @@ import (
 type actorContextKey struct{}
 
 type requestActor struct {
-	Subject string
-	Role    security.Role
+	Subject  string
+	Role     security.Role
+	TenantID string
 }
 
 type roleResolver func(*http.Request) security.Role
@@ -112,6 +113,9 @@ func (s *server) withRBAC(resolve roleResolver, next http.HandlerFunc) http.Hand
 		}
 		if corr := requestCorrelationFromContext(r.Context()); corr != nil {
 			corr.ActorID = actor.Subject
+			if actor.TenantID != "" {
+				corr.TenantID = actor.TenantID
+			}
 		}
 		ctx := context.WithValue(r.Context(), actorContextKey{}, actor)
 		next(w, r.WithContext(ctx))
@@ -130,7 +134,7 @@ func (s *server) authenticateRequest(r *http.Request) (requestActor, bool) {
 	if s.tokenManager != nil {
 		claims, err := s.tokenManager.VerifyAccessToken(token)
 		if err == nil {
-			return requestActor{Subject: claims.Subject, Role: claims.Role}, true
+			return requestActor{Subject: claims.Subject, Role: claims.Role, TenantID: claims.TenantID}, true
 		}
 	}
 	if s.cfg.apiToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.apiToken)) == 1 {
@@ -279,6 +283,20 @@ func agentsRole(r *http.Request) security.Role {
 }
 
 func webhooksRole(r *http.Request) security.Role {
+	if r.Method == http.MethodGet {
+		return security.RoleViewer
+	}
+	return security.RoleOperator
+}
+
+func tenantSettingsRole(r *http.Request) security.Role {
+	if r.Method == http.MethodGet {
+		return security.RoleViewer
+	}
+	return security.RoleOperator
+}
+
+func customRulesRole(r *http.Request) security.Role {
 	if r.Method == http.MethodGet {
 		return security.RoleViewer
 	}

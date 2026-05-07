@@ -818,6 +818,265 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ComplianceRulesResponse'
+  /api/v1/tenant/settings:
+    get:
+      summary: Get tenant settings
+      operationId: getTenantSettings
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantIDHeader'
+      responses:
+        '200':
+          description: Tenant-scoped configuration settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSettings'
+        '400':
+          description: Tenant context is required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid JWT bearer token when auth is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Update tenant settings
+      operationId: updateTenantSettings
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantIDHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantSettingsUpdate'
+      responses:
+        '200':
+          description: Updated tenant-scoped configuration settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSettings'
+        '400':
+          description: Invalid JSON body or missing tenant context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid JWT bearer token when auth is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Actor does not have permission to update tenant settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Tenant settings failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/compliance/custom-rules:
+    get:
+      summary: List tenant custom compliance rules
+      operationId: listCustomComplianceRules
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantIDHeader'
+      responses:
+        '200':
+          description: Tenant-scoped custom compliance rules.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceCustomRulesResponse'
+        '400':
+          description: Tenant context is required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create tenant custom compliance rule
+      operationId: createCustomComplianceRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantIDHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceCustomRuleRequest'
+      responses:
+        '201':
+          description: Custom compliance rule created at version 1.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceCustomRule'
+        '400':
+          description: Invalid JSON body or missing tenant context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid JWT bearer token when auth is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Actor does not have permission to mutate custom rules.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Custom rule validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/compliance/custom-rules/{id}:
+    put:
+      summary: Update tenant custom compliance rule
+      operationId: updateCustomComplianceRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantIDHeader'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceCustomRuleUpdate'
+      responses:
+        '200':
+          description: Custom compliance rule updated with incremented version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceCustomRule'
+        '400':
+          description: Invalid JSON body or missing tenant context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Custom rule not found for this tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Custom rule validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Delete tenant custom compliance rule
+      operationId: deleteCustomComplianceRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantIDHeader'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Custom rule deleted.
+        '400':
+          description: Missing tenant context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Custom rule not found for this tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/compliance/reports/summary:
+    get:
+      summary: Get tenant compliance reporting summary
+      operationId: getComplianceReportSummary
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantIDHeader'
+      responses:
+        '200':
+          description: Aggregated pass/fail reporting by tenant, rule, product, and trend.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceSummary'
+        '400':
+          description: Tenant context is required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/compliance/reports/export:
+    get:
+      summary: Export tenant compliance report
+      operationId: exportComplianceReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantIDHeader'
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+      responses:
+        '200':
+          description: Tenant-scoped compliance history export.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceExportResponse'
+            text/csv:
+              schema:
+                type: string
+        '400':
+          description: Tenant context is required or export format is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/orders:
     post:
       summary: Create an order
@@ -1813,6 +2072,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 components:
+  parameters:
+    TenantIDHeader:
+      name: X-Tenant-ID
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Tenant scope for MVP requests when the JWT does not carry a tenant_id claim.
   securitySchemes:
     bearerAuth:
       type: http
@@ -2563,6 +2830,244 @@ components:
     ComplianceSeverity:
       type: string
       enum: [info, warning, error, critical]
+    TenantSettings:
+      type: object
+      required: [tenant_id, branding, woocommerce, ai, compliance, updated_at]
+      properties:
+        tenant_id:
+          type: string
+        branding:
+          $ref: '#/components/schemas/TenantBrandingSettings'
+        woocommerce:
+          $ref: '#/components/schemas/TenantWooCredentialRefs'
+        ai:
+          $ref: '#/components/schemas/TenantAIPreferences'
+        compliance:
+          $ref: '#/components/schemas/TenantComplianceOverrides'
+        updated_at:
+          type: string
+          format: date-time
+    TenantSettingsUpdate:
+      type: object
+      properties:
+        branding:
+          $ref: '#/components/schemas/TenantBrandingSettings'
+        woocommerce:
+          $ref: '#/components/schemas/TenantWooCredentialRefs'
+        ai:
+          $ref: '#/components/schemas/TenantAIPreferences'
+        compliance:
+          $ref: '#/components/schemas/TenantComplianceOverrides'
+    TenantBrandingSettings:
+      type: object
+      properties:
+        store_name:
+          type: string
+        logo_url:
+          type: string
+          format: uri
+        primary_color:
+          type: string
+        accent_color:
+          type: string
+    TenantWooCredentialRefs:
+      type: object
+      properties:
+        store_url:
+          type: string
+          format: uri
+        consumer_key_ref:
+          type: string
+        consumer_secret_ref:
+          type: string
+    TenantAIPreferences:
+      type: object
+      properties:
+        content_tone:
+          type: string
+        model_tier:
+          type: string
+        auto_generate_seo:
+          type: boolean
+        fact_check_required:
+          type: boolean
+    TenantComplianceOverrides:
+      type: object
+      properties:
+        disabled_rule_ids:
+          type: array
+          items:
+            type: string
+        severity_override:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [info, warning, error, critical]
+        seo_score_min:
+          type: integer
+          minimum: 0
+          maximum: 100
+    ComplianceCustomRulesResponse:
+      type: object
+      required: [rules]
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceCustomRule'
+    ComplianceCustomRule:
+      type: object
+      required: [tenant_id, id, version, name, severity, enabled, definition, created_at, updated_at]
+      properties:
+        tenant_id:
+          type: string
+        id:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+        description:
+          type: string
+        severity:
+          $ref: '#/components/schemas/ComplianceSeverity'
+        enabled:
+          type: boolean
+        definition:
+          $ref: '#/components/schemas/ComplianceCustomRuleDefinition'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ComplianceCustomRuleRequest:
+      type: object
+      required: [id, name, severity, enabled, definition]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        severity:
+          $ref: '#/components/schemas/ComplianceSeverity'
+        enabled:
+          type: boolean
+        definition:
+          $ref: '#/components/schemas/ComplianceCustomRuleDefinition'
+    ComplianceCustomRuleUpdate:
+      type: object
+      required: [name, severity, enabled, definition]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        severity:
+          $ref: '#/components/schemas/ComplianceSeverity'
+        enabled:
+          type: boolean
+        definition:
+          $ref: '#/components/schemas/ComplianceCustomRuleDefinition'
+    ComplianceCustomRuleDefinition:
+      type: object
+      required: [type, field, values]
+      properties:
+        type:
+          type: string
+          enum: [contains_any]
+        field:
+          type: string
+          enum: [title, description, meta_description, seo_title]
+        values:
+          type: array
+          items:
+            type: string
+        fail_reason:
+          type: string
+    ComplianceSummary:
+      type: object
+      required: [tenant_id, total_checks, passed_checks, failed_checks, pass_rate, rule_stats, product_stats, trends]
+      properties:
+        tenant_id:
+          type: string
+        total_checks:
+          type: integer
+        passed_checks:
+          type: integer
+        failed_checks:
+          type: integer
+        pass_rate:
+          type: number
+        rule_stats:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ComplianceRuleStat'
+        product_stats:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ComplianceProductStat'
+        trends:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceTrendPoint'
+    ComplianceRuleStat:
+      type: object
+      required: [rule_id, passed, failed, total]
+      properties:
+        rule_id:
+          type: string
+        passed:
+          type: integer
+        failed:
+          type: integer
+        total:
+          type: integer
+    ComplianceProductStat:
+      type: object
+      required: [product_id, passed, failed, total]
+      properties:
+        product_id:
+          type: string
+        passed:
+          type: integer
+        failed:
+          type: integer
+        total:
+          type: integer
+    ComplianceTrendPoint:
+      type: object
+      required: [date, passed, failed, total]
+      properties:
+        date:
+          type: string
+          format: date
+        passed:
+          type: integer
+        failed:
+          type: integer
+        total:
+          type: integer
+    ComplianceEvaluationRecord:
+      type: object
+      required: [tenant_id, product_id, checked_at, result]
+      properties:
+        tenant_id:
+          type: string
+        product_id:
+          type: string
+        checked_at:
+          type: string
+          format: date-time
+        result:
+          $ref: '#/components/schemas/ComplianceCheckResponse'
+    ComplianceExportResponse:
+      type: array
+      items:
+        $ref: '#/components/schemas/ComplianceEvaluationRecord'
     SEOSuggestionRequest:
       type: object
       properties:
