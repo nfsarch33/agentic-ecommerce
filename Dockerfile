@@ -2,6 +2,7 @@ FROM golang:1.24-alpine AS builder
 
 ARG VERSION=dev
 ARG COMMIT=unknown
+ARG TARGET=mc-api
 
 RUN apk add --no-cache git ca-certificates tzdata
 
@@ -14,16 +15,16 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" \
-    -o /mc-api ./cmd/mc-api
+    -o /out/app ./cmd/${TARGET}
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-COPY --from=builder /mc-api /mc-api
+COPY --from=builder /out/app /app
 
 USER nonroot:nonroot
 
 EXPOSE 8080
 
-ENTRYPOINT ["/mc-api"]
+ENTRYPOINT ["/app"]
