@@ -2,6 +2,37 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## v2.0.0 - 2026-05-08
+
+### Release Summary
+
+v2.0.0 completes the v1.1.0-v2.0.0 roadmap and promotes the backend from a v1.0 Mission Control API into the durable orchestration spine for the full Agentic Ecommerce stack. The release combines Redis Streams events, tenant-aware data access, Temporal workflows, pgvector-backed RAG and fact-checking, Media Intelligence, outbound webhooks for n8n automation, recurring agent schedules, cloud hardening, performance/security gates, and v1.9 tenant compliance reporting into one documented release candidate.
+
+### Capabilities Included
+
+- Redis Streams event bus with tenant-aware event envelopes, at-least-once delivery semantics, consumer groups, and dead-letter handling.
+- Tenant-aware PostgreSQL model coverage for catalog, orders, product media, RAG documents, tenant settings, custom compliance rules, compliance history, and export/reporting surfaces.
+- Temporal workflow layer for `ProductPublishWorkflow`, `ContentGenerationWorkflow`, `MediaProcessingWorkflow`, `SourcingWorkflow`, human-review signals, status lookup, and worker deployment through the `temporal-worker` service.
+- CCE expansion in Go with pgvector-backed RAG ingestion/search, fact-check evidence retrieval, content evaluation, compliance checks, SEO readiness, and bridge-only AI boundaries.
+- Media Intelligence API coverage for supplier image sourcing, deterministic processing, quality validation, object-store persistence, CDN-ready URLs, and workflow-driven product linking.
+- Outbound webhook registration, HMAC signing, test delivery, WooCommerce inbound webhook contracts, and credential-free n8n example workflow templates.
+- Advanced agent runtime contracts for sourcing, pricing, compliance, schedule controls, worker metrics, and automation events.
+- Production hardening for Compose, Terraform AWS ECS/GCP Cloud Run dry-run contracts, Temporal placeholders, S3/GCS media storage, secret-manager mappings, CDN stubs, autoscaling intent, and monitoring validation.
+- v1.8-v1.9 QA baselines covering contract tests, k6 performance targets, tenant isolation fixtures, compliance report export, docs-inclusive leak scans, Sentrux gates, and shell-leak hygiene.
+
+### Release Gates
+
+- Backend documentation and contract gates: `VERSION`, `api/openapi.yaml`, `CHANGELOG.md`, `README.md`, `docs/api-reference.md`, `docs/temporal-workflow-specs.md`, `docs/webhook-contracts.md`, and ADR-025 all identify v2.0.0.
+- Runtime gates: `go test -race ./...`, `go vet ./...`, `make build`, `make coverage-check`, `make contract-test`, `make release-perf-smoke`, `make monitoring-validate`, `make compose-config`, and `make compose-config-prod`.
+- Workflow and automation gates: `make compose-temporal-config`, `go test ./internal/workflow/...`, `make compose-agent-schedules-config`, `make n8n-config`, and `make n8n-workflows-validate`.
+- Security gates: `make security-refresh`, `sentrux gate .`, `runx shell-leak-scan --repo ecommerce`, and docs-inclusive checks for live secrets, private hosts, internal IPs, provider credentials, account IDs, `.tfvars`, and direct MiniMax app-service calls.
+- Cross-stack gates: frontend generated API types must be regenerated from `api/openapi.yaml`; release notes must include final backend and frontend SHAs.
+
+### Notes
+
+- This release prepares documentation, contracts, and version metadata for v2.0.0. It does not tag or publish a GitHub release by itself.
+- ADR-025 records the release decisions and v3.0.0 roadmap preview.
+
 ## v1.0.0 - 2026-05-07
 
 ### Release Summary
