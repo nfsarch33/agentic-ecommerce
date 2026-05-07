@@ -80,6 +80,55 @@ func TestRunOnceExecutesDeterministicAgentThroughOrchestrator(t *testing.T) {
 	}
 }
 
+func TestRunDisabledSkipsScheduler(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	cfg := Config{Enabled: false, MetricsAddr: "127.0.0.1:0", Interval: time.Minute, Concurrency: 1}
+
+	if err := run(context.Background(), slog.New(slog.NewJSONHandler(&buf, nil)), cfg); err != nil {
+		t.Fatalf("run returned error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "agent-worker.disabled") {
+		t.Fatalf("logs missing disabled event:\n%s", buf.String())
+	}
+}
+
+func TestRunStartsMetricsServerAndShutsDownOnContextCancel(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	cfg := Config{
+		Enabled:        true,
+		Concurrency:    1,
+		Interval:       time.Hour,
+		MetricsAddr:    "127.0.0.1:0",
+		EventBusDriver: "redis",
+		SyncChannel:    "ec.sync.events",
+		DLQChannel:     "ec.sync.deadletter",
+	}
+
+	go func() {
+		errCh <- run(ctx, slog.New(slog.NewJSONHandler(&buf, nil)), cfg)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("run returned error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("run did not shut down after context cancellation")
+	}
+	if logs := buf.String(); !strings.Contains(logs, "agent-worker.start") || !strings.Contains(logs, "agent-worker.shutdown") {
+		t.Fatalf("logs missing lifecycle events:\n%s", logs)
+	}
+}
+
 func TestMetricsHandlerExposesAgentWorkerMetrics(t *testing.T) {
 	t.Parallel()
 
@@ -181,5 +230,61 @@ func TestHealthcheckArgs(t *testing.T) {
 	}
 	if isHealthcheckArgs([]string{"agent-worker"}) {
 		t.Fatal("isHealthcheckArgs without healthcheck arg = true, want false")
+	}
+}
+
+func TestParseHelpersAcceptDocumentedValuesAndRejectInvalidInput(t *testing.T) {
+	t.Parallel()
+
+	boolTests := []struct {
+		raw      string
+		fallback bool
+		want     bool
+	}{
+		{raw: "", fallback: true, want: true},
+		{raw: "YES", want: true},
+		{raw: "off", fallback: true, want: false},
+	}
+	for _, tt := range boolTests {
+		got, err := parseBool(tt.raw, tt.fallback)
+		if err != nil {
+			t.Fatalf("parseBool(%q): %v", tt.raw, err)
+		}
+		if got != tt.want {
+			t.Fatalf("parseBool(%q) = %v, want %v", tt.raw, got, tt.want)
+		}
+	}
+	if _, err := parseBool("sometimes", false); err == nil {
+		t.Fatal("parseBool accepted invalid input")
+	}
+
+	if got, err := parsePositiveInt(" 7 ", 1); err != nil || got != 7 {
+		t.Fatalf("parsePositiveInt = %d, %v; want 7 nil", got, err)
+	}
+	if _, err := parsePositiveInt("0", 1); err == nil {
+		t.Fatal("parsePositiveInt accepted zero")
+	}
+
+	durationTests := []struct {
+		raw  string
+		want time.Duration
+	}{
+		{raw: "", want: 5 * time.Second},
+		{raw: "250ms", want: 250 * time.Millisecond},
+		{raw: "15", want: 15 * time.Second},
+	}
+	for _, tt := range durationTests {
+		got, err := parseDuration(tt.raw, 5*time.Second)
+		if err != nil {
+			t.Fatalf("parseDuration(%q): %v", tt.raw, err)
+		}
+		if got != tt.want {
+			t.Fatalf("parseDuration(%q) = %s, want %s", tt.raw, got, tt.want)
+		}
+	}
+	for _, raw := range []string{"0", "-1s", "forever"} {
+		if _, err := parseDuration(raw, time.Second); err == nil {
+			t.Fatalf("parseDuration(%q) accepted invalid input", raw)
+		}
 	}
 }

@@ -34,6 +34,44 @@ func TestCheckWrapsContentEvaluatorWithPassReasons(t *testing.T) {
 	}
 }
 
+func TestComplianceDescriptorAdvertisesQualityGateCapability(t *testing.T) {
+	t.Parallel()
+
+	descriptor := NewAgent().Descriptor()
+	if descriptor.ID != "compliance" || descriptor.Name == "" {
+		t.Fatalf("descriptor = %+v", descriptor)
+	}
+	if !containsReason(descriptor.Capabilities, "quality_gate") {
+		t.Fatalf("capabilities = %v, want quality_gate", descriptor.Capabilities)
+	}
+}
+
+func TestComplianceRunReturnsStructuredPayloadForScheduler(t *testing.T) {
+	t.Parallel()
+
+	agent := NewAgent()
+	result, err := agent.Run(context.Background(), orchestrator.Task{Payload: map[string]any{
+		"product": map[string]any{"id": "p1", "title": "Foam Roller"},
+		"output": map[string]any{
+			"description":      "Foam Roller supports simple recovery routines at home.",
+			"seo_title":        "Foam Roller",
+			"meta_description": "Foam Roller for recovery and mobility routines.",
+		},
+		"style":     "professional",
+		"max_words": 80,
+		"keywords":  []string{"foam roller"},
+	}})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Payload["pass"] != true {
+		t.Fatalf("payload = %#v, want passing compliance result", result.Payload)
+	}
+	if _, ok := result.Payload["evaluation"].(map[string]any); !ok {
+		t.Fatalf("payload missing normalized evaluation: %#v", result.Payload)
+	}
+}
+
 func TestCheckReturnsStructuredFailureReasons(t *testing.T) {
 	t.Parallel()
 
