@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agentic Ecommerce Mission Control API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Public contract for the Agentic Ecommerce Go backend consumed by
     agentic-ecommerce-web. This spec intentionally excludes private
@@ -207,6 +207,172 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/orders:
+    post:
+      summary: Create an order
+      operationId: createOrder
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid JSON body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Order validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/orders/{id}:
+    get:
+      summary: Get an order by ID
+      operationId: getOrder
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Order found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid order ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Order not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/orders/{id}/status:
+    patch:
+      summary: Advance order status
+      operationId: updateOrderStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrderStatusRequest'
+      responses:
+        '200':
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid JSON body or invalid ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Order not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid status or status transition.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/cart/{session_id}:
+    get:
+      summary: Get a cart session
+      operationId: getCart
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Cart session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+    put:
+      summary: Replace a cart session
+      operationId: putCart
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartRequest'
+      responses:
+        '200':
+          description: Cart saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '400':
+          description: Invalid JSON body or session ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Cart validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -309,6 +475,152 @@ components:
         per_page:
           type: integer
           minimum: 1
+    ShippingAddress:
+      type: object
+      required: [name, line1, city, postal_code, country]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        line1:
+          type: string
+          minLength: 1
+        line2:
+          type: string
+        city:
+          type: string
+          minLength: 1
+        region:
+          type: string
+        postal_code:
+          type: string
+          minLength: 1
+        country:
+          type: string
+          minLength: 2
+    Totals:
+      type: object
+      required: [subtotal, shipping, total]
+      properties:
+        subtotal:
+          $ref: '#/components/schemas/Money'
+        shipping:
+          $ref: '#/components/schemas/Money'
+        total:
+          $ref: '#/components/schemas/Money'
+    OrderItem:
+      type: object
+      required: [product_id, sku, title, quantity, unit_price, line_total]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+          minLength: 1
+        title:
+          type: string
+          minLength: 1
+        quantity:
+          type: integer
+          minimum: 1
+        unit_price:
+          $ref: '#/components/schemas/Money'
+        line_total:
+          $ref: '#/components/schemas/Money'
+    OrderItemInput:
+      type: object
+      required: [product_id, sku, title, quantity, unit_price]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+          minLength: 1
+        title:
+          type: string
+          minLength: 1
+        quantity:
+          type: integer
+          minimum: 1
+        unit_price:
+          $ref: '#/components/schemas/Money'
+    Order:
+      type: object
+      required: [id, customer_email, items, status, totals, shipping_address, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        customer_email:
+          type: string
+          format: email
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        status:
+          type: string
+          enum: [pending, paid, fulfilled, shipped, completed, failed, cancelled]
+        totals:
+          $ref: '#/components/schemas/Totals'
+        shipping_address:
+          $ref: '#/components/schemas/ShippingAddress'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateOrderRequest:
+      type: object
+      required: [customer_email, items, shipping_address]
+      properties:
+        customer_email:
+          type: string
+          format: email
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OrderItemInput'
+        shipping_address:
+          $ref: '#/components/schemas/ShippingAddress'
+        shipping:
+          $ref: '#/components/schemas/Money'
+    UpdateOrderStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, paid, fulfilled, shipped, completed, failed, cancelled]
+    Cart:
+      type: object
+      required: [session_id, items, totals, updated_at]
+      properties:
+        session_id:
+          type: string
+          minLength: 1
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        totals:
+          $ref: '#/components/schemas/Totals'
+        updated_at:
+          type: string
+          format: date-time
+    CartRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItemInput'
     ErrorResponse:
       type: object
       required: [error]
