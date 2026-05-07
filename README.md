@@ -2,6 +2,8 @@
 
 Standalone Go service stack for WooCommerce-first agentic ecommerce.
 
+Current release: **v1.0.0**. See `VERSION`, `CHANGELOG.md`, and `docs/release-checklist.md` for release gates.
+
 ## Scope
 
 - Mission Control API spine (`cmd/mc-api`)
@@ -11,6 +13,36 @@ Standalone Go service stack for WooCommerce-first agentic ecommerce.
 
 This repo starts with WooCommerce cashflow first, then grows into multi-channel catalog, content compliance, Temporal workflows, n8n event automation, and media intelligence.
 
+## Architecture
+
+```mermaid
+flowchart TB
+  Web["agentic-ecommerce-web\nNext.js storefront + admin"]
+  BFF["Frontend BFF routes\n/api/auth/* and /api/ai-describe"]
+  API["mc-api\nGo Mission Control API"]
+  Workers["Workers\nwc-sync, content-worker, agent-worker"]
+  Postgres["PostgreSQL + pgvector"]
+  Redis["Redis\ncart/session + event bus"]
+  Woo["WooCommerce REST API\noperator-approved sync"]
+  Bridge["Approved AI bridge\nOpenAI-compatible proxy"]
+  Monitoring["Prometheus + Grafana"]
+  Cloud["AWS ECS / GCP Cloud Run\nTerraform dry-run contracts"]
+
+  Web --> BFF
+  BFF --> API
+  BFF --> Bridge
+  API --> Postgres
+  API --> Redis
+  API --> Workers
+  Workers --> Woo
+  Workers --> Bridge
+  API --> Monitoring
+  Workers --> Monitoring
+  API -. image + env contract .-> Cloud
+  Web -. image + env contract .-> Cloud
+```
+
+`api/openapi.yaml` is the source of truth for the backend API consumed by the frontend. Public platform endpoints are `/healthz`, `/readyz`, and `/metrics`; storefront product reads, cart operations, and checkout order creation remain public, while admin/operator mutations require JWT bearer tokens and RBAC.
 
 ## Public Safety
 
@@ -18,7 +50,7 @@ This repository is Apache-2.0 and safe for public collaboration only while it co
 
 The public Next.js frontend lives at `nfsarch33/agentic-ecommerce-web` and consumes the API contract in `api/openapi.yaml`.
 
-## Local Development
+## Quickstart
 
 Use the dev compose stack for backend work:
 
@@ -35,6 +67,14 @@ The stack runs PostgreSQL, Redis 7, and `mc-api` with published ports bound to `
 Protected backend operations use JWT bearer tokens with RBAC roles `admin`, `operator`, and `viewer`. Configure `ECOMMERCE_JWT_SECRET`, `ECOMMERCE_ADMIN_USERNAME`, and `ECOMMERCE_ADMIN_PASSWORD` locally, then call `/api/v1/auth/login` for a short-lived access token. Health, readiness, metrics, storefront product reads, cart operations, and checkout order creation remain public.
 
 For the storefront checkout flow, run `agentic-ecommerce-web` separately with `bun run dev` and point it at `http://127.0.0.1:8080`. See `docs/local-development.md` for the backend compose, frontend dev, and Redis readiness plan.
+
+## API Documentation
+
+- Backend OpenAPI contract: `api/openapi.yaml`.
+- Local API root: `http://127.0.0.1:8080` after `make dev`.
+- Frontend BFF route documentation: `agentic-ecommerce-web/docs/bff-routes.md`.
+
+Regenerate frontend API types from this contract in the frontend repo with `bun run api:generate` after backend contract changes.
 
 ## Full Stack Compose
 
@@ -63,7 +103,7 @@ WooCommerce plugin installation and REST API key creation are explicit local ste
 
 ## Cloud Deployment
 
-v0.8.0 introduces credential-free Terraform deployment scaffolding for AWS ECS Fargate and GCP Cloud Run under `deploy/terraform/`. See `docs/cloud-deploy.md` for SHA-tagged image promotion, secret-manager mapping, database migration workflow, and cloud observability notes.
+The v1.0.0 release keeps Docker Compose as the deploy-contract source of truth and provides credential-free Terraform scaffolding for AWS ECS Fargate and GCP Cloud Run under `deploy/terraform/`. See `docs/cloud-deploy.md` for SHA-tagged image promotion, secret-manager mapping, Docker Compose references, database migration workflow, security boundaries, and cloud observability notes.
 
 ## Gates
 

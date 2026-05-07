@@ -7,13 +7,13 @@ locals {
 
   common_backend_env = {
     ECOMMERCE_ALLOWED_ORIGIN        = var.allowed_origin
-    ECOMMERCE_JWT_ISSUER           = "agentic-ecommerce"
-    ECOMMERCE_JWT_AUDIENCE         = "mc-api"
-    ECOMMERCE_JWT_ACCESS_TTL       = "15m"
-    ECOMMERCE_REFRESH_TTL          = "24h"
-    ECOMMERCE_ADMIN_ROLE           = "admin"
-    ECOMMERCE_RATE_LIMIT_CAPACITY  = "120"
-    ECOMMERCE_RATE_LIMIT_REFILL    = "1m"
+    ECOMMERCE_JWT_ISSUER            = "agentic-ecommerce"
+    ECOMMERCE_JWT_AUDIENCE          = "mc-api"
+    ECOMMERCE_JWT_ACCESS_TTL        = "15m"
+    ECOMMERCE_REFRESH_TTL           = "24h"
+    ECOMMERCE_ADMIN_ROLE            = "admin"
+    ECOMMERCE_RATE_LIMIT_CAPACITY   = "120"
+    ECOMMERCE_RATE_LIMIT_REFILL     = "1m"
     ECOMMERCE_EVENTBUS_DRIVER       = "redis"
     ECOMMERCE_EVENTBUS_CHANNEL_SYNC = "ec.sync.events"
     ECOMMERCE_EVENTBUS_CHANNEL_DLQ  = "ec.sync.deadletter"

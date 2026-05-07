@@ -1,6 +1,6 @@
 # Cloud Deployment Guide
 
-v0.8.0 adds a safe cloud deployment path for the Agentic Ecommerce stack. The first milestone is cloud-agnostic Docker Compose locally, followed by Terraform dry-runs for AWS ECS Fargate and GCP Cloud Run. The Terraform examples intentionally use placeholders and secret references only; do not commit account IDs, live project IDs, private regions, real endpoints, or secret values.
+v1.0.0 keeps a safe cloud deployment path for the Agentic Ecommerce stack. Docker Compose remains the local release-candidate contract, followed by Terraform dry-runs for AWS ECS Fargate and GCP Cloud Run. The Terraform examples intentionally use placeholders and secret references only; do not commit account IDs, live project IDs, private regions, real endpoints, or secret values.
 
 ## Deployment Shape
 
@@ -32,7 +32,7 @@ CI should push:
 - `ghcr.io/nfsarch33/agentic-ecommerce:$IMAGE_TAG-agent-worker` for `agent-worker`.
 - `ghcr.io/nfsarch33/agentic-ecommerce-web:$IMAGE_TAG` for the frontend once the frontend repo builds the matching SHA.
 
-Use the backend SHA and frontend SHA from the release note or PR description when promoting a stack. For v0.8.0 planning, the known baselines are backend `173c3620f6adbf8a2bc40cc34b64cd5944553c41` and frontend `e7004f6a3da78a1c632b8c2cbe0af67bd31d87fe`.
+Use the backend SHA and frontend SHA from the v1.0.0 release note or PR description when promoting a stack. Do not promote a mutable `main` or `latest` tag.
 
 ## AWS ECS Fargate Path
 

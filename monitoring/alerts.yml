@@ -21,7 +21,7 @@ groups:
           severity: warning
         annotations:
           summary: "mc-api p95 latency above 500ms"
-          description: "The API p95 latency SLI is above the v0.8.0 warning threshold."
+          description: "The API p95 latency SLI is above the v1.0.0 warning threshold."
 
       - alert: AgenticEcommerceHighErrorRate
         expr: |
@@ -35,7 +35,7 @@ groups:
           severity: warning
         annotations:
           summary: "mc-api error rate above 1%"
-          description: "The mc-api 5xx error rate exceeded the v0.8.0 warning threshold."
+          description: "The mc-api 5xx error rate exceeded the v1.0.0 warning threshold."
 
       - alert: AgenticEcommerceSyncLagHigh
         expr: agentic_ecommerce_sync_lag_seconds > 300
@@ -44,7 +44,7 @@ groups:
           severity: warning
         annotations:
           summary: "WooCommerce sync lag above 5 minutes"
-          description: "The sync lag metric is above the v0.8.0 warning threshold."
+          description: "The sync lag metric is above the v1.0.0 warning threshold."
 
       - alert: AgenticEcommerceAgentFailureRateHigh
         expr: |
@@ -72,7 +72,7 @@ groups:
           severity: warning
         annotations:
           summary: "Compliance failure spike detected"
-          description: "Backend and worker compliance failures exceeded the v0.8.0 spike threshold in 15 minutes."
+          description: "Backend and worker compliance failures exceeded the v1.0.0 spike threshold in 15 minutes."
 
       - alert: AgenticEcommerceAgentSuccessMissing
         expr: increase(agentic_ecommerce_agent_success_total[30m]) == 0

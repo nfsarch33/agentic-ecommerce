@@ -14,12 +14,12 @@ Never commit:
 - Private hostnames, fleet inventories, internal IPs, OCI IDs, or Tailscale node details
 - Customer, candidate, proposal, or application data
 
-## MiniMax policy
+## AI provider policy
 
-This backend must not call `api.minimaxi.com` directly from the MacBook.
-MiniMax traffic runs through the fleet-side `minimax-openai-bridge`, with
-key selection state managed through `runx minimax` and the approved
-Tailscale/OCI nodes.
+This backend must not call MiniMax provider endpoints directly from app
+services. AI traffic must run through the approved OpenAI-compatible bridge,
+with provider key selection, quota handling, and operational state owned by
+that bridge runtime.
 
 ## Runtime security controls
 
