@@ -198,6 +198,22 @@ func TestAgentScheduleConfigFromEnvRejectsUnsafeValues(t *testing.T) {
 	}
 }
 
+func TestAgentScheduleConfigFromEnvRejectsInvalidEnabledFlag(t *testing.T) {
+	t.Setenv("ECOMMERCE_AGENT_SCHEDULES_ENABLED", "definitely")
+
+	if _, err := agentScheduleConfigFromEnv(); err == nil {
+		t.Fatal("agentScheduleConfigFromEnv accepted invalid enabled flag")
+	}
+}
+
+func TestAgentScheduleConfigFromEnvRejectsZeroMaxConcurrentRuns(t *testing.T) {
+	t.Setenv("ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS", "0")
+
+	if _, err := agentScheduleConfigFromEnv(); err == nil {
+		t.Fatal("agentScheduleConfigFromEnv accepted zero max concurrent runs")
+	}
+}
+
 func TestNewProductRepositoryFromEnvFallsBackToInMemoryWithoutDSN(t *testing.T) {
 	t.Setenv("ECOMMERCE_DB_URL", "")
 
