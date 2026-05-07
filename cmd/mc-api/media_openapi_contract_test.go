@@ -1,0 +1,39 @@
+package main
+
+import (
+	"reflect"
+	"testing"
+
+	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
+)
+
+func TestMediaOpenAPIContracts(t *testing.T) {
+	t.Parallel()
+
+	spec := loadOpenAPISpec(t)
+	paths := specMap(t, spec, "paths")
+
+	assertOperation(t, paths, "/api/v1/media/source", "post", "sourceMedia", []string{"201", "400", "422", "502", "503"})
+	assertOperation(t, paths, "/api/v1/media/process", "post", "processMedia", []string{"200", "400", "404", "422"})
+	assertOperation(t, paths, "/api/v1/media/{id}", "get", "getMedia", []string{"200", "404"})
+	assertOperation(t, paths, "/api/v1/media/{id}/validate", "post", "validateMedia", []string{"200", "404"})
+
+	schemas := specMap(t, specMap(t, spec, "components"), "schemas")
+	assertRequiredFields(t, schemas, "MediaSourceRequest", []string{"url"})
+	assertRequiredFields(t, schemas, "MediaProcessRequest", []string{"media_id"})
+	assertRequiredFields(t, schemas, "MediaMetadata", jsonFieldNames(reflect.TypeOf(intelligence.Metadata{})))
+	assertRequiredFields(t, schemas, "MediaQualityReport", []string{"pass", "score"})
+	assertSchemaHasProperties(t, schemas, "MediaAsset", jsonFieldNames(reflect.TypeOf(intelligence.Asset{})))
+	assertSchemaHasProperties(t, schemas, "MediaQualityIssue", jsonFieldNames(reflect.TypeOf(intelligence.QualityIssue{})))
+	assertEnum(t, schemas, "MediaProcessRequest", "format", []string{"gif", "image/gif", "image/jpeg", "image/png", "image/webp", "jpeg", "png", "webp"})
+}
+
+func assertSchemaHasProperties(t *testing.T, schemas map[string]any, schemaName string, fields []string) {
+	t.Helper()
+	properties := specMap(t, specMap(t, schemas, schemaName), "properties")
+	for _, field := range fields {
+		if _, ok := properties[field]; !ok {
+			t.Fatalf("%s properties missing %q; properties=%v", schemaName, field, properties)
+		}
+	}
+}

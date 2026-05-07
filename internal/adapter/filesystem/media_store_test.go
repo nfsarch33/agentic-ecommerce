@@ -63,6 +63,49 @@ func TestMediaStorePutOpenDeleteRoundTrip(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "products", "p1", "original.webp")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("stored file still exists or unexpected error: %v", err)
 	}
+	if err := store.Delete(context.Background(), saved.Key); err != nil {
+		t.Fatalf("Delete is not idempotent: %v", err)
+	}
+}
+
+func TestMediaStorePutIsIdempotentForSameKey(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := NewMediaStore(Config{RootDir: root, PublicBaseURL: "/media"})
+
+	first, err := store.Put(context.Background(), port.MediaObject{
+		Key:         "products/p1/original.webp",
+		ContentType: "image/webp",
+		Body:        strings.NewReader("first"),
+	})
+	if err != nil {
+		t.Fatalf("first Put: %v", err)
+	}
+	second, err := store.Put(context.Background(), port.MediaObject{
+		Key:         "products/p1/original.webp",
+		ContentType: "image/webp",
+		Body:        strings.NewReader("second"),
+	})
+	if err != nil {
+		t.Fatalf("second Put: %v", err)
+	}
+	if first.Key != second.Key || first.URL != second.URL {
+		t.Fatalf("same key produced different object identity: first=%+v second=%+v", first, second)
+	}
+
+	reader, err := store.Open(context.Background(), "products/p1/original.webp")
+	if err != nil {
+		t.Fatalf("Open after overwrite: %v", err)
+	}
+	defer reader.Close()
+	got, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read opened object: %v", err)
+	}
+	if string(got) != "second" {
+		t.Fatalf("opened bytes = %q, want overwritten content", string(got))
+	}
 }
 
 func TestMediaStoreRejectsUnsafeKeys(t *testing.T) {
@@ -71,7 +114,7 @@ func TestMediaStoreRejectsUnsafeKeys(t *testing.T) {
 	root := t.TempDir()
 	store := NewMediaStore(Config{RootDir: root})
 
-	for _, key := range []string{"", "../outside.webp", "/absolute.webp", "products/../outside.webp", "products/../../outside.webp"} {
+	for _, key := range []string{"", "../outside.webp", "/absolute.webp", "products/../outside.webp", "products/../../outside.webp", `products\..\outside.webp`, `C:\outside.webp`} {
 		t.Run(key, func(t *testing.T) {
 			_, err := store.Put(context.Background(), port.MediaObject{
 				Key:         key,
