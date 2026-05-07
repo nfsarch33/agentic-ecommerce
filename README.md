@@ -114,6 +114,13 @@ make build
 go test -race -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
 make monitoring-validate
+make release-perf-smoke
 ```
+
+`make release-perf-smoke` runs the v1.0.0 API smoke against an in-process
+deterministic mc-api with in-memory repositories, JWT login, and a mocked
+content agent. It verifies p95 latency targets for `GET /api/v1/products`,
+admin login, and mocked AI description generation without MiniMax or
+WooCommerce network calls.
 
 Private-repo operations must go through `runx` once the `ecommerce` alias is registered.
