@@ -12,11 +12,12 @@ import (
 )
 
 type RedisTokenBucket struct {
-	addr           string
-	db             string
-	capacity       int
-	refillInterval time.Duration
-	now            func() time.Time
+	addr             string
+	db               string
+	capacity         int
+	refillInterval   time.Duration
+	operationTimeout time.Duration
+	now              func() time.Time
 }
 
 func NewRedisTokenBucket(addr, db string, cfg TokenBucketConfig) *RedisTokenBucket {
@@ -28,16 +29,21 @@ func NewRedisTokenBucket(addr, db string, cfg TokenBucketConfig) *RedisTokenBuck
 	if refillInterval <= 0 {
 		refillInterval = time.Minute
 	}
+	operationTimeout := cfg.RedisTimeout
+	if operationTimeout <= 0 {
+		operationTimeout = 500 * time.Millisecond
+	}
 	now := cfg.Now
 	if now == nil {
 		now = time.Now
 	}
 	return &RedisTokenBucket{
-		addr:           strings.TrimSpace(addr),
-		db:             strings.TrimSpace(db),
-		capacity:       capacity,
-		refillInterval: refillInterval,
-		now:            now,
+		addr:             strings.TrimSpace(addr),
+		db:               strings.TrimSpace(db),
+		capacity:         capacity,
+		refillInterval:   refillInterval,
+		operationTimeout: operationTimeout,
+		now:              now,
 	}
 }
 
@@ -48,7 +54,13 @@ func (l *RedisTokenBucket) Allow(ctx context.Context, key string) (RateLimitDeci
 	if key == "" {
 		key = "anonymous"
 	}
-	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", l.addr)
+	dialCtx := ctx
+	var cancel context.CancelFunc
+	if _, ok := ctx.Deadline(); !ok {
+		dialCtx, cancel = context.WithTimeout(ctx, l.operationTimeout)
+		defer cancel()
+	}
+	conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", l.addr)
 	if err != nil {
 		return RateLimitDecision{}, err
 	}
@@ -56,7 +68,7 @@ func (l *RedisTokenBucket) Allow(ctx context.Context, key string) (RateLimitDeci
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(deadline)
 	} else {
-		_ = conn.SetDeadline(time.Now().Add(500 * time.Millisecond))
+		_ = conn.SetDeadline(time.Now().Add(l.operationTimeout))
 	}
 	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 	if l.db != "" && l.db != "0" {

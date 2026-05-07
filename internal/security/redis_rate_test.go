@@ -20,6 +20,17 @@ func TestNewRedisTokenBucketAppliesDefaults(t *testing.T) {
 	if limiter.refillInterval != time.Minute {
 		t.Fatalf("refillInterval = %s, want 1m", limiter.refillInterval)
 	}
+	if limiter.operationTimeout != 500*time.Millisecond {
+		t.Fatalf("operationTimeout = %s, want 500ms", limiter.operationTimeout)
+	}
+}
+
+func TestNewRedisTokenBucketAppliesConfiguredTimeout(t *testing.T) {
+	t.Parallel()
+	limiter := NewRedisTokenBucket("127.0.0.1:6379", "0", TokenBucketConfig{RedisTimeout: 150 * time.Millisecond})
+	if limiter.operationTimeout != 150*time.Millisecond {
+		t.Fatalf("operationTimeout = %s, want 150ms", limiter.operationTimeout)
+	}
 }
 
 func TestRedisReadValueParsesArray(t *testing.T) {
