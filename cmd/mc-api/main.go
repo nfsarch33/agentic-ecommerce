@@ -27,6 +27,7 @@ import (
 	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/agentic-ecommerce/internal/security"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 )
 
@@ -83,12 +84,22 @@ type listResponse struct {
 }
 
 type serverConfig struct {
-	allowedOrigin    string
-	apiToken         string
-	webhookSecret    string
-	readinessTimeout time.Duration
-	shutdownTimeout  time.Duration
-	otelEnabled      bool
+	allowedOrigin     string
+	apiToken          string
+	webhookSecret     string
+	jwtSecret         string
+	jwtIssuer         string
+	jwtAudience       string
+	jwtAccessTTL      time.Duration
+	refreshTTL        time.Duration
+	adminUsername     string
+	adminPassword     string
+	adminRole         security.Role
+	rateLimitCapacity int
+	rateLimitRefill   time.Duration
+	readinessTimeout  time.Duration
+	shutdownTimeout   time.Duration
+	otelEnabled       bool
 }
 
 type server struct {
@@ -101,6 +112,9 @@ type server struct {
 	agentRegistry  *orchestrator.Registry
 	agentScheduler *orchestrator.Scheduler
 	webhookSecret  string
+	tokenManager   *security.TokenManager
+	sessions       security.RefreshSessionStore
+	rateLimiter    security.RateLimiter
 	readiness      []readinessProbe
 	cleanup        []func()
 	log            *slog.Logger
@@ -273,20 +287,31 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	webhookSecret := getenv("ECOMMERCE_WC_WEBHOOK_SECRET", "")
 	readinessTimeout := parseDurationEnv("ECOMMERCE_READINESS_TIMEOUT", 2*time.Second)
 	shutdownTimeout := parseDurationEnv("ECOMMERCE_SHUTDOWN_TIMEOUT", 10*time.Second)
+	jwtSecret, jwtIssuer, jwtAudience, jwtAccessTTL, refreshTTL, adminUsername, adminPassword, adminRole, rateLimitCapacity, rateLimitRefill := securityConfigFromEnv()
 	readinessChecks, cleanup := newReadinessChecksFromEnv(readinessTimeout)
 	otelEnabled := parseBoolEnv("ECOMMERCE_OTEL_ENABLED", false)
 	if otelEnabled {
 		configureTelemetry()
 	}
 	registry := defaultAgentRegistry()
-	return &server{
+	srv := &server{
 		cfg: serverConfig{
-			allowedOrigin:    getenv("ECOMMERCE_ALLOWED_ORIGIN", ""),
-			apiToken:         getenv("ECOMMERCE_API_TOKEN", ""),
-			webhookSecret:    webhookSecret,
-			readinessTimeout: readinessTimeout,
-			shutdownTimeout:  shutdownTimeout,
-			otelEnabled:      otelEnabled,
+			allowedOrigin:     getenv("ECOMMERCE_ALLOWED_ORIGIN", ""),
+			apiToken:          getenv("ECOMMERCE_API_TOKEN", ""),
+			webhookSecret:     webhookSecret,
+			jwtSecret:         jwtSecret,
+			jwtIssuer:         jwtIssuer,
+			jwtAudience:       jwtAudience,
+			jwtAccessTTL:      jwtAccessTTL,
+			refreshTTL:        refreshTTL,
+			adminUsername:     adminUsername,
+			adminPassword:     adminPassword,
+			adminRole:         adminRole,
+			rateLimitCapacity: rateLimitCapacity,
+			rateLimitRefill:   rateLimitRefill,
+			readinessTimeout:  readinessTimeout,
+			shutdownTimeout:   shutdownTimeout,
+			otelEnabled:       otelEnabled,
 		},
 		repo:           repo,
 		orderRepo:      orderRepo,
@@ -300,6 +325,8 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		cleanup:        cleanup,
 		log:            logger,
 	}
+	srv.configureSecurity()
+	return srv
 }
 
 func (s *server) Close() {
@@ -344,30 +371,32 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/readyz", s.readyzHandler)
 	mux.HandleFunc("/metrics", metricsHandler)
 
-	api := s.withCORS(s.withBearerAuth(s.productsHandler))
+	authAPI := s.withCORS(s.withRateLimit(s.authHandler))
+	mux.HandleFunc("/api/v1/auth/", authAPI)
+	api := s.withCORS(s.withRateLimit(s.withRBAC(productsRole, s.withAudit(productsAuditAction, s.productsHandler))))
 	mux.HandleFunc("/api/v1/products", api)
 	mux.HandleFunc("/api/v1/products/", api)
-	ordersAPI := s.withCORS(s.withBearerAuth(s.ordersHandler))
+	ordersAPI := s.withCORS(s.withRateLimit(s.withRBAC(ordersRole, s.withAudit(ordersAuditAction, s.ordersHandler))))
 	mux.HandleFunc("/api/v1/orders", ordersAPI)
 	mux.HandleFunc("/api/v1/orders/", ordersAPI)
-	cartAPI := s.withCORS(s.withBearerAuth(s.cartHandler))
+	cartAPI := s.withCORS(s.withRateLimit(s.withRBAC(publicRole, s.withAudit(cartAuditAction, s.cartHandler))))
 	mux.HandleFunc("/api/v1/cart/", cartAPI)
-	syncAPI := s.withCORS(s.withBearerAuth(s.syncHandler))
+	syncAPI := s.withCORS(s.withRateLimit(s.withRBAC(syncRole, s.withAudit(syncAuditAction, s.syncHandler))))
 	mux.HandleFunc("/api/v1/sync/status", syncAPI)
 	mux.HandleFunc("/api/v1/sync/conflicts", syncAPI)
 	mux.HandleFunc("/api/v1/sync/conflicts/", syncAPI)
 	mux.HandleFunc("/api/v1/sync/products/", syncAPI)
-	mux.HandleFunc("/api/v1/webhooks/woocommerce/orders", s.woocommerceOrderWebhookHandler)
-	mux.HandleFunc("/api/v1/webhooks/woocommerce/products", s.woocommerceProductWebhookHandler)
-	complianceAPI := s.withCORS(s.withBearerAuth(s.complianceRulesHandler))
+	mux.HandleFunc("/api/v1/webhooks/woocommerce/orders", s.withAudit(webhookAuditAction("webhook.woocommerce.orders"), s.woocommerceOrderWebhookHandler))
+	mux.HandleFunc("/api/v1/webhooks/woocommerce/products", s.withAudit(webhookAuditAction("webhook.woocommerce.products"), s.woocommerceProductWebhookHandler))
+	complianceAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.complianceRulesHandler)))
 	mux.HandleFunc("/api/v1/compliance/rules", complianceAPI)
-	agentsAPI := s.withCORS(s.withBearerAuth(s.agentsHandler))
+	agentsAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.withAudit(agentAuditAction, s.agentsHandler))))
 	mux.HandleFunc("/api/v1/agents", agentsAPI)
 	mux.HandleFunc("/api/v1/agents/", agentsAPI)
-	agentRunsAPI := s.withCORS(s.withBearerAuth(s.agentRunsHandler))
+	agentRunsAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.agentRunsHandler)))
 	mux.HandleFunc("/api/v1/agent-runs/", agentRunsAPI)
 
-	return s.withTelemetry(s.withRequestLogging(mux))
+	return s.withSecurityHeaders(s.withTelemetry(s.withRequestLogging(mux)))
 }
 
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
@@ -719,22 +748,6 @@ func (r *responseStatusRecorder) Write(body []byte) (int, error) {
 		r.WriteHeader(http.StatusOK)
 	}
 	return r.ResponseWriter.Write(body)
-}
-
-func (s *server) withBearerAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if s.cfg.apiToken == "" {
-			next(w, r)
-			return
-		}
-		got := strings.TrimSpace(r.Header.Get("Authorization"))
-		want := "Bearer " + s.cfg.apiToken
-		if got != want {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorised"})
-			return
-		}
-		next(w, r)
-	}
 }
 
 func toProductResponse(p catalog.Product) productResponse {
