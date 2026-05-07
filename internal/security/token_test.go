@@ -53,10 +53,20 @@ func TestTokenManagerRejectsTamperedAccessToken(t *testing.T) {
 		t.Fatalf("MintAccessToken: %v", err)
 	}
 
-	tampered := token[:len(token)-1] + differentTokenByte(token[len(token)-1])
+	tampered := tamperTokenSignature(t, token)
 	if _, err := manager.VerifyAccessToken(tampered); err == nil {
 		t.Fatal("VerifyAccessToken accepted a tampered token")
 	}
+}
+
+func tamperTokenSignature(t *testing.T, token string) string {
+	t.Helper()
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 || len(parts[2]) == 0 {
+		t.Fatalf("token shape = %q, want three non-empty JWT segments", token)
+	}
+	parts[2] = differentTokenByte(parts[2][0]) + parts[2][1:]
+	return strings.Join(parts, ".")
 }
 
 func differentTokenByte(current byte) string {

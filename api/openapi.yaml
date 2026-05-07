@@ -987,6 +987,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/events/recent:
+    get:
+      summary: List recent backend events
+      operationId: listRecentEvents
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Recent event activity, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecentEventsResponse'
+        '401':
+          description: Missing or invalid JWT bearer token when auth is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -1659,6 +1687,36 @@ components:
       properties:
         status:
           type: string
+    RecentEventsResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventItem'
+    EventItem:
+      type: object
+      required: [id, type, severity, message, occurred_at]
+      properties:
+        id:
+          type: string
+          minLength: 1
+        type:
+          type: string
+          enum: [product.created, product.updated, order.placed, sync.completed, agent.run.completed, compliance.checked]
+        severity:
+          type: string
+          enum: [info, warning, error]
+        message:
+          type: string
+          minLength: 1
+        occurred_at:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          additionalProperties: true
     SyncEvent:
       type: object
       required: [id, type, created_at]

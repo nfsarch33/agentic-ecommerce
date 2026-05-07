@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,7 +15,10 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 )
 
-var ErrProductNotFound = errors.New("product not found")
+var (
+	ErrProductNotFound = errors.New("product not found")
+	ErrTenantRequired  = errors.New("tenant id required")
+)
 
 type ProductRepository struct {
 	pool productStore
@@ -130,11 +134,15 @@ func (r *ProductRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (r *ProductRepository) CreateWithTenant(ctx context.Context, product catalog.Product, tenantID string) error {
+	tenantID, err := requireTenantID(tenantID)
+	if err != nil {
+		return err
+	}
 	const q = `
 		INSERT INTO products (id, sku, title, slug, description, price_amount, price_currency, stock, status, tenant_id, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 
-	_, err := r.pool.Exec(ctx, q,
+	_, err = r.pool.Exec(ctx, q,
 		product.ID(),
 		product.SKU(),
 		product.Title(),
@@ -155,8 +163,12 @@ func (r *ProductRepository) CreateWithTenant(ctx context.Context, product catalo
 }
 
 func (r *ProductRepository) ListByTenant(ctx context.Context, tenantID string, page, perPage int) (port.ListResult, error) {
+	tenantID, err := requireTenantID(tenantID)
+	if err != nil {
+		return port.ListResult{}, err
+	}
 	var total int
-	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM products WHERE tenant_id = $1`, tenantID).Scan(&total)
+	err = r.pool.QueryRow(ctx, `SELECT count(*) FROM products WHERE tenant_id = $1`, tenantID).Scan(&total)
 	if err != nil {
 		return port.ListResult{}, fmt.Errorf("count products by tenant: %w", err)
 	}
@@ -183,6 +195,10 @@ func (r *ProductRepository) ListByTenant(ctx context.Context, tenantID string, p
 }
 
 func (r *ProductRepository) GetByIDAndTenant(ctx context.Context, id uuid.UUID, tenantID string) (catalog.Product, error) {
+	tenantID, err := requireTenantID(tenantID)
+	if err != nil {
+		return catalog.Product{}, err
+	}
 	const q = `SELECT id, sku, title, slug, description, price_amount, price_currency, stock, status, created_at, updated_at
 		FROM products WHERE id = $1 AND tenant_id = $2`
 	row := r.pool.QueryRow(ctx, q, id, tenantID)
@@ -194,6 +210,14 @@ func (r *ProductRepository) GetByIDAndTenant(ctx context.Context, id uuid.UUID, 
 		return catalog.Product{}, err
 	}
 	return p, nil
+}
+
+func requireTenantID(tenantID string) (string, error) {
+	trimmed := strings.TrimSpace(tenantID)
+	if trimmed == "" {
+		return "", ErrTenantRequired
+	}
+	return trimmed, nil
 }
 
 func (r *ProductRepository) getOne(ctx context.Context, query string, arg any) (catalog.Product, error) {

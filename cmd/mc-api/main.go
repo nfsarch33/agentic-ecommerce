@@ -26,6 +26,7 @@ import (
 	pricingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/pricing"
 	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	"github.com/nfsarch33/agentic-ecommerce/internal/security"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
@@ -107,6 +108,7 @@ type server struct {
 	repo              port.ProductRepository
 	orderRepo         port.OrderRepository
 	cartRepo          port.CartRepository
+	eventBus          eventHistory
 	syncEngine        *enginesync.Engine
 	contentAgent      contentGenerator
 	agentRegistry     *orchestrator.Registry
@@ -123,6 +125,10 @@ type server struct {
 
 type contentGenerator interface {
 	Generate(ctx context.Context, req contentagent.GenerateRequest) (contentagent.GenerateResult, error)
+}
+
+type eventHistory interface {
+	Delivered() []eventbus.Event
 }
 
 func main() {
@@ -317,6 +323,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		repo:           repo,
 		orderRepo:      orderRepo,
 		cartRepo:       cartRepo,
+		eventBus:       eventbus.NewInMemoryBus(),
 		syncEngine:     enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
 		contentAgent:   generator,
 		agentRegistry:  registry,
@@ -396,6 +403,8 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/agents/", agentsAPI)
 	agentRunsAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.agentRunsHandler)))
 	mux.HandleFunc("/api/v1/agent-runs/", agentRunsAPI)
+	eventsAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.recentEventsHandler)))
+	mux.HandleFunc("/api/v1/events/recent", eventsAPI)
 
 	return s.withSecurityHeaders(s.withTelemetry(s.withRequestLogging(mux)))
 }

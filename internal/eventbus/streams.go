@@ -16,6 +16,7 @@ type StreamsConfig struct {
 	StreamPrefix  string
 	ConsumerGroup string
 	ConsumerID    string
+	ClaimMinIdle  time.Duration
 }
 
 func (c StreamsConfig) streamKey(eventType EventType) string {
@@ -44,6 +45,15 @@ type XStream struct {
 	Messages []XMessage
 }
 
+type XAutoClaimArgs struct {
+	Stream   string
+	Group    string
+	Consumer string
+	MinIdle  time.Duration
+	Start    string
+	Count    int64
+}
+
 type XMessage struct {
 	ID     string
 	Values map[string]any
@@ -55,6 +65,7 @@ type RedisStreamer interface {
 	XAdd(ctx context.Context, args XAddArgs) error
 	XGroupCreateMkStream(ctx context.Context, stream, group, start string) error
 	XReadGroup(ctx context.Context, args XReadGroupArgs) ([]XStream, error)
+	XAutoClaim(ctx context.Context, args XAutoClaimArgs) ([]XStream, error)
 	XAck(ctx context.Context, stream, group string, ids ...string) error
 	Ping(ctx context.Context) error
 	Close() error
@@ -70,25 +81,25 @@ func NewStreamsPublisher(client RedisStreamer, cfg StreamsConfig) *StreamsPublis
 }
 
 func (p *StreamsPublisher) Publish(ctx context.Context, event Event) error {
+	if event.ID == "" {
+		event.ID = uuid.NewString()
+	}
 	payload, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal event: %w", err)
-	}
-
-	if event.ID == "" {
-		event.ID = uuid.NewString()
 	}
 
 	stream := p.cfg.streamKey(event.Type)
 	return p.client.XAdd(ctx, XAddArgs{
 		Stream: stream,
 		Values: map[string]any{
-			"id":        event.ID,
-			"type":      string(event.Type),
-			"tenant_id": event.TenantID,
-			"source":    event.Source,
-			"payload":   string(payload),
-			"timestamp": event.Timestamp.Format(time.RFC3339Nano),
+			"id":              event.ID,
+			"idempotency_key": event.ID,
+			"type":            string(event.Type),
+			"tenant_id":       event.TenantID,
+			"source":          event.Source,
+			"payload":         string(payload),
+			"timestamp":       event.Timestamp.Format(time.RFC3339Nano),
 		},
 	})
 }
@@ -135,12 +146,15 @@ func (c *StreamsConsumer) Subscribe(ctx context.Context, eventTypes []EventType,
 }
 
 func (c *StreamsConsumer) readLoop(ctx context.Context, streams []string, group, consumerID string, handler Handler) {
+	streamCount := len(streams) / 2
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
+
+		c.reclaimPending(ctx, streams[:streamCount], group, consumerID, handler)
 
 		result, err := c.client.XReadGroup(ctx, XReadGroupArgs{
 			Group:    group,
@@ -157,15 +171,39 @@ func (c *StreamsConsumer) readLoop(ctx context.Context, streams []string, group,
 			continue
 		}
 
-		for _, stream := range result {
-			for _, msg := range stream.Messages {
-				event, parseErr := parseStreamMessage(msg)
-				if parseErr != nil {
-					continue
-				}
-				if err := handler(ctx, event); err == nil {
-					_ = c.client.XAck(ctx, stream.Stream, group, msg.ID)
-				}
+		c.processStreams(ctx, result, group, handler)
+	}
+}
+
+func (c *StreamsConsumer) reclaimPending(ctx context.Context, streams []string, group, consumerID string, handler Handler) {
+	minIdle := c.cfg.ClaimMinIdle
+	if minIdle <= 0 {
+		minIdle = time.Minute
+	}
+	for _, stream := range streams {
+		result, err := c.client.XAutoClaim(ctx, XAutoClaimArgs{
+			Stream:   stream,
+			Group:    group,
+			Consumer: consumerID,
+			MinIdle:  minIdle,
+			Start:    "0-0",
+			Count:    10,
+		})
+		if err == nil {
+			c.processStreams(ctx, result, group, handler)
+		}
+	}
+}
+
+func (c *StreamsConsumer) processStreams(ctx context.Context, result []XStream, group string, handler Handler) {
+	for _, stream := range result {
+		for _, msg := range stream.Messages {
+			event, parseErr := parseStreamMessage(msg)
+			if parseErr != nil {
+				continue
+			}
+			if err := handler(ctx, event); err == nil {
+				_ = c.client.XAck(ctx, stream.Stream, group, msg.ID)
 			}
 		}
 	}
