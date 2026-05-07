@@ -109,6 +109,21 @@ image-only placeholder until `cmd/temporal-worker` lands. Its task queue contrac
 is `ECOMMERCE_TEMPORAL_TASK_QUEUE=ec-workflows`. See
 `docs/temporal-local.md` for the full runbook and worker handoff.
 
+## n8n Automation Profile
+
+v1.5.0 adds n8n as an opt-in local automation profile:
+
+```bash
+make n8n-config
+make n8n-up
+```
+
+n8n is published on `http://127.0.0.1:${N8N_HOST_PORT:-5678}` through the same
+loopback-only `BIND_HOST` boundary as the rest of the stack. Import templates
+from `deploy/n8n/workflows/` after completing the local owner setup in the n8n
+UI. See `docs/n8n-local.md` for credential placeholders, workflow import steps,
+and the security boundary.
+
 ## Media Storage and Compliance Placeholders
 
 The dev stack mounts a host media directory into backend services for upload and
@@ -179,4 +194,5 @@ make compose-config
 make compose-wc-config
 make compose-workers-config
 make compose-temporal-config
+make n8n-config
 ```

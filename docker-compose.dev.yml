@@ -94,6 +94,49 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_IMAGE_TAG:-1.88.0}
+    container_name: ec-n8n
+    profiles: ["n8n"]
+    restart: unless-stopped
+    environment:
+      N8N_HOST: ${N8N_HOST:-127.0.0.1}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-http://127.0.0.1:5678/}
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://127.0.0.1:5678/}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-}
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      EXECUTIONS_DATA_SAVE_ON_ERROR: ${N8N_EXECUTIONS_DATA_SAVE_ON_ERROR:-all}
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: ${N8N_EXECUTIONS_DATA_SAVE_ON_SUCCESS:-none}
+      EXECUTIONS_DATA_SAVE_ON_PROGRESS: "false"
+      EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "false"
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-UTC}
+      TZ: ${GENERIC_TIMEZONE:-UTC}
+      SLACK_WEBHOOK_URL: ${N8N_SLACK_WEBHOOK_URL:-}
+      ORDER_EMAIL_ENDPOINT_URL: ${N8N_ORDER_EMAIL_ENDPOINT_URL:-}
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${N8N_HOST_PORT:-5678}:5678"
+    volumes:
+      - ec-n8ndata:/home/node/.n8n
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const http=require('http');const req=http.get('http://127.0.0.1:5678/healthz',res=>process.exit(res.statusCode<500?0:1));req.on('error',()=>process.exit(1));req.setTimeout(2000,()=>{req.destroy();process.exit(1)})\""
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+
   wc-db:
     image: ${WC_DB_IMAGE:-mariadb:11.4}
     container_name: ec-wc-db
@@ -387,5 +430,6 @@ volumes:
   ec-redisdata:
   ec-temporaldata:
   ec-miniodata:
+  ec-n8ndata:
   ec-wc-dbdata:
   ec-wpdata:

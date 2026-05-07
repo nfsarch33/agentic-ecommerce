@@ -33,6 +33,10 @@ For local Temporal workflow infrastructure, use `make temporal-up` and the
 runbook in `docs/temporal-local.md`. Temporal is opt-in and does not gate
 `/healthz` or `/readyz` until workflow APIs are implemented.
 
+For local n8n automation templates, use `make n8n-up` and the runbook in
+`docs/n8n-local.md`. n8n is opt-in, loopback-only by default, and does not imply
+that the backend outbound webhook bridge API has landed.
+
 ## Local RAG and Embedding Fixtures
 
 The dev PostgreSQL service already uses `pgvector/pgvector:pg16`. v1.3.0 adds
