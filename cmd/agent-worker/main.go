@@ -26,22 +26,28 @@ var (
 	version = "dev"
 	commit  = "unknown"
 
-	agentWorkerRunsSucceededTotal atomic.Int64
-	agentWorkerRunsFailedTotal    atomic.Int64
+	agentWorkerRunsSucceededTotal    atomic.Int64
+	agentWorkerRunsFailedTotal       atomic.Int64
+	agentScheduledRunsSucceededTotal atomic.Int64
+	agentScheduledRunsFailedTotal    atomic.Int64
 )
 
-// Config is the runtime contract between compose and the future v0.6.0 orchestrator.
+// Config is the runtime contract between compose and the agent scheduler.
 type Config struct {
-	Enabled        bool
-	RunOnce        bool
-	Concurrency    int
-	Interval       time.Duration
-	MetricsAddr    string
-	EventBusDriver string
-	EventBusAddr   string
-	EventBusDB     string
-	SyncChannel    string
-	DLQChannel     string
+	Enabled                   bool
+	RunOnce                   bool
+	Concurrency               int
+	Interval                  time.Duration
+	ScheduleEnabled           bool
+	ScheduleDefaultInterval   time.Duration
+	ScheduleMaxConcurrentRuns int
+	ScheduleTaskQueue         string
+	MetricsAddr               string
+	EventBusDriver            string
+	EventBusAddr              string
+	EventBusDB                string
+	SyncChannel               string
+	DLQChannel                string
 }
 
 func main() {
@@ -86,18 +92,34 @@ func loadConfig(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("ECOMMERCE_AGENT_WORKER_INTERVAL: %w", err)
 	}
+	scheduleEnabled, err := parseBool(getenv("ECOMMERCE_AGENT_SCHEDULES_ENABLED"), false)
+	if err != nil {
+		return Config{}, fmt.Errorf("ECOMMERCE_AGENT_SCHEDULES_ENABLED: %w", err)
+	}
+	scheduleDefaultInterval, err := parseDuration(getenv("ECOMMERCE_AGENT_SCHEDULES_DEFAULT_INTERVAL"), 15*time.Minute)
+	if err != nil {
+		return Config{}, fmt.Errorf("ECOMMERCE_AGENT_SCHEDULES_DEFAULT_INTERVAL: %w", err)
+	}
+	scheduleMaxConcurrentRuns, err := parsePositiveInt(getenv("ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS"), 1)
+	if err != nil {
+		return Config{}, fmt.Errorf("ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS: %w", err)
+	}
 
 	return Config{
-		Enabled:        enabled,
-		RunOnce:        runOnce,
-		Concurrency:    concurrency,
-		Interval:       interval,
-		MetricsAddr:    getenvDefault(getenv, "ECOMMERCE_AGENT_WORKER_METRICS_ADDR", "127.0.0.1:8081"),
-		EventBusDriver: getenvDefault(getenv, "ECOMMERCE_EVENTBUS_DRIVER", "redis"),
-		EventBusAddr:   getenvDefault(getenv, "ECOMMERCE_EVENTBUS_REDIS_ADDR", "127.0.0.1:6379"),
-		EventBusDB:     getenvDefault(getenv, "ECOMMERCE_EVENTBUS_REDIS_DB", "0"),
-		SyncChannel:    getenvDefault(getenv, "ECOMMERCE_EVENTBUS_CHANNEL_SYNC", "ec.sync.events"),
-		DLQChannel:     getenvDefault(getenv, "ECOMMERCE_EVENTBUS_CHANNEL_DLQ", "ec.sync.deadletter"),
+		Enabled:                   enabled,
+		RunOnce:                   runOnce,
+		Concurrency:               concurrency,
+		Interval:                  interval,
+		ScheduleEnabled:           scheduleEnabled,
+		ScheduleDefaultInterval:   scheduleDefaultInterval,
+		ScheduleMaxConcurrentRuns: scheduleMaxConcurrentRuns,
+		ScheduleTaskQueue:         firstConfigured(getenv, "ECOMMERCE_AGENT_SCHEDULES_TASK_QUEUE", "ECOMMERCE_TEMPORAL_TASK_QUEUE", "ec-workflows"),
+		MetricsAddr:               getenvDefault(getenv, "ECOMMERCE_AGENT_WORKER_METRICS_ADDR", "127.0.0.1:8081"),
+		EventBusDriver:            getenvDefault(getenv, "ECOMMERCE_EVENTBUS_DRIVER", "redis"),
+		EventBusAddr:              getenvDefault(getenv, "ECOMMERCE_EVENTBUS_REDIS_ADDR", "127.0.0.1:6379"),
+		EventBusDB:                getenvDefault(getenv, "ECOMMERCE_EVENTBUS_REDIS_DB", "0"),
+		SyncChannel:               getenvDefault(getenv, "ECOMMERCE_EVENTBUS_CHANNEL_SYNC", "ec.sync.events"),
+		DLQChannel:                getenvDefault(getenv, "ECOMMERCE_EVENTBUS_CHANNEL_DLQ", "ec.sync.deadletter"),
 	}, nil
 }
 
@@ -107,7 +129,17 @@ func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		return nil
 	}
 	if cfg.RunOnce {
-		logger.Info("agent-worker.run_once", "concurrency", cfg.Concurrency, "eventbus_driver", cfg.EventBusDriver)
+		logger.Info(
+			"agent-worker.run_once",
+			"concurrency", cfg.Concurrency,
+			"agent_schedules_enabled", cfg.ScheduleEnabled,
+			"agent_schedule_task_queue", cfg.ScheduleTaskQueue,
+			"eventbus_driver", cfg.EventBusDriver,
+		)
+		if !cfg.ScheduleEnabled {
+			logger.Info("agent-worker.schedules_disabled", "mode", "run_once")
+			return nil
+		}
 		return runScheduledJobs(ctx, logger, cfg)
 	}
 
@@ -126,14 +158,23 @@ func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		"metrics_addr", cfg.MetricsAddr,
 		"interval", cfg.Interval.String(),
 		"concurrency", cfg.Concurrency,
+		"agent_schedules_enabled", cfg.ScheduleEnabled,
+		"agent_schedule_default_interval", cfg.ScheduleDefaultInterval.String(),
+		"agent_schedule_max_concurrent_runs", cfg.ScheduleMaxConcurrentRuns,
+		"agent_schedule_task_queue", cfg.ScheduleTaskQueue,
 		"eventbus_driver", cfg.EventBusDriver,
 	)
 
-	ticker := time.NewTicker(cfg.Interval)
-	defer ticker.Stop()
-
-	if err := runScheduledJobs(ctx, logger, cfg); err != nil {
-		return err
+	var tickerC <-chan time.Time
+	if cfg.ScheduleEnabled {
+		ticker := time.NewTicker(cfg.ScheduleDefaultInterval)
+		defer ticker.Stop()
+		tickerC = ticker.C
+		if err := runScheduledJobs(ctx, logger, cfg); err != nil {
+			return err
+		}
+	} else {
+		logger.Info("agent-worker.schedules_disabled", "mode", "service")
 	}
 
 	for {
@@ -148,7 +189,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			return httpServer.Shutdown(shutdownCtx)
-		case <-ticker.C:
+		case <-tickerC:
 			if err := runScheduledJobs(ctx, logger, cfg); err != nil {
 				return err
 			}
@@ -173,6 +214,7 @@ func runScheduledJobs(ctx context.Context, logger *slog.Logger, cfg Config) erro
 		"eventbus_driver", cfg.EventBusDriver,
 		"sync_channel", cfg.SyncChannel,
 		"dlq_channel", cfg.DLQChannel,
+		"agent_schedule_task_queue", cfg.ScheduleTaskQueue,
 	)
 	return nil
 }
@@ -209,7 +251,7 @@ func newOrchestratorRuntime(cfg Config) workerRuntime {
 			orchestrator.NewInMemoryStore(),
 			orchestrator.NewEventRecorder(),
 			nil,
-			orchestrator.SchedulerOptions{MaxConcurrent: cfg.Concurrency},
+			orchestrator.SchedulerOptions{MaxConcurrent: cfg.ScheduleMaxConcurrentRuns},
 		),
 		jobs: []workerJob{defaultComplianceProbeJob()},
 	}
@@ -234,11 +276,13 @@ func (r workerRuntime) RunOnce(ctx context.Context, logger *slog.Logger) (worker
 		if completed.State == orchestrator.RunSucceeded {
 			summary.Succeeded++
 			agentWorkerRunsSucceededTotal.Add(1)
+			agentScheduledRunsSucceededTotal.Add(1)
 			logger.Info("agent-worker.scheduler_run_succeeded", "agent_id", completed.AgentID, "run_id", completed.ID)
 			continue
 		}
 		summary.Failed++
 		agentWorkerRunsFailedTotal.Add(1)
+		agentScheduledRunsFailedTotal.Add(1)
 		logger.Error("agent-worker.scheduler_run_failed", "agent_id", completed.AgentID, "run_id", completed.ID, "state", completed.State, "error_code", completed.Error.Code)
 	}
 	return summary, nil
@@ -295,6 +339,10 @@ func metricsHandler(cfg Config) http.HandlerFunc {
 		if cfg.Enabled {
 			enabled = 1
 		}
+		schedulesEnabled := 0
+		if cfg.ScheduleEnabled {
+			schedulesEnabled = 1
+		}
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		_, _ = fmt.Fprintf(w, `# HELP agentic_ecommerce_agent_worker_build_info Build metadata for the running agent-worker binary.
 # TYPE agentic_ecommerce_agent_worker_build_info gauge
@@ -308,6 +356,22 @@ agentic_ecommerce_agent_worker_concurrency %d
 # HELP agentic_ecommerce_agent_worker_scheduler_interval_seconds Configured scheduler interval.
 # TYPE agentic_ecommerce_agent_worker_scheduler_interval_seconds gauge
 agentic_ecommerce_agent_worker_scheduler_interval_seconds %.0f
+# HELP agentic_ecommerce_agent_schedules_enabled Whether Temporal-backed agent schedules are enabled for this deployment.
+# TYPE agentic_ecommerce_agent_schedules_enabled gauge
+agentic_ecommerce_agent_schedules_enabled %d
+# HELP agentic_ecommerce_agent_schedule_default_interval_seconds Default interval for Temporal-backed recurring agent runs.
+# TYPE agentic_ecommerce_agent_schedule_default_interval_seconds gauge
+agentic_ecommerce_agent_schedule_default_interval_seconds %.0f
+# HELP agentic_ecommerce_agent_schedule_max_concurrent_runs Maximum concurrent Temporal scheduled agent runs.
+# TYPE agentic_ecommerce_agent_schedule_max_concurrent_runs gauge
+agentic_ecommerce_agent_schedule_max_concurrent_runs %d
+# HELP agentic_ecommerce_agent_schedule_config_info Temporal schedule routing metadata.
+# TYPE agentic_ecommerce_agent_schedule_config_info gauge
+agentic_ecommerce_agent_schedule_config_info{task_queue=%q} 1
+# HELP agentic_ecommerce_agent_scheduled_runs_total Temporal scheduled agent runs observed by status.
+# TYPE agentic_ecommerce_agent_scheduled_runs_total counter
+agentic_ecommerce_agent_scheduled_runs_total{task_queue=%q,status="succeeded"} %d
+agentic_ecommerce_agent_scheduled_runs_total{task_queue=%q,status="failed"} %d
 # HELP agentic_ecommerce_agent_worker_runs_total Orchestrator-backed agent runs completed by this worker.
 # TYPE agentic_ecommerce_agent_worker_runs_total counter
 agentic_ecommerce_agent_worker_runs_total{eventbus_driver=%q,sync_channel=%q,status="succeeded"} %d
@@ -321,7 +385,7 @@ agentic_ecommerce_agent_worker_compliance_failures_total{eventbus_driver=%q,sync
 # HELP agentic_ecommerce_agent_worker_media_validation_failures_total Media validations rejected by this worker.
 # TYPE agentic_ecommerce_agent_worker_media_validation_failures_total counter
 agentic_ecommerce_agent_worker_media_validation_failures_total{eventbus_driver=%q,sync_channel=%q} 0
-`, version, commit, enabled, cfg.Concurrency, cfg.Interval.Seconds(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsSucceededTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsFailedTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel)
+`, version, commit, enabled, cfg.Concurrency, cfg.Interval.Seconds(), schedulesEnabled, cfg.ScheduleDefaultInterval.Seconds(), cfg.ScheduleMaxConcurrentRuns, cfg.ScheduleTaskQueue, cfg.ScheduleTaskQueue, agentScheduledRunsSucceededTotal.Load(), cfg.ScheduleTaskQueue, agentScheduledRunsFailedTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsSucceededTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsFailedTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel)
 	}
 }
 
@@ -413,4 +477,18 @@ func getenvDefault(getenv func(string) string, key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func firstConfigured(getenv func(string) string, keys ...string) string {
+	fallback := ""
+	if len(keys) > 0 {
+		fallback = keys[len(keys)-1]
+		keys = keys[:len(keys)-1]
+	}
+	for _, key := range keys {
+		if value := strings.TrimSpace(getenv(key)); value != "" {
+			return value
+		}
+	}
+	return fallback
 }

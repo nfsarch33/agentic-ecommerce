@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke tf-fmt tf-fmt-check tf-validate
+.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke tf-fmt tf-fmt-check tf-validate
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -137,7 +137,7 @@ temporal-worker:
 	go build -o bin/temporal-worker ./cmd/temporal-worker
 
 agent-run-once:
-	ECOMMERCE_AGENT_WORKER_ENABLED=true ECOMMERCE_AGENT_WORKER_RUN_ONCE=true go run ./cmd/agent-worker
+	ECOMMERCE_AGENT_WORKER_ENABLED=true ECOMMERCE_AGENT_WORKER_RUN_ONCE=true ECOMMERCE_AGENT_SCHEDULES_ENABLED=true go run ./cmd/agent-worker
 
 release-perf-smoke:
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test -run TestReleasePerformanceSmoke -count=1 -v ./cmd/mc-api
@@ -217,6 +217,17 @@ compose-temporal-config:
 	$(PROD_COMPOSE) $(TEMPORAL_PROFILE) $(TEMPORAL_WORKER_PROFILE) config --quiet
 	$(COMPOSE) $(TEMPORAL_PROFILE) $(TEMPORAL_WORKER_PROFILE) config --quiet
 
+compose-agent-schedules-config:
+	$(PROD_COMPOSE) $(WORKERS_PROFILE) $(TEMPORAL_PROFILE) $(TEMPORAL_WORKER_PROFILE) config --quiet
+	$(COMPOSE) $(WORKERS_PROFILE) $(TEMPORAL_PROFILE) $(TEMPORAL_WORKER_PROFILE) config --quiet
+
+agent-schedules-list:
+	$(COMPOSE) $(TEMPORAL_PROFILE) exec -T temporal temporal schedule list --address 127.0.0.1:7233 --namespace "$${ECOMMERCE_TEMPORAL_NAMESPACE:-default}" --long
+
+agent-schedules-smoke: compose-agent-schedules-config
+	$(COMPOSE) $(TEMPORAL_PROFILE) up -d --wait temporal
+	$(MAKE) agent-schedules-list
+
 n8n-up:
 	$(COMPOSE) $(N8N_PROFILE) up -d n8n
 
@@ -239,4 +250,4 @@ monitoring-validate:
 	else \
 		echo "promtool not installed; using Go YAML/JSON validation"; \
 	fi
-	go test ./monitoring
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test ./monitoring

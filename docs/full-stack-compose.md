@@ -12,9 +12,9 @@ This stack is production-like for local and single-host validation. It keeps pub
 - `grafana`: provisions the Prometheus datasource and the Agentic Ecommerce overview dashboard.
 - `wc-sync`: one-shot WooCommerce sync worker under the `workers` or `sync` profile. It defaults to dry-run mode.
 - `content-worker`: scaffold content worker under the `workers` profile.
-- `agent-worker`: v0.6.0 scheduler runtime placeholder under the `workers` profile. It exposes `/healthz` and `/metrics` on container port `8081` and is ready for the backend orchestrator package to replace its TODO scheduler hook.
+- `agent-worker`: scheduler runtime under the `workers` profile. It exposes `/healthz` and `/metrics` on container port `8081`, including v1.6.0 schedule-control metrics.
 - `temporal`: v1.2.0 Temporal CLI dev server under the `temporal` profile. It exposes gRPC on loopback port `${TEMPORAL_GRPC_HOST_PORT:-7233}` and the Web UI on `${TEMPORAL_UI_HOST_PORT:-8233}`.
-- `temporal-worker`: image-only placeholder under the `temporal-worker` profile until `cmd/temporal-worker` lands. Its task queue contract is `ECOMMERCE_TEMPORAL_TASK_QUEUE=ec-workflows`.
+- `temporal-worker`: backend Temporal worker under the `temporal-worker` profile. It polls `ECOMMERCE_TEMPORAL_TASK_QUEUE=ec-workflows` by default and logs v1.6.0 schedule-control config.
 - `n8n`: v1.5.0 local automation service under the `n8n` profile. It exposes the editor and webhook runtime on loopback port `${N8N_HOST_PORT:-5678}` and persists state in a named volume.
 - `minimax-openai-bridge`: optional placeholder under the `ai-bridge` profile. Real keys must come from local secret management, never from committed files.
 
@@ -59,6 +59,7 @@ make monitoring-validate
 make compose-config-prod
 make compose-workers-config
 make compose-temporal-config
+make compose-agent-schedules-config
 make n8n-config
 ```
 
@@ -78,6 +79,7 @@ Expected baseline and v1.3.0 rules:
 - `AgenticEcommerceHighErrorRate`: API 5xx error rate above 1% for 5 minutes.
 - `AgenticEcommerceSyncLagHigh`: WooCommerce sync lag above 5 minutes.
 - `AgenticEcommerceAgentFailureRateHigh`: agent-worker failure rate above 5% for 10 minutes.
+- `AgenticEcommerceScheduledAgentFailuresHigh`: Temporal-backed scheduled agent failures observed in the last 15 minutes.
 - `AgenticEcommerceComplianceFailureSpike`: backend plus worker compliance failures above the 15-minute spike threshold.
 - `AgenticEcommerceRAGSearchLatencyHigh`: RAG vector search p95 above 1 second.
 - `AgenticEcommerceEmbeddingFailuresHigh`: approved embedding bridge failures detected.
@@ -93,7 +95,8 @@ open "http://127.0.0.1:${TEMPORAL_UI_HOST_PORT:-8233}"
 ```
 
 See `docs/temporal-local.md` for health checks, readiness expectations, and the
-worker handoff once backend workflow code lands.
+worker runtime. See `docs/agent-schedules.md` for v1.6.0 schedule inspection and
+smoke targets.
 
 n8n local automation is also excluded from the default full-stack boot. Start it
 only when importing or testing automation templates:

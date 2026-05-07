@@ -109,6 +109,15 @@ func TestRequiredAlertRules(t *testing.T) {
 			},
 		},
 		{
+			alert:    "AgenticEcommerceScheduledAgentFailuresHigh",
+			severity: "warning",
+			forValue: "5m",
+			contains: []string{
+				"agentic_ecommerce_agent_scheduled_runs_total{status=\"failed\"}",
+				"> 0",
+			},
+		},
+		{
 			alert:    "AgenticEcommerceComplianceFailureSpike",
 			severity: "warning",
 			forValue: "5m",
