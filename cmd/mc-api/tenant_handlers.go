@@ -31,21 +31,44 @@ func (s *server) withTenantRequired(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *server) tenantIDForRequest(r *http.Request, required bool) (tenantpkg.ID, error) {
-	if actor, ok := r.Context().Value(actorContextKey{}).(requestActor); ok && strings.TrimSpace(actor.TenantID) != "" {
-		return tenantpkg.RequireID(tenantpkg.ID(actor.TenantID))
-	}
-	if s != nil && s.tokenManager != nil {
-		if claims, ok := s.accessClaimsFromRequest(r); ok && strings.TrimSpace(claims.TenantID) != "" {
-			return tenantpkg.RequireID(tenantpkg.ID(claims.TenantID))
-		}
-	}
-	if header := strings.TrimSpace(r.Header.Get("X-Tenant-ID")); header != "" {
-		return tenantpkg.RequireID(tenantpkg.ID(header))
+	if tenantID, ok, err := s.explicitTenantIDForRequest(r); ok || err != nil {
+		return tenantID, err
 	}
 	if required {
 		return "", tenantpkg.ErrTenantRequired
 	}
 	return tenantpkg.Default, nil
+}
+
+func (s *server) tenantIDForScopedRequest(r *http.Request) (tenantpkg.ID, bool, error) {
+	return s.explicitTenantIDForRequest(r)
+}
+
+func (s *server) explicitTenantIDForRequest(r *http.Request) (tenantpkg.ID, bool, error) {
+	if actor, ok := r.Context().Value(actorContextKey{}).(requestActor); ok && strings.TrimSpace(actor.TenantID) != "" {
+		tenantID, err := tenantpkg.RequireID(tenantpkg.ID(actor.TenantID))
+		return tenantID, true, err
+	}
+	if tenantID, ok, err := s.tenantIDFromAccessToken(r); ok || err != nil {
+		return tenantID, ok, err
+	}
+	if header := strings.TrimSpace(r.Header.Get("X-Tenant-ID")); header != "" {
+		tenantID, err := tenantpkg.RequireID(tenantpkg.ID(header))
+		return tenantID, true, err
+	}
+	return "", false, nil
+}
+
+func (s *server) tenantIDFromAccessToken(r *http.Request) (tenantpkg.ID, bool, error) {
+	if s == nil || s.tokenManager == nil {
+		return "", false, nil
+	}
+	claims, ok := s.accessClaimsFromRequest(r)
+	if !ok || strings.TrimSpace(claims.TenantID) == "" {
+		return "", false, nil
+	}
+	tenantID, err := tenantpkg.RequireID(tenantpkg.ID(claims.TenantID))
+	return tenantID, true, err
 }
 
 func (s *server) ensureTenantServices() {

@@ -43,4 +43,6 @@ type TenantProductRepository interface {
 type TenantOrderRepository interface {
 	OrderRepository
 	CreateWithTenant(ctx context.Context, order orderdomain.Order, tenantID string) error
+	GetByIDAndTenant(ctx context.Context, id uuid.UUID, tenantID string) (orderdomain.Order, error)
+	UpdateStatusWithTenant(ctx context.Context, id uuid.UUID, status orderdomain.Status, tenantID string) (orderdomain.Order, error)
 }

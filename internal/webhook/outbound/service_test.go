@@ -207,6 +207,94 @@ func TestServiceRegistrationLifecycle(t *testing.T) {
 	}
 }
 
+func TestServiceTenantRegistrationLifecycle(t *testing.T) {
+	t.Parallel()
+
+	received := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- r.Header.Get("X-EC-Webhook-ID")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	service := NewService(ServiceConfig{
+		Store: NewInMemoryStore(),
+		Client: NewClient(ClientConfig{
+			HTTPClient:  server.Client(),
+			MaxAttempts: 1,
+			Backoff:     func(int) time.Duration { return 0 },
+		}),
+	})
+	tenantA := mustRegisterTenantWebhook(t, service, "tenant-a", server.URL)
+	mustRegisterTenantWebhook(t, service, "tenant-b", server.URL)
+
+	assertTenantWebhookList(t, service, tenantA)
+	assertTenantWebhookDelivery(t, service, received, tenantA)
+	assertTenantWebhookTestAndDelete(t, service, received, tenantA)
+}
+
+func assertTenantWebhookDelivery(t *testing.T, service *Service, received <-chan string, tenantA Registration) {
+	t.Helper()
+	results, err := service.DeliverEvent(context.Background(), eventbus.Event{
+		ID:        "evt-a",
+		Type:      eventbus.ProductCreated,
+		TenantID:  "tenant-a",
+		Timestamp: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("deliver tenant A event: %v", err)
+	}
+	if len(results) != 1 || results[0].WebhookID != tenantA.ID {
+		t.Fatalf("tenant A delivery results = %+v", results)
+	}
+	if got := <-received; got != tenantA.ID {
+		t.Fatalf("delivered webhook id = %q, want %q", got, tenantA.ID)
+	}
+}
+
+func assertTenantWebhookTestAndDelete(t *testing.T, service *Service, received <-chan string, tenantA Registration) {
+	t.Helper()
+	if _, err := service.TestForTenant(context.Background(), tenantA.ID, "tenant-b", eventbus.ProductCreated); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-tenant test err = %v, want ErrNotFound", err)
+	}
+	if _, err := service.TestForTenant(context.Background(), tenantA.ID, "tenant-a", eventbus.ProductCreated); err != nil {
+		t.Fatalf("tenant A test delivery: %v", err)
+	}
+	<-received
+
+	if err := service.DeleteForTenant(context.Background(), tenantA.ID, "tenant-b"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-tenant delete err = %v, want ErrNotFound", err)
+	}
+	if err := service.DeleteForTenant(context.Background(), tenantA.ID, "tenant-a"); err != nil {
+		t.Fatalf("delete tenant A: %v", err)
+	}
+}
+
+func mustRegisterTenantWebhook(t *testing.T, service *Service, tenantID, url string) Registration {
+	t.Helper()
+	reg, err := service.Register(context.Background(), CreateRegistrationInput{
+		TenantID:   tenantID,
+		URL:        url,
+		EventTypes: []eventbus.EventType{eventbus.ProductCreated},
+		Secret:     "whsec_" + tenantID,
+	})
+	if err != nil {
+		t.Fatalf("register %s: %v", tenantID, err)
+	}
+	return reg
+}
+
+func assertTenantWebhookList(t *testing.T, service *Service, want Registration) {
+	t.Helper()
+	registrations, err := service.ListForTenant(context.Background(), want.TenantID)
+	if err != nil {
+		t.Fatalf("list %s: %v", want.TenantID, err)
+	}
+	if len(registrations) != 1 || registrations[0].ID != want.ID {
+		t.Fatalf("%s registrations = %+v", want.TenantID, registrations)
+	}
+}
+
 func TestServiceTestDeliversSubscribedEvent(t *testing.T) {
 	t.Parallel()
 

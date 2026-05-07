@@ -591,6 +591,16 @@ func (s *server) listProducts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := s.repo.List(r.Context(), page, perPage)
+	if tenantRepo, ok := s.repo.(port.TenantProductRepository); ok {
+		tenantID, scoped, tenantErr := s.tenantIDForScopedRequest(r)
+		if tenantErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+			return
+		}
+		if scoped {
+			result, err = tenantRepo.ListByTenant(r.Context(), string(tenantID), page, perPage)
+		}
+	}
 	if err != nil {
 		s.log.Error("list products", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
@@ -646,8 +656,24 @@ func (s *server) createProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.repo.Create(r.Context(), product); err != nil {
-		s.log.Error("create product", "error", err)
+	var createErr error
+	createScoped := false
+	if tenantRepo, ok := s.repo.(port.TenantProductRepository); ok {
+		tenantID, scoped, tenantErr := s.tenantIDForScopedRequest(r)
+		if tenantErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+			return
+		}
+		if scoped {
+			createErr = tenantRepo.CreateWithTenant(r.Context(), product, string(tenantID))
+			createScoped = true
+		}
+	}
+	if !createScoped {
+		createErr = s.repo.Create(r.Context(), product)
+	}
+	if createErr != nil {
+		s.log.Error("create product", "error", createErr)
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "duplicate_product"})
 		return
 	}
@@ -661,11 +687,7 @@ func (s *server) getProduct(w http.ResponseWriter, r *http.Request, idOrSlug str
 		err     error
 	)
 
-	if id, parseErr := uuid.Parse(idOrSlug); parseErr == nil {
-		product, err = s.repo.GetByID(r.Context(), id)
-	} else {
-		product, err = s.repo.GetBySlug(r.Context(), idOrSlug)
-	}
+	product, err = s.productForRequest(r, idOrSlug)
 
 	if err != nil {
 		if isNotFound(err) {
@@ -680,6 +702,45 @@ func (s *server) getProduct(w http.ResponseWriter, r *http.Request, idOrSlug str
 	writeJSON(w, http.StatusOK, toProductResponse(product))
 }
 
+func (s *server) productForRequest(r *http.Request, idOrSlug string) (catalog.Product, error) {
+	if product, ok, err := s.scopedProductForRequest(r, idOrSlug); ok || err != nil {
+		return product, err
+	}
+	if id, parseErr := uuid.Parse(idOrSlug); parseErr == nil {
+		return s.repo.GetByID(r.Context(), id)
+	}
+	return s.repo.GetBySlug(r.Context(), idOrSlug)
+}
+
+func (s *server) scopedProductForRequest(r *http.Request, idOrSlug string) (catalog.Product, bool, error) {
+	tenantRepo, ok := s.repo.(port.TenantProductRepository)
+	if !ok {
+		return catalog.Product{}, false, nil
+	}
+	tenantID, scoped, err := s.tenantIDForScopedRequest(r)
+	if err != nil || !scoped {
+		return catalog.Product{}, scoped, err
+	}
+	product, err := productFromTenantRepo(r.Context(), tenantRepo, string(tenantID), idOrSlug)
+	return product, true, err
+}
+
+func productFromTenantRepo(ctx context.Context, repo port.TenantProductRepository, tenantID, idOrSlug string) (catalog.Product, error) {
+	if id, parseErr := uuid.Parse(idOrSlug); parseErr == nil {
+		return repo.GetByIDAndTenant(ctx, id, tenantID)
+	}
+	result, err := repo.ListByTenant(ctx, tenantID, 1, 100)
+	if err != nil {
+		return catalog.Product{}, err
+	}
+	for _, product := range result.Products {
+		if product.Slug() == idOrSlug {
+			return product, nil
+		}
+	}
+	return catalog.Product{}, inmemory.ErrProductNotFound
+}
+
 func (s *server) updateProduct(w http.ResponseWriter, r *http.Request, idStr string) {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -687,7 +748,7 @@ func (s *server) updateProduct(w http.ResponseWriter, r *http.Request, idStr str
 		return
 	}
 
-	existing, err := s.repo.GetByID(r.Context(), id)
+	existing, err := s.productForRequest(r, idStr)
 	if err != nil {
 		if isNotFound(err) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
@@ -750,6 +811,15 @@ func (s *server) deleteProduct(w http.ResponseWriter, r *http.Request, idStr str
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_id"})
+		return
+	}
+	if _, err := s.productForRequest(r, idStr); err != nil {
+		if isNotFound(err) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+			return
+		}
+		s.log.Error("get product for delete", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
 		return
 	}
 

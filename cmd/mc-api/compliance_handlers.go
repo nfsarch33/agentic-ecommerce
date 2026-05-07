@@ -155,7 +155,7 @@ func (s *server) productByActionPath(w http.ResponseWriter, r *http.Request, pat
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_id"})
 		return catalog.Product{}, false
 	}
-	product, err := s.repo.GetByID(r.Context(), id)
+	product, err := s.productForRequest(r, id.String())
 	if err != nil {
 		if isNotFound(err) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})

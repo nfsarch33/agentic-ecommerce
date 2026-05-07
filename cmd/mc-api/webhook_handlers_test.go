@@ -162,6 +162,84 @@ func TestWebhookAPIRecordsAuditWithoutSecret(t *testing.T) {
 	}
 }
 
+func TestWebhookRegistrationAPIIsTenantScoped(t *testing.T) {
+	t.Parallel()
+
+	srv := testWebhookServer(t)
+	tenantA := createWebhookForTenant(t, srv, "tenant-a", "https://hooks.example.test/a")
+	createWebhookForTenant(t, srv, "tenant-b", "https://hooks.example.test/b")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/webhooks", nil)
+	req.Header.Set("X-Tenant-ID", "tenant-a")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list tenant A status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var listed webhookListResponse
+	if err := json.NewDecoder(rec.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode tenant A webhooks: %v", err)
+	}
+	if len(listed.Webhooks) != 1 || listed.Webhooks[0].ID != tenantA.ID {
+		t.Fatalf("tenant A webhooks = %+v, want only %s", listed.Webhooks, tenantA.ID)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/webhooks/"+tenantA.ID, nil)
+	req.Header.Set("X-Tenant-ID", "tenant-b")
+	rec = httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("cross-tenant webhook delete status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestWebhookTestEndpointIsTenantScoped(t *testing.T) {
+	t.Parallel()
+
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer receiver.Close()
+
+	srv := testWebhookServer(t)
+	tenantA := createWebhookForTenant(t, srv, "tenant-a", receiver.URL)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/"+tenantA.ID+"/test", bytes.NewBufferString(`{"event_type":"product.created"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-ID", "tenant-b")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("cross-tenant webhook test status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/"+tenantA.ID+"/test", bytes.NewBufferString(`{"event_type":"product.created"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-ID", "tenant-a")
+	rec = httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("tenant webhook test status = %d, want 202; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func createWebhookForTenant(t *testing.T, srv *server, tenantID, url string) webhookRegistrationResponse {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks", bytes.NewBufferString(`{"url":"`+url+`","event_types":["product.created"],"secret":"tenant-webhook-secret"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-ID", tenantID)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create webhook %s status = %d, want 201; body=%s", tenantID, rec.Code, rec.Body.String())
+	}
+	var created webhookRegistrationResponse
+	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode created webhook: %v", err)
+	}
+	return created
+}
+
 func testWebhookServer(t *testing.T) *server {
 	t.Helper()
 	store := outbound.NewInMemoryStore()

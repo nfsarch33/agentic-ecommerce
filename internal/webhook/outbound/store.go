@@ -55,6 +55,7 @@ func (s *InMemoryStore) CreateRegistration(_ context.Context, input CreateRegist
 	}
 	reg := Registration{
 		ID:         uuid.NewString(),
+		TenantID:   strings.TrimSpace(input.TenantID),
 		URL:        strings.TrimSpace(input.URL),
 		EventTypes: append([]eventbus.EventType(nil), input.EventTypes...),
 		SecretRef:  strings.TrimSpace(input.SecretRef),
