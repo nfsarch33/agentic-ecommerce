@@ -39,6 +39,12 @@ func (s *server) ingestRAGDocument(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
 		return
 	}
+	if tenantID, scoped, err := s.tenantIDForScopedRequest(r); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+		return
+	} else if scoped {
+		doc.TenantID = string(tenantID)
+	}
 	result, err := s.rag.Ingest(r.Context(), doc)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
@@ -61,7 +67,14 @@ func (s *server) searchRAGEvidence(w http.ResponseWriter, r *http.Request) {
 	if topK <= 0 || topK > 20 {
 		topK = 5
 	}
-	results, err := s.rag.SearchText(r.Context(), query, topK)
+	search := rag.SearchQuery{Text: query, TopK: topK}
+	if tenantID, scoped, err := s.tenantIDForScopedRequest(r); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+		return
+	} else if scoped {
+		search.TenantID = string(tenantID)
+	}
+	results, err := s.rag.Search(r.Context(), search)
 	if err != nil {
 		s.log.Error("rag search", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "rag_search_failed"})

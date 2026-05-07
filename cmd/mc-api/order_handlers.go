@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -104,8 +105,26 @@ func (s *server) createOrder(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	if err := s.orderRepo.Create(r.Context(), order); err != nil {
-		s.log.Error("create order", "error", err)
+	var createErr error
+	createScoped := false
+	if tenantRepo, ok := s.orderRepo.(interface {
+		CreateWithTenant(ctx context.Context, order orderdomain.Order, tenantID string) error
+	}); ok {
+		tenantID, scoped, tenantErr := s.tenantIDForScopedRequest(r)
+		if tenantErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+			return
+		}
+		if scoped {
+			createErr = tenantRepo.CreateWithTenant(r.Context(), order, string(tenantID))
+			createScoped = true
+		}
+	}
+	if !createScoped {
+		createErr = s.orderRepo.Create(r.Context(), order)
+	}
+	if createErr != nil {
+		s.log.Error("create order", "error", createErr)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
 		return
 	}
@@ -119,7 +138,24 @@ func (s *server) getOrder(w http.ResponseWriter, r *http.Request, idStr string) 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_id"})
 		return
 	}
-	order, err := s.orderRepo.GetByID(r.Context(), id)
+	var order orderdomain.Order
+	readScoped := false
+	if tenantRepo, ok := s.orderRepo.(interface {
+		GetByIDAndTenant(ctx context.Context, id uuid.UUID, tenantID string) (orderdomain.Order, error)
+	}); ok {
+		tenantID, scoped, tenantErr := s.tenantIDForScopedRequest(r)
+		if tenantErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+			return
+		}
+		if scoped {
+			order, err = tenantRepo.GetByIDAndTenant(r.Context(), id, string(tenantID))
+			readScoped = true
+		}
+	}
+	if !readScoped {
+		order, err = s.orderRepo.GetByID(r.Context(), id)
+	}
 	if err != nil {
 		if isNotFound(err) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
@@ -148,7 +184,24 @@ func (s *server) patchOrderStatus(w http.ResponseWriter, r *http.Request, idStr 
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	order, err := s.orderRepo.UpdateStatus(r.Context(), id, status)
+	var order orderdomain.Order
+	updateScoped := false
+	if tenantRepo, ok := s.orderRepo.(interface {
+		UpdateStatusWithTenant(ctx context.Context, id uuid.UUID, status orderdomain.Status, tenantID string) (orderdomain.Order, error)
+	}); ok {
+		tenantID, scoped, tenantErr := s.tenantIDForScopedRequest(r)
+		if tenantErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+			return
+		}
+		if scoped {
+			order, err = tenantRepo.UpdateStatusWithTenant(r.Context(), id, status, string(tenantID))
+			updateScoped = true
+		}
+	}
+	if !updateScoped {
+		order, err = s.orderRepo.UpdateStatus(r.Context(), id, status)
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, orderdomain.ErrInvalidStatusTransition):

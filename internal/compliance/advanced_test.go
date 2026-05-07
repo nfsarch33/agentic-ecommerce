@@ -2,6 +2,8 @@ package compliance
 
 import (
 	"context"
+	"encoding/csv"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -184,5 +186,85 @@ func TestHistoryStoreExportsJSONAndCSV(t *testing.T) {
 	}
 	if contentType != "text/csv" || !strings.Contains(string(csvPayload), "tenant_id,product_id,checked_at,pass,score,severity,failed_rule_ids") {
 		t.Fatalf("csv export contentType=%q payload=%s", contentType, csvPayload)
+	}
+}
+
+func TestHistoryExportIsTenantScopedEscapedAndSanitized(t *testing.T) {
+	t.Parallel()
+
+	store := seedHistoryExportStore(t)
+	assertTenantCSVExport(t, store)
+	assertTenantJSONExportSanitized(t, store)
+}
+
+func seedHistoryExportStore(t *testing.T) *InMemoryHistoryStore {
+	t.Helper()
+	store := NewInMemoryHistoryStore()
+	records := []EvaluationRecord{
+		{
+			TenantID:  "tenant-a",
+			ProductID: "product,one",
+			CheckedAt: time.Date(2026, 5, 8, 2, 0, 0, 0, time.UTC),
+			Result: Result{
+				Pass:     false,
+				Score:    40,
+				Severity: SeverityCritical,
+				RuleIDs:  []string{"bad,claim", "formula=guard"},
+				Results:  []RuleResult{{ID: "bad,claim", Pass: false, Reasons: []string{"quoted, reason"}}},
+			},
+		},
+		{
+			TenantID:  "tenant-b",
+			ProductID: "product-two",
+			CheckedAt: time.Date(2026, 5, 8, 3, 0, 0, 0, time.UTC),
+			Result:    Result{Pass: false, Score: 10, Severity: SeverityError, RuleIDs: []string{"other"}},
+		},
+	}
+	for _, record := range records {
+		if err := store.RecordEvaluation(context.Background(), record); err != nil {
+			t.Fatalf("record evaluation: %v", err)
+		}
+	}
+	return store
+}
+
+func assertTenantCSVExport(t *testing.T, store *InMemoryHistoryStore) {
+	t.Helper()
+	csvPayload, contentType, err := ExportHistory(context.Background(), store, SummaryFilter{TenantID: "tenant-a"}, ExportFormatCSV)
+	if err != nil {
+		t.Fatalf("export csv: %v", err)
+	}
+	if contentType != "text/csv" {
+		t.Fatalf("csv content type = %q, want text/csv", contentType)
+	}
+	rows, err := csv.NewReader(strings.NewReader(string(csvPayload))).ReadAll()
+	if err != nil {
+		t.Fatalf("parse csv export: %v\n%s", err, csvPayload)
+	}
+	if len(rows) != 2 || rows[1][0] != "tenant-a" || rows[1][1] != "product,one" || rows[1][6] != "bad,claim|formula=guard" {
+		t.Fatalf("csv rows = %+v", rows)
+	}
+}
+
+func assertTenantJSONExportSanitized(t *testing.T, store *InMemoryHistoryStore) {
+	t.Helper()
+	jsonPayload, contentType, err := ExportHistory(context.Background(), store, SummaryFilter{TenantID: "tenant-a"}, ExportFormatJSON)
+	if err != nil {
+		t.Fatalf("export json: %v", err)
+	}
+	if contentType != "application/json" {
+		t.Fatalf("json content type = %q, want application/json", contentType)
+	}
+	for _, forbidden := range []string{"customer_email", "consumer_key", "consumer_secret", "secret_ref", "secret_hash"} {
+		if strings.Contains(string(jsonPayload), forbidden) {
+			t.Fatalf("json export contains sensitive field %q: %s", forbidden, jsonPayload)
+		}
+	}
+	var exported []EvaluationRecord
+	if err := json.Unmarshal(jsonPayload, &exported); err != nil {
+		t.Fatalf("unmarshal json export: %v", err)
+	}
+	if len(exported) != 1 || exported[0].TenantID != "tenant-a" || exported[0].ProductID != "product,one" {
+		t.Fatalf("json export = %+v", exported)
 	}
 }

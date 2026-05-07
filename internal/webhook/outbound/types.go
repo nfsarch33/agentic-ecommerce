@@ -14,6 +14,7 @@ var (
 
 type Registration struct {
 	ID         string               `json:"id"`
+	TenantID   string               `json:"tenant_id,omitempty"`
 	URL        string               `json:"url"`
 	EventTypes []eventbus.EventType `json:"event_types"`
 	SecretRef  string               `json:"secret_ref,omitempty"`
@@ -23,6 +24,7 @@ type Registration struct {
 }
 
 type CreateRegistrationInput struct {
+	TenantID   string
 	URL        string
 	EventTypes []eventbus.EventType
 	Secret     string

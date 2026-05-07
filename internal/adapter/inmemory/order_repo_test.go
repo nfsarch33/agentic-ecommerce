@@ -75,6 +75,40 @@ func TestOrderRepositoryGetByIDReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestTenantOrderMethodsIsolateOrders(t *testing.T) {
+	t.Parallel()
+	repo := NewOrderRepository()
+	ctx := context.Background()
+	orderA := inmemoryTestOrder(t)
+	orderB := inmemoryTestOrder(t)
+
+	if err := repo.CreateWithTenant(ctx, orderA, "tenant-a"); err != nil {
+		t.Fatalf("create tenant A order: %v", err)
+	}
+	if err := repo.CreateWithTenant(ctx, orderB, "tenant-b"); err != nil {
+		t.Fatalf("create tenant B order: %v", err)
+	}
+
+	got, err := repo.GetByIDAndTenant(ctx, orderA.ID(), "tenant-a")
+	if err != nil {
+		t.Fatalf("get tenant A order: %v", err)
+	}
+	if got.ID() != orderA.ID() {
+		t.Fatalf("tenant A order ID = %s, want %s", got.ID(), orderA.ID())
+	}
+	if _, err := repo.GetByIDAndTenant(ctx, orderA.ID(), "tenant-b"); !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf("cross-tenant order get error = %v, want ErrOrderNotFound", err)
+	}
+
+	patched, err := repo.UpdateStatusWithTenant(ctx, orderA.ID(), orderdomain.StatusPaid, "tenant-a")
+	if err != nil {
+		t.Fatalf("update tenant A status: %v", err)
+	}
+	if patched.Status() != orderdomain.StatusPaid {
+		t.Fatalf("patched status = %s, want paid", patched.Status())
+	}
+}
+
 func TestCartRepositorySaveAndGet(t *testing.T) {
 	t.Parallel()
 	repo := NewCartRepository()
