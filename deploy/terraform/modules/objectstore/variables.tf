@@ -37,6 +37,42 @@ variable "public_base_url" {
   default     = ""
 }
 
+variable "cdn_stub_enabled" {
+  description = "Whether to emit a provider-specific CDN placeholder contract for media reads."
+  type        = bool
+  default     = true
+}
+
+variable "cdn_hostname" {
+  description = "Optional CDN hostname placeholder. Leave empty to derive a public-safe placeholder."
+  type        = string
+  default     = ""
+}
+
+variable "cdn_default_ttl_seconds" {
+  description = "Default CDN cache TTL for immutable media assets."
+  type        = number
+  default     = 3600
+}
+
+variable "cdn_max_ttl_seconds" {
+  description = "Maximum CDN cache TTL for immutable media assets."
+  type        = number
+  default     = 86400
+}
+
+variable "cdn_allowed_methods" {
+  description = "HTTP methods allowed at the media CDN edge."
+  type        = list(string)
+  default     = ["GET", "HEAD", "OPTIONS"]
+}
+
+variable "cdn_viewer_protocol_policy" {
+  description = "Viewer protocol policy placeholder. Use redirect-to-https or https-only for real deployments."
+  type        = string
+  default     = "redirect-to-https"
+}
+
 variable "versioning_enabled" {
   description = "Whether the eventual bucket should keep object versions."
   type        = bool
