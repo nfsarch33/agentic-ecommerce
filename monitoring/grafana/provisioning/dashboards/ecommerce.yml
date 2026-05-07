@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Agentic Ecommerce
+    orgId: 1
+    folder: Agentic Ecommerce
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

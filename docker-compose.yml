@@ -1,0 +1,265 @@
+name: agentic-ecommerce
+
+x-app-common: &app-common
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  networks:
+    - ecommerce
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    <<: *app-common
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ecommerce}
+      POSTGRES_USER: ${POSTGRES_USER:-ecommerce}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-postgres}
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ecommerce} -d ${POSTGRES_DB:-ecommerce}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    <<: *app-common
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  mc-api:
+    <<: *app-common
+    image: ghcr.io/nfsarch33/agentic-ecommerce:${ECOMMERCE_IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-v0.5.0}
+        COMMIT: ${COMMIT:-local}
+        TARGET: mc-api
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ECOMMERCE_HTTP_ADDR: 0.0.0.0:8080
+      ECOMMERCE_DB_URL: postgres://${POSTGRES_USER:-ecommerce}:${POSTGRES_PASSWORD:-change-me-postgres}@postgres:5432/${POSTGRES_DB:-ecommerce}?sslmode=disable
+      ECOMMERCE_REDIS_ADDR: redis:6379
+      ECOMMERCE_REDIS_DB: ${ECOMMERCE_REDIS_DB:-0}
+      ECOMMERCE_REDIS_KEY_PREFIX: ${ECOMMERCE_REDIS_KEY_PREFIX:-ec:prod:}
+      ECOMMERCE_EVENTBUS_DRIVER: ${ECOMMERCE_EVENTBUS_DRIVER:-redis}
+      ECOMMERCE_EVENTBUS_REDIS_ADDR: redis:6379
+      ECOMMERCE_EVENTBUS_REDIS_DB: ${ECOMMERCE_EVENTBUS_REDIS_DB:-0}
+      ECOMMERCE_EVENTBUS_CHANNEL_SYNC: ${ECOMMERCE_EVENTBUS_CHANNEL_SYNC:-ec.sync.events}
+      ECOMMERCE_EVENTBUS_CHANNEL_DLQ: ${ECOMMERCE_EVENTBUS_CHANNEL_DLQ:-ec.sync.deadletter}
+      ECOMMERCE_API_TOKEN: ${ECOMMERCE_API_TOKEN:-}
+      ECOMMERCE_ALLOWED_ORIGIN: ${ECOMMERCE_ALLOWED_ORIGIN:-}
+      ECOMMERCE_WC_STORE_URL: ${ECOMMERCE_WC_STORE_URL:-}
+      ECOMMERCE_WC_CONSUMER_KEY: ${ECOMMERCE_WC_CONSUMER_KEY:-}
+      ECOMMERCE_WC_CONSUMER_SECRET: ${ECOMMERCE_WC_CONSUMER_SECRET:-}
+      ECOMMERCE_WC_WEBHOOK_SECRET: ${ECOMMERCE_WC_WEBHOOK_SECRET:-}
+      ECOMMERCE_AI_BRIDGE_URL: ${ECOMMERCE_AI_BRIDGE_URL:-}
+      ECOMMERCE_AI_MODEL: ${ECOMMERCE_AI_MODEL:-}
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${MC_API_HOST_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "/app", "healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  frontend:
+    <<: *app-common
+    image: ghcr.io/nfsarch33/agentic-ecommerce-web:${WEB_IMAGE_TAG:-main}
+    depends_on:
+      mc-api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MC_API_BASE_URL: ${MC_API_BASE_URL:-http://mc-api:8080}
+      FLEET_AI_BRIDGE_URL: ${FLEET_AI_BRIDGE_URL:-}
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${WEB_HOST_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const http=require('http');const req=http.get('http://127.0.0.1:3000',res=>process.exit(res.statusCode<500?0:1));req.on('error',()=>process.exit(1));req.setTimeout(2000,()=>{req.destroy();process.exit(1)})\""
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  wc-sync:
+    <<: *app-common
+    image: ghcr.io/nfsarch33/agentic-ecommerce:${ECOMMERCE_IMAGE_TAG:-dev}-wc-sync
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-v0.5.0}
+        COMMIT: ${COMMIT:-local}
+        TARGET: wc-sync
+    profiles: ["workers", "sync"]
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mc-api:
+        condition: service_healthy
+    environment:
+      ECOMMERCE_WC_BASE_URL: ${ECOMMERCE_WC_BASE_URL:-}
+      ECOMMERCE_WC_CONSUMER_KEY: ${ECOMMERCE_WC_CONSUMER_KEY:-}
+      ECOMMERCE_WC_CONSUMER_SECRET: ${ECOMMERCE_WC_CONSUMER_SECRET:-}
+      ECOMMERCE_SYNC_MODE: ${ECOMMERCE_SYNC_MODE:-once}
+      ECOMMERCE_SYNC_DRY_RUN: ${ECOMMERCE_SYNC_DRY_RUN:-true}
+      ECOMMERCE_DB_URL: postgres://${POSTGRES_USER:-ecommerce}:${POSTGRES_PASSWORD:-change-me-postgres}@postgres:5432/${POSTGRES_DB:-ecommerce}?sslmode=disable
+      ECOMMERCE_REDIS_ADDR: redis:6379
+      ECOMMERCE_EVENTBUS_DRIVER: ${ECOMMERCE_EVENTBUS_DRIVER:-redis}
+      ECOMMERCE_EVENTBUS_REDIS_ADDR: redis:6379
+      ECOMMERCE_EVENTBUS_REDIS_DB: ${ECOMMERCE_EVENTBUS_REDIS_DB:-0}
+      ECOMMERCE_EVENTBUS_CHANNEL_SYNC: ${ECOMMERCE_EVENTBUS_CHANNEL_SYNC:-ec.sync.events}
+      ECOMMERCE_EVENTBUS_CHANNEL_DLQ: ${ECOMMERCE_EVENTBUS_CHANNEL_DLQ:-ec.sync.deadletter}
+
+  content-worker:
+    <<: *app-common
+    image: ghcr.io/nfsarch33/agentic-ecommerce:${ECOMMERCE_IMAGE_TAG:-dev}-content-worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-v0.5.0}
+        COMMIT: ${COMMIT:-local}
+        TARGET: content-worker
+    profiles: ["workers"]
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      mc-api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ECOMMERCE_AI_BRIDGE_URL: ${ECOMMERCE_AI_BRIDGE_URL:-}
+      ECOMMERCE_AI_MODEL: ${ECOMMERCE_AI_MODEL:-}
+      ECOMMERCE_REDIS_ADDR: redis:6379
+
+  minimax-openai-bridge:
+    image: ghcr.io/nfsarch33/minimax-openai-bridge:${MINIMAX_BRIDGE_IMAGE_TAG:-main}
+    <<: *app-common
+    profiles: ["ai-bridge"]
+    environment:
+      MINIMAX_API_KEY_1: ${MINIMAX_API_KEY_1:-}
+      MINIMAX_API_KEY_2: ${MINIMAX_API_KEY_2:-}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-}
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${MINIMAX_BRIDGE_HOST_PORT:-8090}:8080"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1"
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    <<: *app-common
+    user: "65534:65534"
+    depends_on:
+      mc-api:
+        condition: service_healthy
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${PROMETHEUS_HOST_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:9090/-/healthy >/dev/null 2>&1 || exit 1"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    <<: *app-common
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me-grafana}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${GRAFANA_HOST_PORT:-3001}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:3000/api/health >/dev/null 2>&1 || exit 1"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+networks:
+  ecommerce:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:

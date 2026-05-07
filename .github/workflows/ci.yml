@@ -1,10 +1,10 @@
 name: CI
 
 on:
+  pull_request:
   push:
     branches:
       - main
-  pull_request:
 
 permissions:
   contents: read
@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend:
-    name: Test, vet, build, and containerize
+  go:
+    name: Go gates
     runs-on: ubuntu-latest
 
     steps:
@@ -49,5 +49,25 @@ jobs:
       - name: Build binaries
         run: make build
 
-      - name: Build Docker image
-        run: docker build --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }} .
+  compose:
+    name: Compose and Docker build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate dev compose
+        run: docker compose -f docker-compose.dev.yml config --quiet
+
+      - name: Validate full stack compose
+        run: docker compose --env-file .env.compose.example -f docker-compose.yml config --quiet
+
+      - name: Build mc-api image
+        run: docker build --build-arg TARGET=mc-api --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }} .
+
+      - name: Build wc-sync image
+        run: docker build --build-arg TARGET=wc-sync --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }}-wc-sync .
+
+      - name: Build content-worker image
+        run: docker build --build-arg TARGET=content-worker --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }}-content-worker .

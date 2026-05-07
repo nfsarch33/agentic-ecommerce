@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
@@ -71,6 +72,55 @@ func TestHealthz(t *testing.T) {
 	}
 	if got["status"] != "ok" || got["service"] != "agentic-ecommerce-mc-api" {
 		t.Fatalf("body = %#v", got)
+	}
+}
+
+func TestMetricsEndpointExposesPrometheusText(t *testing.T) {
+	t.Parallel()
+	srv, _ := testServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "text/plain; version=0.0.4; charset=utf-8" {
+		t.Fatalf("content-type = %q", got)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		"agentic_ecommerce_build_info",
+		"agentic_ecommerce_sync_lag_seconds",
+		"agentic_ecommerce_agent_success_total",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("metrics body missing %q:\n%s", want, body)
+		}
+	}
+}
+
+func TestIsHealthcheckArgs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "no args", args: []string{"/app"}, want: false},
+		{name: "healthcheck", args: []string{"/app", "healthcheck"}, want: true},
+		{name: "flag", args: []string{"/app", "--healthcheck"}, want: true},
+		{name: "other", args: []string{"/app", "serve"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := isHealthcheckArgs(tt.args); got != tt.want {
+				t.Fatalf("isHealthcheckArgs(%v) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
 	}
 }
 
