@@ -1,0 +1,5 @@
+# No Shell Leak
+
+All private-repo operations for this repo must use `runx` with the `ecommerce` alias once registered.
+
+Do not put private repo paths, credential locations, tokens, internal hosts, or identity files in shell argv. Add missing repeated workflows to `runx` as Go subcommands or presets.
