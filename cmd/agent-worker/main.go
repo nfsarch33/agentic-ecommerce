@@ -11,13 +11,22 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
+
+	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
+	complianceagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/compliance"
+	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	pricingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/pricing"
+	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
 )
 
 var (
 	version = "dev"
 	commit  = "unknown"
+
+	agentWorkerRunsTotal atomic.Int64
 )
 
 // Config is the runtime contract between compose and the future v0.6.0 orchestrator.
@@ -150,16 +159,112 @@ func runScheduledJobs(ctx context.Context, logger *slog.Logger, cfg Config) erro
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	// TODO(v0.6.0 QA): replace this placeholder with internal/agent orchestrator wiring
-	// once the parallel backend branch lands scheduler registration and event dispatch.
+	runtime := newOrchestratorRuntime(cfg)
+	summary, err := runtime.RunOnce(ctx, logger)
+	if err != nil {
+		return err
+	}
 	logger.Info(
-		"agent-worker.scheduler_placeholder",
-		"concurrency", cfg.Concurrency,
+		"agent-worker.scheduler_cycle_complete",
+		"submitted", summary.Submitted,
+		"succeeded", summary.Succeeded,
+		"failed", summary.Failed,
 		"eventbus_driver", cfg.EventBusDriver,
 		"sync_channel", cfg.SyncChannel,
 		"dlq_channel", cfg.DLQChannel,
 	)
 	return nil
+}
+
+type workerRuntime struct {
+	scheduler *orchestrator.Scheduler
+	jobs      []workerJob
+}
+
+type workerJob struct {
+	AgentID  string
+	Priority int
+	Payload  map[string]any
+}
+
+type workerRunSummary struct {
+	Submitted int
+	Succeeded int
+	Failed    int
+}
+
+func newOrchestratorRuntime(cfg Config) workerRuntime {
+	registry := orchestrator.NewRegistry()
+	for _, candidate := range []orchestrator.Agent{
+		complianceagent.NewAgent(),
+		pricingagent.NewAgent(),
+		sourcingagent.NewAgent(),
+	} {
+		_ = registry.Register(candidate)
+	}
+	return workerRuntime{
+		scheduler: orchestrator.NewScheduler(
+			registry,
+			orchestrator.NewInMemoryStore(),
+			orchestrator.NewEventRecorder(),
+			nil,
+			orchestrator.SchedulerOptions{MaxConcurrent: cfg.Concurrency},
+		),
+		jobs: []workerJob{defaultComplianceProbeJob()},
+	}
+}
+
+func (r workerRuntime) RunOnce(ctx context.Context, logger *slog.Logger) (workerRunSummary, error) {
+	summary := workerRunSummary{}
+	for _, job := range r.jobs {
+		run, err := r.scheduler.Submit(ctx, orchestrator.SubmitRequest{
+			AgentID:  job.AgentID,
+			Priority: job.Priority,
+			Payload:  job.Payload,
+		})
+		if err != nil {
+			return summary, err
+		}
+		summary.Submitted++
+		completed, err := r.scheduler.Wait(ctx, run.ID)
+		if err != nil {
+			return summary, err
+		}
+		if completed.State == orchestrator.RunSucceeded {
+			summary.Succeeded++
+			agentWorkerRunsTotal.Add(1)
+			logger.Info("agent-worker.scheduler_run_succeeded", "agent_id", completed.AgentID, "run_id", completed.ID)
+			continue
+		}
+		summary.Failed++
+		logger.Error("agent-worker.scheduler_run_failed", "agent_id", completed.AgentID, "run_id", completed.ID, "state", completed.State, "error_code", completed.Error.Code)
+	}
+	return summary, nil
+}
+
+func defaultComplianceProbeJob() workerJob {
+	output := contentagent.GeneratedContent{
+		Description:     "Professional resistance training kit for home workouts, mobility drills, and progressive strength routines.",
+		SEOTitle:        "Resistance Training Kit",
+		MetaDescription: "A professional resistance training kit for home workouts and mobility drills.",
+	}
+	return workerJob{
+		AgentID:  "compliance",
+		Priority: 1,
+		Payload: map[string]any{
+			"product": map[string]any{
+				"ID":          "worker-probe",
+				"SKU":         "RB-SET",
+				"Title":       "Resistance Band Set",
+				"Description": "Resistance bands for training and mobility.",
+				"Currency":    "AUD",
+			},
+			"output":    output,
+			"style":     contentagent.StyleProfessional,
+			"max_words": 80,
+			"keywords":  []string{"resistance", "training"},
+		},
+	}
 }
 
 func workerMux(cfg Config) http.Handler {
@@ -201,10 +306,10 @@ agentic_ecommerce_agent_worker_concurrency %d
 # HELP agentic_ecommerce_agent_worker_scheduler_interval_seconds Configured scheduler interval.
 # TYPE agentic_ecommerce_agent_worker_scheduler_interval_seconds gauge
 agentic_ecommerce_agent_worker_scheduler_interval_seconds %.0f
-# HELP agentic_ecommerce_agent_worker_placeholder_runs_total Placeholder scheduler run counter until orchestrator integration lands.
-# TYPE agentic_ecommerce_agent_worker_placeholder_runs_total counter
-agentic_ecommerce_agent_worker_placeholder_runs_total{eventbus_driver=%q,sync_channel=%q} 0
-`, version, commit, enabled, cfg.Concurrency, cfg.Interval.Seconds(), cfg.EventBusDriver, cfg.SyncChannel)
+# HELP agentic_ecommerce_agent_worker_runs_total Orchestrator-backed agent runs completed by this worker.
+# TYPE agentic_ecommerce_agent_worker_runs_total counter
+agentic_ecommerce_agent_worker_runs_total{eventbus_driver=%q,sync_channel=%q} %d
+`, version, commit, enabled, cfg.Concurrency, cfg.Interval.Seconds(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsTotal.Load())
 	}
 }
 

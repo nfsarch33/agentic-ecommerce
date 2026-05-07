@@ -25,7 +25,8 @@ func TestReadyz(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got["status"] != "ready" || got["agents"] != float64(3) {
+	agentWorker, _ := got["agent_worker"].(map[string]any)
+	if got["status"] != "ready" || got["agents"] != float64(3) || agentWorker["ready"] != true {
 		t.Fatalf("readyz body = %#v", got)
 	}
 }

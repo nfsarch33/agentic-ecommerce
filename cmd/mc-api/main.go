@@ -305,10 +305,16 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) readyzHandler(w http.ResponseWriter, r *http.Request) {
 	s.ensureAgentScheduler()
+	agents := s.agentRegistry.List()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":  "ready",
 		"service": "agentic-ecommerce-mc-api",
-		"agents":  len(s.agentRegistry.List()),
+		"agents":  len(agents),
+		"agent_worker": map[string]any{
+			"ready":             s.agentScheduler != nil && len(agents) > 0,
+			"scheduler":         "in_process",
+			"registered_agents": len(agents),
+		},
 	})
 }
 
