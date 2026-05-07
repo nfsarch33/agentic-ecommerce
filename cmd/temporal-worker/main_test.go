@@ -53,6 +53,49 @@ func TestGetenvTrimsAndFallsBack(t *testing.T) {
 	}
 }
 
+func TestTemporalAddressFromEnvAcceptsComposeAlias(t *testing.T) {
+	t.Setenv("ECOMMERCE_TEMPORAL_ADDR", "")
+	t.Setenv("ECOMMERCE_TEMPORAL_ADDRESS", " temporal:7233 ")
+
+	if got := temporalAddressFromEnv(); got != "temporal:7233" {
+		t.Fatalf("temporal address = %q, want compose alias", got)
+	}
+}
+
+func TestTemporalAddressFromEnvPrefersLegacyAddr(t *testing.T) {
+	t.Setenv("ECOMMERCE_TEMPORAL_ADDR", " 127.0.0.1:7233 ")
+	t.Setenv("ECOMMERCE_TEMPORAL_ADDRESS", "temporal:7233")
+
+	if got := temporalAddressFromEnv(); got != "127.0.0.1:7233" {
+		t.Fatalf("temporal address = %q, want legacy addr", got)
+	}
+}
+
+func TestNewProductRepositoryFromEnvFallsBackToInMemoryWithoutDSN(t *testing.T) {
+	t.Setenv("ECOMMERCE_DB_URL", "")
+
+	repo, cleanup, err := newProductRepositoryFromEnv(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("new repository: %v", err)
+	}
+	if repo == nil {
+		t.Fatal("repo is nil")
+	}
+	cleanup()
+}
+
+func TestNewProductRepositoryFromEnvRejectsInvalidDSN(t *testing.T) {
+	t.Setenv("ECOMMERCE_DB_URL", "://not-a-valid-dsn")
+
+	repo, cleanup, err := newProductRepositoryFromEnv(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected invalid DSN error")
+	}
+	if repo != nil || cleanup != nil {
+		t.Fatal("repo and cleanup should be nil on error")
+	}
+}
+
 type fakeSyncEngine struct {
 	productID uuid.UUID
 }
