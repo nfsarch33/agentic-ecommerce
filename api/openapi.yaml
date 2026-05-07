@@ -592,6 +592,141 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/media/source:
+    post:
+      summary: Source supplier media
+      operationId: sourceMedia
+      description: Fetches an image from a supplier URL through the backend media intelligence service and extracts deterministic metadata.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MediaSourceRequest'
+      responses:
+        '201':
+          description: Media asset sourced and registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAsset'
+        '400':
+          description: Invalid JSON body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Missing or invalid source URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Supplier media fetch failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Media sourcing is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/media/process:
+    post:
+      summary: Process sourced media
+      operationId: processMedia
+      description: Applies deterministic resize/format stubs and records explicit TODO metadata for background removal.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MediaProcessRequest'
+      responses:
+        '200':
+          description: Processed media asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAsset'
+        '400':
+          description: Invalid JSON body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Media asset not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Missing media ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/media/{id}:
+    get:
+      summary: Get media asset
+      operationId: getMedia
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Media asset metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAsset'
+        '404':
+          description: Media asset not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/media/{id}/validate:
+    post:
+      summary: Validate media quality
+      operationId: validateMedia
+      description: Runs resolution, aspect ratio, format, alt text, and brand-safety placeholder checks.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Media quality assessment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaQualityReport'
+        '404':
+          description: Media asset not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/products/{id}/compliance-check:
     post:
       summary: Run product content compliance checks
@@ -1234,6 +1369,50 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporal client is not configured for the API process.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Temporal rejected the workflow start request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/workflows/media-processing:
+    post:
+      summary: Start the MediaProcessingWorkflow
+      operationId: startMediaProcessingWorkflow
+      description: Starts the Temporal workflow that sources supplier media, processes it, runs QA, stores it, and links it to a product.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartMediaProcessingWorkflowRequest'
+      responses:
+        '202':
+          description: Temporal workflow execution accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowStartResponse'
+        '400':
+          description: Invalid JSON body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Product ID or source URL is missing.
           content:
             application/json:
               schema:
@@ -2014,6 +2193,139 @@ components:
           minimum: 0
         within_limit:
           type: boolean
+    MediaSourceRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        product_id:
+          type: string
+          description: Product identifier to associate with the sourced asset.
+        alt_text:
+          type: string
+          description: Candidate alt text from supplier data or operator input.
+    MediaProcessRequest:
+      type: object
+      required: [media_id]
+      properties:
+        media_id:
+          type: string
+        resize:
+          $ref: '#/components/schemas/MediaResizeOptions'
+        format:
+          type: string
+          enum: [image/jpeg, image/png, image/webp, image/gif, jpeg, png, webp, gif]
+        remove_background:
+          type: boolean
+          default: false
+    MediaResizeOptions:
+      type: object
+      properties:
+        max_width:
+          type: integer
+          minimum: 1
+        max_height:
+          type: integer
+          minimum: 1
+    MediaAsset:
+      type: object
+      required: [id, metadata]
+      properties:
+        id:
+          type: string
+        product_id:
+          type: string
+        source_url:
+          type: string
+          format: uri
+        alt_text:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/MediaMetadata'
+        processing:
+          $ref: '#/components/schemas/MediaProcessingInfo'
+        quality:
+          $ref: '#/components/schemas/MediaQualityReport'
+        storage:
+          $ref: '#/components/schemas/MediaStorageInfo'
+        created_at:
+          type: string
+          format: date-time
+    MediaMetadata:
+      type: object
+      required: [mime_type, content_length, checksum_sha256, width, height]
+      properties:
+        mime_type:
+          type: string
+        content_length:
+          type: integer
+          minimum: 0
+        checksum_sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        width:
+          type: integer
+          minimum: 0
+        height:
+          type: integer
+          minimum: 0
+    MediaProcessingInfo:
+      type: object
+      properties:
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediaProcessingOperation'
+    MediaProcessingOperation:
+      type: object
+      required: [id, message]
+      properties:
+        id:
+          type: string
+          enum: [resize_stub, format_conversion_stub, background_removal_todo]
+        message:
+          type: string
+    MediaQualityReport:
+      type: object
+      required: [pass, score]
+      properties:
+        pass:
+          type: boolean
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediaQualityIssue'
+    MediaQualityIssue:
+      type: object
+      required: [id, message, blocking]
+      properties:
+        id:
+          type: string
+        message:
+          type: string
+        severity:
+          type: string
+          enum: [info, warning, error, critical]
+        blocking:
+          type: boolean
+    MediaStorageInfo:
+      type: object
+      properties:
+        key:
+          type: string
+        url:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+          minimum: 0
     ShippingAddress:
       type: object
       required: [name, line1, city, postal_code, country]
@@ -2196,6 +2508,29 @@ components:
           type: array
           items:
             type: string
+    StartMediaProcessingWorkflowRequest:
+      type: object
+      required: [product_id, source_url]
+      properties:
+        product_id:
+          type: string
+          description: Product identifier to link the processed media to.
+        source_url:
+          type: string
+          format: uri
+        alt_text:
+          type: string
+        requested_by:
+          type: string
+          description: Operator identity recorded in workflow audit events.
+        resize:
+          $ref: '#/components/schemas/MediaResizeOptions'
+        format:
+          type: string
+          enum: [image/jpeg, image/png, image/webp, image/gif, jpeg, png, webp, gif]
+        remove_background:
+          type: boolean
+          default: false
     WorkflowStartResponse:
       type: object
       required: [workflow_id, run_id, status, task_queue]
