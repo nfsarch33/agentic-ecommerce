@@ -312,6 +312,54 @@ func TestContentHandlersMatchOpenAPIContract(t *testing.T) {
 	})
 }
 
+func TestOpenAPIIncludesContentAgentEndpoints(t *testing.T) {
+	t.Parallel()
+	spec := loadOpenAPIContract(t)
+
+	suggestion := responseSchema(t, spec, "/api/v1/products/{id}/generate-description", http.MethodPost, "200")
+	for _, field := range []string{
+		"product_id",
+		"description",
+		"seo_title",
+		"meta_description",
+		"score",
+		"pass",
+		"tokens_used",
+		"evaluation",
+	} {
+		if !containsString(suggestion.Required, field) {
+			t.Fatalf("ContentSuggestion required fields = %v, want %q", suggestion.Required, field)
+		}
+	}
+
+	evaluationRef := suggestion.Properties["evaluation"].Ref
+	evaluation := dereferenceSchema(t, spec, evaluationRef)
+	for _, field := range []string{
+		"score",
+		"pass",
+		"readability_score",
+		"keyword_density",
+		"tone",
+		"length",
+		"factual_issues",
+	} {
+		if !containsString(evaluation.Required, field) {
+			t.Fatalf("ContentEvaluation required fields = %v, want %q", evaluation.Required, field)
+		}
+	}
+
+	_ = responseSchema(t, spec, "/api/v1/products/{id}/ai-suggestions", http.MethodGet, "200")
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 func fixedProduct(t *testing.T) catalog.Product {
 	t.Helper()
 	price, err := catalog.NewMoney(4995, "AUD")
