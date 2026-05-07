@@ -336,6 +336,8 @@ func workflowAuditAction(r *http.Request) auditAction {
 	switch {
 	case path == "product-publish" && r.Method == http.MethodPost:
 		return auditAction{Action: "workflow.product_publish.start", Resource: "product-publish", Mutates: true}
+	case path == "media-processing" && r.Method == http.MethodPost:
+		return auditAction{Action: "workflow.media_processing.start", Resource: "media-processing", Mutates: true}
 	case strings.HasSuffix(path, "/signals/review") && r.Method == http.MethodPost:
 		return auditAction{Action: "workflow.product_publish.review_signal", Resource: strings.TrimSuffix(path, "/signals/review"), Mutates: true}
 	default:
