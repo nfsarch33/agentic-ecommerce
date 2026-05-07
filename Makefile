@@ -1,10 +1,14 @@
-.PHONY: test build vet coverage lint dev dev-down dev-logs migrate-up migrate-down seed compose-config compose-wc-config redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run
+.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed compose-config compose-wc-config redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run
 
 COMPOSE_FILE := docker-compose.dev.yml
+COMPOSE_PROD_FILE := docker-compose.yml
 DB_URL       ?= postgres://postgres:postgres@127.0.0.1:5432/ecommerce?sslmode=disable
 COMPOSE      := docker compose -f $(COMPOSE_FILE)
+PROD_COMPOSE := docker compose -f $(COMPOSE_PROD_FILE)
 WC_PROFILES  := --profile woocommerce --profile tools
 SYNC_PROFILE := --profile sync
+IMAGE        ?= ghcr.io/nfsarch33/agentic-ecommerce
+TAG          ?= dev
 
 test:
 	go test -race ./...
@@ -24,6 +28,28 @@ coverage:
 
 lint:
 	golangci-lint run ./...
+
+docker-build:
+	docker build --build-arg TARGET=mc-api -t $(IMAGE):$(TAG) .
+	docker build --build-arg TARGET=wc-sync -t $(IMAGE):$(TAG)-wc-sync .
+	docker build --build-arg TARGET=content-worker -t $(IMAGE):$(TAG)-content-worker .
+
+docker-push:
+	docker push $(IMAGE):$(TAG)
+	docker push $(IMAGE):$(TAG)-wc-sync
+	docker push $(IMAGE):$(TAG)-content-worker
+
+compose-up:
+	$(PROD_COMPOSE) up -d --build
+
+compose-down:
+	$(PROD_COMPOSE) down
+
+compose-logs:
+	$(PROD_COMPOSE) logs -f
+
+compose-config-prod:
+	$(PROD_COMPOSE) config --quiet
 
 dev:
 	$(COMPOSE) up -d --build
