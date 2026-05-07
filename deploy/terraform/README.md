@@ -1,6 +1,6 @@
 # Terraform Deployment Scaffolding
 
-This directory contains v0.8.0 cloud deployment scaffolding for `agentic-ecommerce`.
+This directory contains v1.0.0 cloud deployment scaffolding for `agentic-ecommerce`.
 
 The modules are intentionally provider-neutral contracts. They do not create live AWS or GCP resources yet, so `terraform validate` can run without cloud credentials, account IDs, private regions, or committed secrets. The provider-specific example roots show how the backend stack maps to AWS ECS Fargate and GCP Cloud Run before real provider resources are added.
 
