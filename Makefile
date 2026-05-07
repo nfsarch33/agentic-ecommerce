@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once release-perf-smoke tf-fmt tf-fmt-check tf-validate
+.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke tf-fmt tf-fmt-check tf-validate
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -34,6 +34,7 @@ build:
 	go build -o bin/wc-sync ./cmd/wc-sync
 	go build -o bin/content-worker ./cmd/content-worker
 	go build -o bin/agent-worker ./cmd/agent-worker
+	go build -o bin/temporal-worker ./cmd/temporal-worker
 
 coverage:
 	go test -race -coverprofile=coverage.out ./...
@@ -72,12 +73,14 @@ docker-build:
 	docker build --build-arg TARGET=wc-sync -t $(IMAGE):$(TAG)-wc-sync .
 	docker build --build-arg TARGET=content-worker -t $(IMAGE):$(TAG)-content-worker .
 	docker build --build-arg TARGET=agent-worker -t $(IMAGE):$(TAG)-agent-worker .
+	docker build --build-arg TARGET=temporal-worker -t $(IMAGE):$(TAG)-temporal-worker .
 
 docker-push:
 	docker push $(IMAGE):$(TAG)
 	docker push $(IMAGE):$(TAG)-wc-sync
 	docker push $(IMAGE):$(TAG)-content-worker
 	docker push $(IMAGE):$(TAG)-agent-worker
+	docker push $(IMAGE):$(TAG)-temporal-worker
 
 compose-up:
 	$(PROD_COMPOSE) up -d --build
@@ -124,6 +127,10 @@ sync-run: sync-once
 agent-worker:
 	mkdir -p bin
 	go build -o bin/agent-worker ./cmd/agent-worker
+
+temporal-worker:
+	mkdir -p bin
+	go build -o bin/temporal-worker ./cmd/temporal-worker
 
 agent-run-once:
 	ECOMMERCE_AGENT_WORKER_ENABLED=true ECOMMERCE_AGENT_WORKER_RUN_ONCE=true go run ./cmd/agent-worker
