@@ -97,7 +97,7 @@ func TestConflictEndpointsListAndResolveManualReview(t *testing.T) {
 		t.Fatalf("conflicts = %+v", list.Conflicts)
 	}
 
-	body := bytes.NewBufferString(`{"resolution":"accept_local","note":"reviewed by operator"}`)
+	body := bytes.NewBufferString(`{"resolution":"local","note":"reviewed by operator"}`)
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/sync/conflicts/"+list.Conflicts[0].ID+"/resolve", body)
 	rec = httptest.NewRecorder()
 	srv.mux().ServeHTTP(rec, req)
@@ -126,6 +126,25 @@ func TestWooCommerceProductWebhookEndpointVerifiesHMAC(t *testing.T) {
 	}
 	if got := srv.syncEngine.Status().TotalEvents; got != 1 {
 		t.Fatalf("events = %d, want 1", got)
+	}
+}
+
+func TestWooCommerceProductWebhookEndpointRejectsInvalidHMAC(t *testing.T) {
+	t.Parallel()
+
+	srv, _, _ := testSyncServer(t)
+	body := []byte(`{"id":7,"sku":"HOOK-1","name":"Webhook product"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/woocommerce/products", bytes.NewReader(body))
+	req.Header.Set("X-WC-Webhook-Signature", testWebhookSignature(body, "wrong-secret"))
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401; body=%s", rec.Code, rec.Body.String())
+	}
+	if got := srv.syncEngine.Status().TotalEvents; got != 0 {
+		t.Fatalf("events = %d, want 0", got)
 	}
 }
 
@@ -158,6 +177,16 @@ func testSyncServer(t *testing.T) (*server, *inmemory.ProductRepository, *syncFa
 		log:           slog.New(slog.NewJSONHandler(os.Stdout, nil)),
 	}
 	return srv, repo, wc
+}
+
+func seedSyncConflict(t *testing.T, srv *server, repo *inmemory.ProductRepository, wc *syncFakeWooCommerce) catalog.Product {
+	t.Helper()
+	product := addProduct(t, repo, "SYNC-CONTRACT-1", "Local Sync Product", 1000)
+	wc.products = []woocommerce.Product{{ID: 404, SKU: product.SKU(), Name: "Remote Sync Product", Regular: "12.00"}}
+	if _, err := srv.syncEngine.ImportFromWooCommerce(context.Background(), enginesync.ImportOptions{}); err != nil {
+		t.Fatalf("seed conflict: %v", err)
+	}
+	return product
 }
 
 func testWebhookSignature(body []byte, secret string) string {

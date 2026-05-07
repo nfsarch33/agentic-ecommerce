@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
@@ -79,6 +81,10 @@ func TestClient_UpsertProductRejectsHTTPFailure(t *testing.T) {
 
 func TestClient_ListProductsAddsQueryAndDecodesResponse(t *testing.T) {
 	t.Parallel()
+	fixture, err := os.ReadFile(filepath.Join("testdata", "products_list_response.json"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/wp-json/wc/v3/products" {
@@ -90,7 +96,8 @@ func TestClient_ListProductsAddsQueryAndDecodesResponse(t *testing.T) {
 		if got := r.URL.Query().Get("sku"); got != "BAND-001" {
 			t.Fatalf("sku = %q, want BAND-001", got)
 		}
-		_ = json.NewEncoder(w).Encode([]Product{{ID: 1, SKU: "BAND-001", Name: "Band"}})
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(fixture)
 	}))
 	t.Cleanup(server.Close)
 
@@ -99,7 +106,7 @@ func TestClient_ListProductsAddsQueryAndDecodesResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list products: %v", err)
 	}
-	if len(products) != 1 || products[0].SKU != "BAND-001" {
+	if len(products) != 1 || products[0].SKU != "BAND-001" || products[0].Name != "Resistance Band" {
 		t.Fatalf("products = %+v", products)
 	}
 }
