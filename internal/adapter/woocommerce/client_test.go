@@ -77,6 +77,85 @@ func TestClient_UpsertProductRejectsHTTPFailure(t *testing.T) {
 	}
 }
 
+func TestClient_ListProductsAddsQueryAndDecodesResponse(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/wp-json/wc/v3/products" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("per_page"); got != "25" {
+			t.Fatalf("per_page = %q, want 25", got)
+		}
+		if got := r.URL.Query().Get("sku"); got != "BAND-001" {
+			t.Fatalf("sku = %q, want BAND-001", got)
+		}
+		_ = json.NewEncoder(w).Encode([]Product{{ID: 1, SKU: "BAND-001", Name: "Band"}})
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClient(Config{BaseURL: server.URL}, server.Client())
+	products, err := client.ListProducts(context.Background(), ListOptions{PerPage: 25, SKU: "BAND-001"})
+	if err != nil {
+		t.Fatalf("list products: %v", err)
+	}
+	if len(products) != 1 || products[0].SKU != "BAND-001" {
+		t.Fatalf("products = %+v", products)
+	}
+}
+
+func TestClient_BatchCreateProductsPostsBatchPayload(t *testing.T) {
+	t.Parallel()
+
+	var got map[string][]Product
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/wp-json/wc/v3/products/batch" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(BatchResult{Create: []Product{{ID: 99, SKU: "BATCH-1", Name: "Batch"}}})
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClient(Config{BaseURL: server.URL}, server.Client())
+	result, err := client.BatchCreateProducts(context.Background(), []Product{{SKU: "BATCH-1", Name: "Batch"}})
+	if err != nil {
+		t.Fatalf("batch create: %v", err)
+	}
+	if len(got["create"]) != 1 || got["create"][0].SKU != "BATCH-1" {
+		t.Fatalf("body = %+v", got)
+	}
+	if len(result.Create) != 1 || result.Create[0].ID != 99 {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestClient_ListOrdersAddsFilters(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/wp-json/wc/v3/orders" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("status"); got != "processing" {
+			t.Fatalf("status = %q, want processing", got)
+		}
+		_ = json.NewEncoder(w).Encode([]Order{{ID: 10, Status: "processing", Total: "19.95"}})
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClient(Config{BaseURL: server.URL}, server.Client())
+	orders, err := client.ListOrders(context.Background(), ListOptions{Status: "processing", Page: 2})
+	if err != nil {
+		t.Fatalf("list orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].ID != 10 {
+		t.Fatalf("orders = %+v", orders)
+	}
+}
+
 func TestWcStatus_MapsCorrectly(t *testing.T) {
 	t.Parallel()
 
