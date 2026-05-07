@@ -1269,6 +1269,164 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/webhooks:
+    post:
+      summary: Register an outbound webhook endpoint
+      operationId: createWebhook
+      description: Registers an HTTPS endpoint that receives HMAC-signed event deliveries. The raw secret is accepted only at creation time and is never returned.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWebhookRequest'
+      responses:
+        '201':
+          description: Webhook endpoint registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookRegistration'
+        '400':
+          description: Invalid JSON body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid JWT bearer token when auth is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Caller does not have operator permission.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: URL, event types, or signing secret is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      summary: List outbound webhook endpoints
+      operationId: listWebhooks
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Registered outbound webhook endpoints.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookListResponse'
+        '401':
+          description: Missing or invalid JWT bearer token when auth is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Caller does not have viewer permission.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/webhooks/{id}:
+    delete:
+      summary: Delete an outbound webhook endpoint
+      operationId: deleteWebhook
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Webhook endpoint deleted.
+        '401':
+          description: Missing or invalid JWT bearer token when auth is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Caller does not have operator permission.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Webhook endpoint not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/webhooks/{id}/test:
+    post:
+      summary: Send a signed test event to an outbound webhook endpoint
+      operationId: testWebhook
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestWebhookRequest'
+      responses:
+        '202':
+          description: Test delivery attempted and recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookTestResponse'
+        '400':
+          description: Invalid JSON body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid JWT bearer token when auth is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Caller does not have operator permission.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Webhook endpoint not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Requested test event type is not subscribed by the webhook.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/events/recent:
     get:
       summary: List recent backend events
@@ -1729,6 +1887,109 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AgentRun'
+    CreateWebhookRequest:
+      type: object
+      required: [url, event_types, secret]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: HTTP or HTTPS endpoint that receives signed JSON events.
+        event_types:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: [agent.run.completed, compliance.checked, order.placed, product.created, product.updated, sync.completed]
+        secret:
+          type: string
+          format: password
+          minLength: 1
+          writeOnly: true
+          description: HMAC signing secret. Accepted only on create and never returned by the API.
+        secret_ref:
+          type: string
+          description: Optional operator-managed secret reference for future durable secret stores.
+        enabled:
+          type: boolean
+          default: true
+    TestWebhookRequest:
+      type: object
+      properties:
+        event_type:
+          type: string
+          enum: [agent.run.completed, compliance.checked, order.placed, product.created, product.updated, sync.completed]
+          description: Optional subscribed event type to use for the test delivery. Defaults to the first registered type.
+    WebhookRegistration:
+      type: object
+      required: [id, url, event_types, secret_hash, enabled, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        event_types:
+          type: array
+          items:
+            type: string
+            enum: [agent.run.completed, compliance.checked, order.placed, product.created, product.updated, sync.completed]
+        secret_ref:
+          type: string
+        secret_hash:
+          type: string
+          description: SHA-256 hash fingerprint of the signing secret, never the secret value.
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    WebhookListResponse:
+      type: object
+      required: [webhooks]
+      properties:
+        webhooks:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookRegistration'
+    WebhookDeliveryResult:
+      type: object
+      required: [webhook_id, event_id, event_type, success, status, attempts, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        webhook_id:
+          type: string
+          format: uuid
+        event_id:
+          type: string
+        event_type:
+          type: string
+          enum: [agent.run.completed, compliance.checked, order.placed, product.created, product.updated, sync.completed]
+        success:
+          type: boolean
+        status:
+          type: integer
+          minimum: 0
+          description: HTTP response status, or 0 when no response was received.
+        attempts:
+          type: integer
+          minimum: 0
+        error:
+          type: string
+          description: Sanitised machine-readable delivery failure reason.
+        created_at:
+          type: string
+          format: date-time
+    WebhookTestResponse:
+      type: object
+      required: [delivery]
+      properties:
+        delivery:
+          $ref: '#/components/schemas/WebhookDeliveryResult'
     Money:
       type: object
       required: [amount, currency]
