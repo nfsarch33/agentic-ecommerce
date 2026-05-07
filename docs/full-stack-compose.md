@@ -13,6 +13,8 @@ This stack is production-like for local and single-host validation. It keeps pub
 - `wc-sync`: one-shot WooCommerce sync worker under the `workers` or `sync` profile. It defaults to dry-run mode.
 - `content-worker`: scaffold content worker under the `workers` profile.
 - `agent-worker`: v0.6.0 scheduler runtime placeholder under the `workers` profile. It exposes `/healthz` and `/metrics` on container port `8081` and is ready for the backend orchestrator package to replace its TODO scheduler hook.
+- `temporal`: v1.2.0 Temporal CLI dev server under the `temporal` profile. It exposes gRPC on loopback port `${TEMPORAL_GRPC_HOST_PORT:-7233}` and the Web UI on `${TEMPORAL_UI_HOST_PORT:-8233}`.
+- `temporal-worker`: image-only placeholder under the `temporal-worker` profile until `cmd/temporal-worker` lands. Its task queue contract is `ECOMMERCE_TEMPORAL_TASK_QUEUE=ec-workflows`.
 - `minimax-openai-bridge`: optional placeholder under the `ai-bridge` profile. Real keys must come from local secret management, never from committed files.
 
 ## Bring-Up
@@ -36,6 +38,7 @@ Validate the checked-in monitoring config before booting the stack:
 make monitoring-validate
 make compose-config-prod
 make compose-workers-config
+make compose-temporal-config
 ```
 
 `make monitoring-validate` runs `promtool check config` and `promtool check rules` when `promtool` is installed, then falls back to the repository Go validation tests for Prometheus YAML and Grafana dashboard JSON coverage.
@@ -57,6 +60,17 @@ Expected v1.0.0 rules:
 - `AgenticEcommerceComplianceFailureSpike`: backend plus worker compliance failures above the 15-minute spike threshold.
 
 The `Agentic Ecommerce Overview` dashboard should show API latency/error rate, WooCommerce sync lag/conflicts, agent run success/failure, and compliance pass/fail rates. The worker-backed panels populate when the `workers` profile is running.
+
+Temporal local infrastructure is intentionally excluded from default full-stack
+boot. Start it when workflow development needs a server:
+
+```bash
+make temporal-up
+open "http://127.0.0.1:${TEMPORAL_UI_HOST_PORT:-8233}"
+```
+
+See `docs/temporal-local.md` for health checks, readiness expectations, and the
+worker handoff once backend workflow code lands.
 
 Run scaffolded workers explicitly:
 

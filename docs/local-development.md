@@ -29,6 +29,10 @@ The dev compose stack publishes PostgreSQL, Redis, and `mc-api` on loopback by d
 
 For the optional WooCommerce test instance and `wc-sync` worker, see `docs/dev-compose.md`. The WooCommerce profile keeps WordPress and MariaDB separate from the default backend boot path so API development does not require a local store.
 
+For local Temporal workflow infrastructure, use `make temporal-up` and the
+runbook in `docs/temporal-local.md`. Temporal is opt-in and does not gate
+`/healthz` or `/readyz` until workflow APIs are implemented.
+
 ## Local Media Directory
 
 v0.7.0 reserves `.local/media-uploads/` for filesystem-backed media storage in
