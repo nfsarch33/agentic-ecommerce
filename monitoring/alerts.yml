@@ -60,6 +60,16 @@ groups:
           summary: "Agent worker failure rate above 5%"
           description: "More than 5% of agent-worker orchestrator runs failed over the last 10 minutes."
 
+      - alert: AgenticEcommerceScheduledAgentFailuresHigh
+        expr: |
+          (sum(increase(agentic_ecommerce_agent_scheduled_runs_total{status="failed"}[15m])) or vector(0)) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scheduled agent failures detected"
+          description: "Temporal-backed recurring agent schedules reported one or more failed runs in the last 15 minutes."
+
       - alert: AgenticEcommerceComplianceFailureSpike
         expr: |
           (

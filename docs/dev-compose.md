@@ -66,7 +66,10 @@ If `ECOMMERCE_WC_CONSUMER_KEY` or `ECOMMERCE_WC_CONSUMER_SECRET` is blank, the w
 
 ## Agent Worker
 
-`agent-worker` is the v0.6.0 scheduler runtime shell. It intentionally does not duplicate the parallel backend orchestrator work yet; the binary reads scheduler and event-bus config, exposes health/metrics, and logs a `agent-worker.scheduler_placeholder` TODO hook for backend QA to wire to `internal/agent` once the orchestrator branch lands.
+`agent-worker` runs the backend agent scheduler shell against the existing
+orchestrator package. The compose `workers` profile keeps it opt-in; the binary
+reads scheduler, schedule-control, and event-bus config, then exposes health and
+Prometheus metrics.
 
 Run the placeholder once without compose:
 
@@ -88,7 +91,15 @@ ECOMMERCE_AGENT_WORKER_ENABLED=true
 ECOMMERCE_AGENT_WORKER_RUN_ONCE=false
 ECOMMERCE_AGENT_WORKER_CONCURRENCY=1
 ECOMMERCE_AGENT_WORKER_INTERVAL=5m
+ECOMMERCE_AGENT_SCHEDULES_ENABLED=false
+ECOMMERCE_AGENT_SCHEDULES_DEFAULT_INTERVAL=15m
+ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS=1
+ECOMMERCE_AGENT_SCHEDULES_TASK_QUEUE=ec-workflows
 ```
+
+`ECOMMERCE_AGENT_SCHEDULES_ENABLED` is disabled by default. Use
+`docs/agent-schedules.md` for the v1.6.0 Temporal schedule inspection targets
+and monitoring contract.
 
 ## Temporal Dev Server
 
@@ -104,10 +115,10 @@ The Temporal gRPC endpoint is published on
 `http://127.0.0.1:${TEMPORAL_UI_HOST_PORT:-8233}`. Both ports stay loopback-only
 through `BIND_HOST=127.0.0.1`.
 
-`temporal-worker` is defined under the separate `temporal-worker` profile as an
-image-only placeholder until `cmd/temporal-worker` lands. Its task queue contract
-is `ECOMMERCE_TEMPORAL_TASK_QUEUE=ec-workflows`. See
-`docs/temporal-local.md` for the full runbook and worker handoff.
+`temporal-worker` is defined under the separate `temporal-worker` profile and
+polls `ECOMMERCE_TEMPORAL_TASK_QUEUE=ec-workflows` by default. See
+`docs/temporal-local.md` for the full runbook and `docs/agent-schedules.md` for
+schedule-specific controls.
 
 ## n8n Automation Profile
 
@@ -194,5 +205,6 @@ make compose-config
 make compose-wc-config
 make compose-workers-config
 make compose-temporal-config
+make compose-agent-schedules-config
 make n8n-config
 ```

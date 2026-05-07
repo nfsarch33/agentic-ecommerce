@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
@@ -120,6 +121,80 @@ func TestTemporalAddressFromEnvPrefersLegacyAddr(t *testing.T) {
 
 	if got := temporalAddressFromEnv(); got != "127.0.0.1:7233" {
 		t.Fatalf("temporal address = %q, want legacy addr", got)
+	}
+}
+
+func TestTemporalTaskQueueFromEnvDefaultsToWorkflowQueue(t *testing.T) {
+	t.Setenv("ECOMMERCE_TEMPORAL_TASK_QUEUE", "")
+
+	if got := temporalTaskQueueFromEnv(); got != ecworkflow.TaskQueue {
+		t.Fatalf("task queue = %q, want %q", got, ecworkflow.TaskQueue)
+	}
+}
+
+func TestTemporalTaskQueueFromEnvUsesConfiguredQueue(t *testing.T) {
+	t.Setenv("ECOMMERCE_TEMPORAL_TASK_QUEUE", " agent-schedules ")
+
+	if got := temporalTaskQueueFromEnv(); got != "agent-schedules" {
+		t.Fatalf("task queue = %q, want agent-schedules", got)
+	}
+}
+
+func TestAgentScheduleConfigFromEnvUsesSafeDefaults(t *testing.T) {
+	t.Setenv("ECOMMERCE_AGENT_SCHEDULES_ENABLED", "")
+	t.Setenv("ECOMMERCE_AGENT_SCHEDULES_DEFAULT_INTERVAL", "")
+	t.Setenv("ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS", "")
+	t.Setenv("ECOMMERCE_AGENT_SCHEDULES_TASK_QUEUE", "")
+	t.Setenv("ECOMMERCE_TEMPORAL_TASK_QUEUE", "")
+
+	cfg, err := agentScheduleConfigFromEnv()
+	if err != nil {
+		t.Fatalf("agentScheduleConfigFromEnv returned error: %v", err)
+	}
+	if cfg.Enabled {
+		t.Fatal("Enabled = true, want false")
+	}
+	if cfg.DefaultInterval != 15*time.Minute {
+		t.Fatalf("DefaultInterval = %s, want 15m", cfg.DefaultInterval)
+	}
+	if cfg.MaxConcurrentRuns != 1 {
+		t.Fatalf("MaxConcurrentRuns = %d, want 1", cfg.MaxConcurrentRuns)
+	}
+	if cfg.TaskQueue != ecworkflow.TaskQueue {
+		t.Fatalf("TaskQueue = %q, want %q", cfg.TaskQueue, ecworkflow.TaskQueue)
+	}
+}
+
+func TestAgentScheduleConfigFromEnvUsesOverrides(t *testing.T) {
+	t.Setenv("ECOMMERCE_AGENT_SCHEDULES_ENABLED", "true")
+	t.Setenv("ECOMMERCE_AGENT_SCHEDULES_DEFAULT_INTERVAL", "45m")
+	t.Setenv("ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS", "2")
+	t.Setenv("ECOMMERCE_AGENT_SCHEDULES_TASK_QUEUE", "agent-schedules")
+	t.Setenv("ECOMMERCE_TEMPORAL_TASK_QUEUE", "ec-workflows")
+
+	cfg, err := agentScheduleConfigFromEnv()
+	if err != nil {
+		t.Fatalf("agentScheduleConfigFromEnv returned error: %v", err)
+	}
+	if !cfg.Enabled {
+		t.Fatal("Enabled = false, want true")
+	}
+	if cfg.DefaultInterval != 45*time.Minute {
+		t.Fatalf("DefaultInterval = %s, want 45m", cfg.DefaultInterval)
+	}
+	if cfg.MaxConcurrentRuns != 2 {
+		t.Fatalf("MaxConcurrentRuns = %d, want 2", cfg.MaxConcurrentRuns)
+	}
+	if cfg.TaskQueue != "agent-schedules" {
+		t.Fatalf("TaskQueue = %q, want agent-schedules", cfg.TaskQueue)
+	}
+}
+
+func TestAgentScheduleConfigFromEnvRejectsUnsafeValues(t *testing.T) {
+	t.Setenv("ECOMMERCE_AGENT_SCHEDULES_DEFAULT_INTERVAL", "0")
+
+	if _, err := agentScheduleConfigFromEnv(); err == nil {
+		t.Fatal("agentScheduleConfigFromEnv accepted zero interval")
 	}
 }
 

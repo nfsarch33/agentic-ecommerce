@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,9 +28,22 @@ import (
 	"go.temporal.io/sdk/worker"
 )
 
+type agentScheduleConfig struct {
+	Enabled           bool
+	DefaultInterval   time.Duration
+	MaxConcurrentRuns int
+	TaskQueue         string
+}
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	temporalAddr := temporalAddressFromEnv()
+	taskQueue := temporalTaskQueueFromEnv()
+	scheduleConfig, err := agentScheduleConfigFromEnv()
+	if err != nil {
+		logger.Error("temporal_worker.agent_schedules_config", "error", err)
+		os.Exit(1)
+	}
 
 	c, err := client.Dial(client.Options{HostPort: temporalAddr})
 	if err != nil {
@@ -58,7 +72,7 @@ func main() {
 	contentActivities := newContentGenerationActivitiesFromEnv(logger)
 	mediaActivities := newMediaProcessingActivitiesFromEnv(logger, repo)
 
-	w := worker.New(c, ecworkflow.TaskQueue, worker.Options{})
+	w := worker.New(c, taskQueue, worker.Options{})
 	w.RegisterWorkflow(ecworkflow.ProductPublishWorkflow)
 	w.RegisterWorkflow(ecworkflow.ContentGenerationWorkflow)
 	w.RegisterWorkflow(ecworkflow.MediaProcessingWorkflow)
@@ -76,7 +90,15 @@ func main() {
 	w.RegisterActivityWithOptions(mediaActivities.StoreMedia, activity.RegisterOptions{Name: ecworkflow.MediaStoreActivity})
 	w.RegisterActivityWithOptions(mediaActivities.LinkMediaToProduct, activity.RegisterOptions{Name: ecworkflow.MediaLinkProductActivity})
 
-	logger.Info("temporal_worker.start", "task_queue", ecworkflow.TaskQueue, "addr", temporalAddr)
+	logger.Info(
+		"temporal_worker.start",
+		"task_queue", taskQueue,
+		"addr", temporalAddr,
+		"agent_schedules_enabled", scheduleConfig.Enabled,
+		"agent_schedule_default_interval", scheduleConfig.DefaultInterval.String(),
+		"agent_schedule_max_concurrent_runs", scheduleConfig.MaxConcurrentRuns,
+		"agent_schedule_task_queue", scheduleConfig.TaskQueue,
+	)
 	if err := w.Run(worker.InterruptCh()); err != nil {
 		logger.Error("temporal_worker.run", "error", err)
 		os.Exit(1)
@@ -180,6 +202,34 @@ func temporalAddressFromEnv() string {
 	)
 }
 
+func temporalTaskQueueFromEnv() string {
+	return getenv("ECOMMERCE_TEMPORAL_TASK_QUEUE", ecworkflow.TaskQueue)
+}
+
+func agentScheduleConfigFromEnv() (agentScheduleConfig, error) {
+	enabled, err := parseBool(getenv("ECOMMERCE_AGENT_SCHEDULES_ENABLED", ""), false)
+	if err != nil {
+		return agentScheduleConfig{}, fmt.Errorf("ECOMMERCE_AGENT_SCHEDULES_ENABLED: %w", err)
+	}
+	defaultInterval, err := parseDuration(getenv("ECOMMERCE_AGENT_SCHEDULES_DEFAULT_INTERVAL", ""), 15*time.Minute)
+	if err != nil {
+		return agentScheduleConfig{}, fmt.Errorf("ECOMMERCE_AGENT_SCHEDULES_DEFAULT_INTERVAL: %w", err)
+	}
+	maxConcurrentRuns, err := parsePositiveInt(getenv("ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS", ""), 1)
+	if err != nil {
+		return agentScheduleConfig{}, fmt.Errorf("ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS: %w", err)
+	}
+	return agentScheduleConfig{
+		Enabled:           enabled,
+		DefaultInterval:   defaultInterval,
+		MaxConcurrentRuns: maxConcurrentRuns,
+		TaskQueue: firstNonEmpty(
+			getenv("ECOMMERCE_AGENT_SCHEDULES_TASK_QUEUE", ""),
+			temporalTaskQueueFromEnv(),
+		),
+	}, nil
+}
+
 func newProductRepositoryFromEnv(ctx context.Context, logger *slog.Logger) (port.ProductRepository, func(), error) {
 	dsn := strings.TrimSpace(os.Getenv("ECOMMERCE_DB_URL"))
 	if dsn == "" {
@@ -217,4 +267,54 @@ func getenv(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func parseBool(raw string, fallback bool) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "":
+		return fallback, nil
+	case "1", "true", "yes", "y", "on":
+		return true, nil
+	case "0", "false", "no", "n", "off":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid boolean %q", raw)
+	}
+}
+
+func parsePositiveInt(raw string, fallback int) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, err
+	}
+	if value < 1 {
+		return 0, fmt.Errorf("must be >= 1")
+	}
+	return value, nil
+}
+
+func parseDuration(raw string, fallback time.Duration) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback, nil
+	}
+	duration, err := time.ParseDuration(raw)
+	if err == nil {
+		if duration <= 0 {
+			return 0, fmt.Errorf("must be > 0")
+		}
+		return duration, nil
+	}
+	seconds, secondsErr := strconv.Atoi(raw)
+	if secondsErr != nil {
+		return 0, err
+	}
+	if seconds < 1 {
+		return 0, fmt.Errorf("must be > 0")
+	}
+	return time.Duration(seconds) * time.Second, nil
 }

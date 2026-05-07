@@ -1,9 +1,9 @@
 # Temporal Local Runbook
 
-v1.2.0 introduces local Temporal infrastructure for workflow development. This
+v1.2.0 introduced local Temporal infrastructure for workflow development. This
 runbook covers the compose-managed Temporal dev server, Temporal Web UI, and the
-placeholder worker contract. It does not define workflow or activity code; the
-backend Temporal agent owns `cmd/temporal-worker` and workflow APIs.
+backend worker runtime. v1.6.0 adds schedule-control wiring without registering
+concrete schedules in this infra slice.
 
 ## Services
 
@@ -11,9 +11,8 @@ backend Temporal agent owns `cmd/temporal-worker` and workflow APIs.
   `ec-temporaldata` or `temporal-data` compose volume.
 - `temporal` Web UI: served by the dev server on
   `http://127.0.0.1:${TEMPORAL_UI_HOST_PORT:-8233}`.
-- `temporal-worker`: image-only compose placeholder under the
-  `temporal-worker` profile. It is intentionally not built from this branch
-  because `cmd/temporal-worker` has not landed.
+- `temporal-worker`: backend worker under the `temporal-worker` profile. It
+  polls the configured task queue and registers shipped workflow/activity code.
 
 Default local contract:
 
@@ -23,6 +22,10 @@ TEMPORAL_UI_HOST_PORT=8233
 ECOMMERCE_TEMPORAL_ADDRESS=temporal:7233
 ECOMMERCE_TEMPORAL_NAMESPACE=default
 ECOMMERCE_TEMPORAL_TASK_QUEUE=ec-workflows
+ECOMMERCE_AGENT_SCHEDULES_ENABLED=false
+ECOMMERCE_AGENT_SCHEDULES_DEFAULT_INTERVAL=15m
+ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS=1
+ECOMMERCE_AGENT_SCHEDULES_TASK_QUEUE=ec-workflows
 ```
 
 All published ports bind through `BIND_HOST=127.0.0.1` by default. Do not expose
@@ -64,30 +67,21 @@ docker compose -f docker-compose.yml --profile temporal up -d temporal
 docker compose -f docker-compose.yml --profile temporal down
 ```
 
-## Worker Handoff
+## Worker Runtime
 
-The worker service is present for configuration compatibility only:
+The worker service can be validated with compose config before it is started:
 
 ```bash
 docker compose -f docker-compose.dev.yml --profile temporal-worker config
 ```
 
-Once `cmd/temporal-worker` lands, replace the image-only service with the same
-Dockerfile pattern used by `mc-api`, `wc-sync`, and `agent-worker`:
-
-```yaml
-build:
-  context: .
-  dockerfile: Dockerfile
-  args:
-    VERSION: ${VERSION:-dev}
-    COMMIT: ${COMMIT:-unknown}
-    TARGET: temporal-worker
-```
-
 The worker must poll `ECOMMERCE_TEMPORAL_TASK_QUEUE=ec-workflows` and connect to
 `ECOMMERCE_TEMPORAL_ADDRESS=temporal:7233` from inside compose. Host-side CLI
 commands should use `127.0.0.1:${TEMPORAL_GRPC_HOST_PORT:-7233}`.
+
+Schedule creation is intentionally not handled by this runbook. Use
+`docs/agent-schedules.md` to inspect registered schedules and verify the
+disabled-by-default runtime controls.
 
 ## Health and Readiness
 
@@ -118,12 +112,13 @@ Run the config gates before opening or merging an infra change:
 make compose-temporal-config
 make compose-config
 make compose-config-prod
+make compose-agent-schedules-config
 make monitoring-validate
 ```
 
-There is no Prometheus scrape target for `temporal-worker` yet because the worker
-binary and metrics endpoint are not merged. Add the scrape job after the worker
-exports `/metrics`, using the existing `agent-worker` job as the local pattern.
+`agent-worker` exposes the schedule-control metrics used by the v1.6.0 alert
+rules. `temporal-worker` logs its schedule-control config at startup and relies
+on Temporal's own service metrics for server-side schedule execution telemetry.
 
 ## Local Workflow Testing
 
@@ -133,6 +128,7 @@ After workflow code lands, the expected loop is:
 make temporal-up
 go test ./internal/workflow/...
 docker compose -f docker-compose.dev.yml --profile temporal-worker up temporal-worker
+make agent-schedules-list
 ```
 
 Use deterministic Temporal workflow tests for replay coverage. Avoid direct I/O,
