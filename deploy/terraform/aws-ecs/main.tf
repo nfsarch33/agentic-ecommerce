@@ -7,6 +7,13 @@ locals {
 
   common_backend_env = {
     ECOMMERCE_ALLOWED_ORIGIN        = var.allowed_origin
+    ECOMMERCE_JWT_ISSUER           = "agentic-ecommerce"
+    ECOMMERCE_JWT_AUDIENCE         = "mc-api"
+    ECOMMERCE_JWT_ACCESS_TTL       = "15m"
+    ECOMMERCE_REFRESH_TTL          = "24h"
+    ECOMMERCE_ADMIN_ROLE           = "admin"
+    ECOMMERCE_RATE_LIMIT_CAPACITY  = "120"
+    ECOMMERCE_RATE_LIMIT_REFILL    = "1m"
     ECOMMERCE_EVENTBUS_DRIVER       = "redis"
     ECOMMERCE_EVENTBUS_CHANNEL_SYNC = "ec.sync.events"
     ECOMMERCE_EVENTBUS_CHANNEL_DLQ  = "ec.sync.deadletter"
@@ -16,6 +23,9 @@ locals {
   common_backend_secrets = {
     ECOMMERCE_DB_URL             = module.postgres.connection_secret_ref
     ECOMMERCE_REDIS_ADDR         = module.redis.endpoint_secret_ref
+    ECOMMERCE_JWT_SECRET         = "aws-secretsmanager:${var.jwt_secret_name}"
+    ECOMMERCE_ADMIN_USERNAME     = "aws-secretsmanager:${var.admin_username_secret_name}"
+    ECOMMERCE_ADMIN_PASSWORD     = "aws-secretsmanager:${var.admin_password_secret_name}"
     ECOMMERCE_API_TOKEN          = "aws-secretsmanager:${var.api_token_secret_name}"
     ECOMMERCE_AI_BRIDGE_URL      = "aws-secretsmanager:${var.fleet_ai_bridge_url_secret_name}"
     ECOMMERCE_WC_CONSUMER_KEY    = "aws-secretsmanager:${var.wc_consumer_key_secret_name}"

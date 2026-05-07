@@ -32,6 +32,8 @@ make redis-ping
 
 The stack runs PostgreSQL, Redis 7, and `mc-api` with published ports bound to `127.0.0.1` by default. `/healthz` is a liveness check only. `/readyz` gates configured dependencies by pinging `ECOMMERCE_DB_URL` and `ECOMMERCE_REDIS_ADDR`; unset dependencies are reported as skipped so local in-memory tests stay lightweight. Redis is exposed to `mc-api` as `ECOMMERCE_REDIS_ADDR=redis:6379`; host tools can use `ECOMMERCE_REDIS_ADDR=127.0.0.1:6379`.
 
+Protected backend operations use JWT bearer tokens with RBAC roles `admin`, `operator`, and `viewer`. Configure `ECOMMERCE_JWT_SECRET`, `ECOMMERCE_ADMIN_USERNAME`, and `ECOMMERCE_ADMIN_PASSWORD` locally, then call `/api/v1/auth/login` for a short-lived access token. Health, readiness, metrics, storefront product reads, cart operations, and checkout order creation remain public.
+
 For the storefront checkout flow, run `agentic-ecommerce-web` separately with `bun run dev` and point it at `http://127.0.0.1:8080`. See `docs/local-development.md` for the backend compose, frontend dev, and Redis readiness plan.
 
 ## Full Stack Compose
