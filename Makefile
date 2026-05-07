@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once
+.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once tf-fmt tf-fmt-check tf-validate
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -11,6 +11,14 @@ SYNC_PROFILE := --profile sync
 WORKERS_PROFILE := --profile workers
 IMAGE        ?= ghcr.io/nfsarch33/agentic-ecommerce
 TAG          ?= dev
+TF_DIR       := deploy/terraform
+TF_VALIDATE_DIRS := \
+	$(TF_DIR)/modules/network \
+	$(TF_DIR)/modules/postgres \
+	$(TF_DIR)/modules/redis \
+	$(TF_DIR)/modules/service \
+	$(TF_DIR)/aws-ecs \
+	$(TF_DIR)/gcp-cloudrun
 
 test:
 	go test -race ./...
@@ -31,6 +39,31 @@ coverage:
 
 lint:
 	golangci-lint run ./...
+
+tf-fmt:
+	@if ! command -v terraform >/dev/null 2>&1; then \
+		echo "terraform not installed; install Terraform >=1.6 and run: terraform fmt -recursive $(TF_DIR)"; \
+		exit 0; \
+	fi
+	terraform fmt -recursive $(TF_DIR)
+
+tf-fmt-check:
+	@if ! command -v terraform >/dev/null 2>&1; then \
+		echo "terraform not installed; skipping terraform fmt -check"; \
+		exit 0; \
+	fi
+	terraform fmt -check -recursive $(TF_DIR)
+
+tf-validate:
+	@if ! command -v terraform >/dev/null 2>&1; then \
+		echo "terraform not installed; install Terraform >=1.6 and run terraform init -backend=false plus terraform validate in each deploy/terraform root"; \
+		exit 0; \
+	fi
+	@set -e; for dir in $(TF_VALIDATE_DIRS); do \
+		echo "==> terraform init/validate $$dir"; \
+		terraform -chdir=$$dir init -backend=false -input=false >/dev/null; \
+		terraform -chdir=$$dir validate; \
+	done
 
 docker-build:
 	docker build --build-arg TARGET=mc-api -t $(IMAGE):$(TAG) .
