@@ -1,0 +1,146 @@
+{
+  "active": false,
+  "connections": {
+    "Build Email Payload": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Send Email Confirmation Request",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Order Placed Webhook": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build Email Payload",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Send Email Confirmation Request": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Acknowledge Order Event",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "Order Placed - Email Confirmation",
+  "nodes": [
+    {
+      "id": "a41f83da-4b52-42f7-bd59-e5643e88d640",
+      "name": "Order Placed Webhook",
+      "parameters": {
+        "httpMethod": "POST",
+        "options": {},
+        "path": "order-placed",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        240,
+        300
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "order-placed-template"
+    },
+    {
+      "id": "ed0e1d59-cfa3-45df-a6e8-27a0e1b5217f",
+      "name": "Build Email Payload",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a42d0eca-2556-434b-adb5-a42aaad1c2ff",
+              "name": "to",
+              "type": "string",
+              "value": "={{$json.body.customer_email || ''}}"
+            },
+            {
+              "id": "00d68e7d-b5d9-41ab-942e-775d49fe7f02",
+              "name": "subject",
+              "type": "string",
+              "value": "=Order {{$json.body.order_number || $json.body.order_id || 'confirmation'}} received"
+            },
+            {
+              "id": "a1034a3c-fb39-4c98-b1eb-f1f855664509",
+              "name": "message",
+              "type": "string",
+              "value": "=Thanks for your order, {{$json.body.customer_name || 'customer'}}. We received order {{$json.body.order_number || $json.body.order_id || 'unknown'}} with total {{$json.body.total || 'not provided'}}."
+            },
+            {
+              "id": "3be54021-c4fe-44f9-801d-1df8a646e7b8",
+              "name": "order_id",
+              "type": "string",
+              "value": "={{$json.body.order_id || ''}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        520,
+        300
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "id": "f5581af5-c15a-41c8-a191-b3df66beb268",
+      "name": "Send Email Confirmation Request",
+      "notes": "Set ORDER_EMAIL_ENDPOINT_URL to a local SMTP bridge or transactional email proxy before activating. Do not commit SMTP credentials or live provider URLs.",
+      "parameters": {
+        "contentType": "json",
+        "jsonBody": "={\"to\": $json.to, \"subject\": $json.subject, \"text\": $json.message, \"metadata\": {\"order_id\": $json.order_id}}",
+        "method": "POST",
+        "options": {
+          "timeout": 10000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "={{$env.ORDER_EMAIL_ENDPOINT_URL}}"
+      },
+      "position": [
+        800,
+        300
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2
+    },
+    {
+      "id": "f047ad07-09a1-4e06-a810-cd1b061004ef",
+      "name": "Acknowledge Order Event",
+      "parameters": {
+        "options": {},
+        "respondWith": "json",
+        "responseBody": "={\"ok\": true, \"workflow\": \"order-placed-email-confirmation\"}"
+      },
+      "position": [
+        1080,
+        300
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false
+  },
+  "versionId": "e302531e-fee5-46ee-aa6a-c4d120025b8d"
+}
+

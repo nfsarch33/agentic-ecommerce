@@ -1,0 +1,128 @@
+{
+  "active": false,
+  "connections": {
+    "Build Slack Payload": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Post Slack Notification",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Post Slack Notification": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Acknowledge Product Event",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Product Approved Webhook": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build Slack Payload",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "Product Approved - Slack Notification",
+  "nodes": [
+    {
+      "id": "b57c9a86-fbd7-49a2-b9ce-f2765f8af7e0",
+      "name": "Product Approved Webhook",
+      "parameters": {
+        "httpMethod": "POST",
+        "options": {},
+        "path": "product-approved",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        240,
+        300
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "product-approved-template"
+    },
+    {
+      "id": "feec139d-2e70-4524-955b-9f8801a36ea7",
+      "name": "Build Slack Payload",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8edc2ca0-13dc-4e4f-9ab2-6615886d0f2c",
+              "name": "text",
+              "type": "string",
+              "value": "=Product approved: {{$json.body.product_name || $json.body.product_id || 'unknown product'}}\nStatus: {{$json.body.status || 'approved'}}\nAdmin URL: {{$json.body.admin_url || 'not provided'}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        520,
+        300
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "id": "dd6dfdf0-d90c-4df3-8a2e-9a4ba43fb820",
+      "name": "Post Slack Notification",
+      "notes": "Set SLACK_WEBHOOK_URL in the n8n container environment before activating. Do not commit live Slack webhook URLs.",
+      "parameters": {
+        "contentType": "json",
+        "jsonBody": "={\"text\": $json.text}",
+        "method": "POST",
+        "options": {
+          "timeout": 10000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "={{$env.SLACK_WEBHOOK_URL}}"
+      },
+      "position": [
+        800,
+        300
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2
+    },
+    {
+      "id": "dcd90a07-3f65-4097-906d-78a9ab3a5fa2",
+      "name": "Acknowledge Product Event",
+      "parameters": {
+        "options": {},
+        "respondWith": "json",
+        "responseBody": "={\"ok\": true, \"workflow\": \"product-approved-slack-notification\"}"
+      },
+      "position": [
+        1080,
+        300
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false
+  },
+  "versionId": "c1d57767-17b6-40dc-89aa-c70d44a5197a"
+}
+
