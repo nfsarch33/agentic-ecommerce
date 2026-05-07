@@ -33,6 +33,16 @@ The stack runs PostgreSQL, Redis 7, and `mc-api` with published ports bound to `
 
 For the storefront checkout flow, run `agentic-ecommerce-web` separately with `bun run dev` and point it at `http://127.0.0.1:8080`. See `docs/local-development.md` for the backend compose, frontend dev, and Redis readiness plan.
 
+The optional WooCommerce dev profile adds WordPress, MariaDB, a WP-CLI helper, and the `wc-sync` worker:
+
+```bash
+make wc-up
+make sync-once
+make wc-down
+```
+
+WooCommerce plugin installation and REST API key creation are explicit local steps, not automatic boot actions. See `docs/dev-compose.md` for the full local WooCommerce flow and the Redis event bus channel contract.
+
 ## Gates
 
 ```bash

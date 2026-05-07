@@ -26,6 +26,8 @@ This repo owns the Go backend services for the Agentic Ecommerce stack. The publ
 
 The dev compose stack publishes PostgreSQL, Redis, and `mc-api` on loopback by default through `BIND_HOST=127.0.0.1`.
 
+For the optional WooCommerce test instance and `wc-sync` worker, see `docs/dev-compose.md`. The WooCommerce profile keeps WordPress and MariaDB separate from the default backend boot path so API development does not require a local store.
+
 ## Redis Session Infrastructure
 
 Redis 7 is available at `redis:6379` inside compose and `127.0.0.1:${REDIS_HOST_PORT:-6379}` from the host. It is reserved for v0.2.0 cart/session storage and later Redis-backed event bus work.
