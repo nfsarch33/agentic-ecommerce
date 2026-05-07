@@ -20,6 +20,8 @@ make contract-test
 - Order creation: `p95 < 200ms`.
 - AI generation: `p95 < 2s`, intended for a mocked AI bridge or the in-process Go smoke gate.
 - Temporal workflow start: `p95 < 500ms`, intended for a local Temporal dev server or the in-process Go smoke gate.
+- Media validation: `p95 < 500ms`, intended for the local MIS fixture path.
+- Webhook delivery: `p95 < 500ms`, intended for a loopback/mock n8n receiver.
 
 Run k6 against a configured local API:
 
@@ -27,6 +29,8 @@ Run k6 against a configured local API:
 BASE_URL=http://127.0.0.1:8080 \
 BEARER_TOKEN=<operator-or-admin-token> \
 PRODUCT_ID=<seed-product-uuid> \
+MEDIA_SOURCE_URL=http://127.0.0.1:18081/fixtures/resistance-band.png \
+WEBHOOK_URL=http://127.0.0.1:18081/n8n/order-placed \
 make load-test
 ```
 
@@ -36,7 +40,7 @@ For deterministic CI/local evidence without external services, run:
 make release-perf-smoke
 ```
 
-The Go smoke test uses an in-process HTTP server, mocked AI generation, and a fake Temporal client while enforcing the same endpoint budgets.
+The Go smoke test uses an in-process HTTP server, mocked AI generation, a fake Temporal client, local MIS image sourcing, and a loopback webhook receiver while enforcing the same endpoint budgets.
 
 ## Database Audit
 
