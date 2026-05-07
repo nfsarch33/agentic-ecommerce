@@ -10,9 +10,11 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 )
 
 func testServer(t *testing.T) (*server, *inmemory.ProductRepository) {
@@ -194,6 +196,86 @@ func TestMetricsEndpointExposesPrometheusText(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("metrics body missing %q:\n%s", want, body)
 		}
+	}
+}
+
+func TestRecentEventsReturnsFrontendContract(t *testing.T) {
+	t.Parallel()
+	srv, _ := testServer(t)
+	bus := eventbus.NewInMemoryBus()
+	srv.eventBus = bus
+	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+	_ = bus.Publish(context.Background(), eventbus.Event{
+		ID:        "evt-product",
+		Type:      eventbus.ProductCreated,
+		TenantID:  "tenant-a",
+		Payload:   map[string]any{"sku": "SKU-1"},
+		Timestamp: now,
+		Source:    "unit-test",
+	})
+	_ = bus.Publish(context.Background(), eventbus.Event{
+		ID:        "evt-compliance",
+		Type:      eventbus.ComplianceChecked,
+		TenantID:  "tenant-a",
+		Payload:   map[string]any{"passed": false},
+		Timestamp: now.Add(time.Minute),
+		Source:    "unit-test",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/recent?limit=1", nil)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Events []struct {
+			ID         string         `json:"id"`
+			Type       string         `json:"type"`
+			Severity   string         `json:"severity"`
+			Message    string         `json:"message"`
+			OccurredAt string         `json:"occurred_at"`
+			Metadata   map[string]any `json:"metadata"`
+		} `json:"events"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Events) != 1 {
+		t.Fatalf("events = %d, want 1", len(body.Events))
+	}
+	got := body.Events[0]
+	if got.ID != "evt-compliance" || got.Type != "compliance.checked" || got.Severity != "warning" {
+		t.Fatalf("event = %+v", got)
+	}
+	if got.Message == "" || got.OccurredAt != now.Add(time.Minute).Format(time.RFC3339) {
+		t.Fatalf("event message/time = %+v", got)
+	}
+	if got.Metadata["tenant_id"] != "tenant-a" {
+		t.Fatalf("metadata = %+v, want tenant_id tenant-a", got.Metadata)
+	}
+}
+
+func TestRecentEventsHandlesEmptyBus(t *testing.T) {
+	t.Parallel()
+	srv, _ := testServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/recent", nil)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Events []any `json:"events"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Events) != 0 {
+		t.Fatalf("events = %d, want 0", len(body.Events))
 	}
 }
 
