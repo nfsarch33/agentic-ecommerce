@@ -47,6 +47,7 @@ type openAPIMediaType struct {
 type openAPISchema struct {
 	Ref        string                   `yaml:"$ref"`
 	Type       string                   `yaml:"type"`
+	Enum       []string                 `yaml:"enum"`
 	Required   []string                 `yaml:"required"`
 	Properties map[string]openAPISchema `yaml:"properties"`
 	Items      *openAPISchema           `yaml:"items"`
@@ -312,6 +313,79 @@ func TestContentHandlersMatchOpenAPIContract(t *testing.T) {
 	})
 }
 
+func TestComplianceHandlersMatchOpenAPIContract(t *testing.T) {
+	t.Parallel()
+	spec := loadOpenAPIContract(t)
+	srv, repo := testServer(t)
+	product := addProductWithContent(t, repo, catalog.ProductInput{
+		SKU:         "RB-SET-5",
+		Title:       "Premium Resistance Band Set for Home Workouts",
+		Description: "Premium resistance band set for home workouts, warm ups, rehab, and progressive strength training. Includes handles, anchors, and a carry bag for daily training.",
+		Images:      []catalog.Image{{URL: "https://cdn.example.com/rb.jpg", Alt: "Premium resistance band set with handles"}},
+	})
+
+	t.Run("compliance check", func(t *testing.T) {
+		body := `{"keywords":["resistance band set","home workouts"],"seo_title":"Premium Resistance Band Set for Home Workouts","meta_description":"Premium resistance band set for home workouts, warm ups, rehab, and progressive strength training.","seo_score_min":70}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/products/"+product.ID().String()+"/compliance-check", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.mux().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+		var payload map[string]any
+		decodeJSONPayload(t, rec.Body.Bytes(), &payload)
+		schema := responseSchema(t, spec, "/api/v1/products/{id}/compliance-check", http.MethodPost, "200")
+		assertSchemaRequiredFields(t, spec, schema, payload)
+		results, ok := payload["results"].([]any)
+		if !ok || len(results) == 0 {
+			t.Fatalf("results = %#v, want per-rule results", payload["results"])
+		}
+		first, ok := results[0].(map[string]any)
+		if !ok {
+			t.Fatalf("first result = %#v, want object", results[0])
+		}
+		resultSchema := dereferenceSchema(t, spec, schema.Properties["results"].Items.Ref)
+		assertSchemaRequiredFields(t, spec, resultSchema, first)
+	})
+
+	t.Run("seo suggestions", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/products/"+product.ID().String()+"/seo-suggestions", bytes.NewBufferString(`{"keywords":["resistance band set","home workouts"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.mux().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+		var payload map[string]any
+		decodeJSONPayload(t, rec.Body.Bytes(), &payload)
+		assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/products/{id}/seo-suggestions", http.MethodPost, "200"), payload)
+	})
+
+	t.Run("rules", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/compliance/rules", nil)
+		rec := httptest.NewRecorder()
+		srv.mux().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+		var payload map[string]any
+		decodeJSONPayload(t, rec.Body.Bytes(), &payload)
+		schema := responseSchema(t, spec, "/api/v1/compliance/rules", http.MethodGet, "200")
+		assertSchemaRequiredFields(t, spec, schema, payload)
+		rules, ok := payload["rules"].([]any)
+		if !ok || len(rules) == 0 {
+			t.Fatalf("rules = %#v, want built-in rules", payload["rules"])
+		}
+		first, ok := rules[0].(map[string]any)
+		if !ok {
+			t.Fatalf("first rule = %#v, want object", rules[0])
+		}
+		ruleSchema := dereferenceSchema(t, spec, schema.Properties["rules"].Items.Ref)
+		assertSchemaRequiredFields(t, spec, ruleSchema, first)
+	})
+}
+
 func TestOpenAPIIncludesContentAgentEndpoints(t *testing.T) {
 	t.Parallel()
 	spec := loadOpenAPIContract(t)
@@ -349,6 +423,40 @@ func TestOpenAPIIncludesContentAgentEndpoints(t *testing.T) {
 	}
 
 	_ = responseSchema(t, spec, "/api/v1/products/{id}/ai-suggestions", http.MethodGet, "200")
+}
+
+func TestOpenAPIIncludesComplianceEndpointSchemas(t *testing.T) {
+	t.Parallel()
+	spec := loadOpenAPIContract(t)
+
+	check := responseSchema(t, spec, "/api/v1/products/{id}/compliance-check", http.MethodPost, "200")
+	for _, field := range []string{"product_id", "pass", "score", "reasons", "rule_ids", "severity", "results"} {
+		if !containsString(check.Required, field) {
+			t.Fatalf("ComplianceCheckResponse required fields = %v, want %q", check.Required, field)
+		}
+	}
+
+	ruleResult := dereferenceSchema(t, spec, check.Properties["results"].Items.Ref)
+	for _, field := range []string{"id", "pass", "score", "severity", "reasons"} {
+		if !containsString(ruleResult.Required, field) {
+			t.Fatalf("ComplianceRuleResult required fields = %v, want %q", ruleResult.Required, field)
+		}
+	}
+
+	severity := dereferenceSchema(t, spec, ruleResult.Properties["severity"].Ref)
+	for _, value := range []string{"info", "warning", "error", "critical"} {
+		if !containsString(severity.Enum, value) {
+			t.Fatalf("ComplianceSeverity enum = %v, want %q", severity.Enum, value)
+		}
+	}
+
+	seoSuggestion := responseSchema(t, spec, "/api/v1/products/{id}/seo-suggestions", http.MethodPost, "200")
+	for _, field := range []string{"product_id", "title", "meta_description", "slug", "score", "keyword_density", "pass", "reasons"} {
+		if !containsString(seoSuggestion.Required, field) {
+			t.Fatalf("SEOSuggestionResponse required fields = %v, want %q", seoSuggestion.Required, field)
+		}
+	}
+	_ = responseSchema(t, spec, "/api/v1/compliance/rules", http.MethodGet, "200")
 }
 
 func containsString(values []string, want string) bool {

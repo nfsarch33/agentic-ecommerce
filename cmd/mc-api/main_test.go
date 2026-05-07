@@ -91,12 +91,18 @@ func TestMetricsEndpointExposesPrometheusText(t *testing.T) {
 	}
 	body := rec.Body.String()
 	for _, want := range []string{
-		"agentic_ecommerce_build_info",
-		"agentic_ecommerce_sync_lag_seconds",
-		"agentic_ecommerce_agent_success_total",
-		"agentic_ecommerce_compliance_checks_total",
-		"agentic_ecommerce_compliance_failures_total",
-		"agentic_ecommerce_media_validation_failures_total",
+		"# TYPE agentic_ecommerce_build_info gauge",
+		"# TYPE agentic_ecommerce_sync_lag_seconds gauge",
+		"# TYPE agentic_ecommerce_agent_success_total counter",
+		"# HELP agentic_ecommerce_compliance_checks_total Compliance checks evaluated by the backend.",
+		"# TYPE agentic_ecommerce_compliance_checks_total counter",
+		`agentic_ecommerce_compliance_checks_total{source="stub"} 0`,
+		"# HELP agentic_ecommerce_compliance_failures_total Compliance checks that failed the publish gate.",
+		"# TYPE agentic_ecommerce_compliance_failures_total counter",
+		`agentic_ecommerce_compliance_failures_total{source="stub"} 0`,
+		"# HELP agentic_ecommerce_media_validation_failures_total Media uploads rejected by validation.",
+		"# TYPE agentic_ecommerce_media_validation_failures_total counter",
+		`agentic_ecommerce_media_validation_failures_total{reason="stub"} 0`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("metrics body missing %q:\n%s", want, body)

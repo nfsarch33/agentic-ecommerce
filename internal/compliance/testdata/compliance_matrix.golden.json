@@ -1,0 +1,48 @@
+[
+  {
+    "name": "compliant_publish_candidate",
+    "pass": true,
+    "reasons": [],
+    "rule_ids": [],
+    "score": 100,
+    "severity": "info"
+  },
+  {
+    "name": "critical_claims_and_missing_media",
+    "pass": false,
+    "reasons": [
+      "product title is required",
+      "product description is too short",
+      "prohibited phrase present: miracle cure",
+      "image alt text is required",
+      "seo title is required",
+      "slug is required",
+      "seo score below minimum",
+      "legal disclaimer is required for regulated claims"
+    ],
+    "rule_ids": [
+      "required_title",
+      "description_length",
+      "prohibited_words",
+      "image_alt_text",
+      "seo_minimum_score",
+      "legal_disclaimer"
+    ],
+    "score": 7,
+    "severity": "critical"
+  },
+  {
+    "name": "seo_threshold_failure_only",
+    "pass": false,
+    "reasons": [
+      "seo title exceeds 60 characters",
+      "seo score below minimum"
+    ],
+    "rule_ids": [
+      "seo_minimum_score"
+    ],
+    "score": 95,
+    "severity": "error"
+  }
+]
+
