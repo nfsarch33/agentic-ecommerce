@@ -58,6 +58,24 @@ variable "api_token_secret_name" {
   default     = "agentic-ecommerce-api-token"
 }
 
+variable "jwt_secret_name" {
+  description = "GCP Secret Manager name for ECOMMERCE_JWT_SECRET."
+  type        = string
+  default     = "agentic-ecommerce-jwt-secret"
+}
+
+variable "admin_username_secret_name" {
+  description = "GCP Secret Manager name for ECOMMERCE_ADMIN_USERNAME."
+  type        = string
+  default     = "agentic-ecommerce-admin-username"
+}
+
+variable "admin_password_secret_name" {
+  description = "GCP Secret Manager name for ECOMMERCE_ADMIN_PASSWORD."
+  type        = string
+  default     = "agentic-ecommerce-admin-password"
+}
+
 variable "postgres_password_secret_name" {
   description = "GCP Secret Manager name for the database password or full DB_URL."
   type        = string

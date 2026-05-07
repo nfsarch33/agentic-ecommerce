@@ -602,23 +602,24 @@ func TestDeleteProduct_NotFound(t *testing.T) {
 	}
 }
 
-func TestProductsRequiresBearerWhenConfigured(t *testing.T) {
+func TestProductMutationAcceptsLegacyBearerWhenConfigured(t *testing.T) {
 	t.Parallel()
 	srv, _ := testServerWithCfg(t, serverConfig{apiToken: "test-token"})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/products", nil)
+	body := `{"sku":"LEGACY-001","title":"Legacy Product","price":{"amount":1000,"currency":"AUD"},"stock":1}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/products", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 	srv.mux().ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("missing token status = %d, want 401", rec.Code)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/products", nil)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/products", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer test-token")
 	rec = httptest.NewRecorder()
 	srv.mux().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("valid token status = %d, want 200", rec.Code)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("valid token status = %d, want 201; body=%s", rec.Code, rec.Body.String())
 	}
 }
 
