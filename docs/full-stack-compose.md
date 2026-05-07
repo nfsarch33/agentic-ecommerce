@@ -15,6 +15,7 @@ This stack is production-like for local and single-host validation. It keeps pub
 - `agent-worker`: v0.6.0 scheduler runtime placeholder under the `workers` profile. It exposes `/healthz` and `/metrics` on container port `8081` and is ready for the backend orchestrator package to replace its TODO scheduler hook.
 - `temporal`: v1.2.0 Temporal CLI dev server under the `temporal` profile. It exposes gRPC on loopback port `${TEMPORAL_GRPC_HOST_PORT:-7233}` and the Web UI on `${TEMPORAL_UI_HOST_PORT:-8233}`.
 - `temporal-worker`: image-only placeholder under the `temporal-worker` profile until `cmd/temporal-worker` lands. Its task queue contract is `ECOMMERCE_TEMPORAL_TASK_QUEUE=ec-workflows`.
+- `n8n`: v1.5.0 local automation service under the `n8n` profile. It exposes the editor and webhook runtime on loopback port `${N8N_HOST_PORT:-5678}` and persists state in a named volume.
 - `minimax-openai-bridge`: optional placeholder under the `ai-bridge` profile. Real keys must come from local secret management, never from committed files.
 
 ## RAG and Embedding Configuration
@@ -58,6 +59,7 @@ make monitoring-validate
 make compose-config-prod
 make compose-workers-config
 make compose-temporal-config
+make n8n-config
 ```
 
 `make monitoring-validate` runs `promtool check config` and `promtool check rules` when `promtool` is installed, then falls back to the repository Go validation tests for Prometheus YAML and Grafana dashboard JSON coverage.
@@ -93,6 +95,18 @@ open "http://127.0.0.1:${TEMPORAL_UI_HOST_PORT:-8233}"
 See `docs/temporal-local.md` for health checks, readiness expectations, and the
 worker handoff once backend workflow code lands.
 
+n8n local automation is also excluded from the default full-stack boot. Start it
+only when importing or testing automation templates:
+
+```bash
+make n8n-up
+open "http://127.0.0.1:${N8N_HOST_PORT:-5678}"
+```
+
+See `docs/n8n-local.md` for workflow imports, environment placeholders, and
+credential handling. The backend outbound webhook bridge is a separate v1.5.0
+backend implementation slice.
+
 Run scaffolded workers explicitly:
 
 ```bash
@@ -126,6 +140,11 @@ approved fleet bridge endpoint. `ECOMMERCE_EMBEDDING_MODEL` defaults to
 and `ECOMMERCE_RAG_CHUNK_SIZE` defaults to `1000`.
 
 `wc-sync` defaults to `ECOMMERCE_SYNC_DRY_RUN=true`. Do not run live WooCommerce sync from this stack until credentials, webhook secrets, and target store ownership have been reviewed.
+
+n8n workflow JSON in `deploy/n8n/workflows/` must stay inactive and
+credential-free. Keep `N8N_SLACK_WEBHOOK_URL`, `N8N_ORDER_EMAIL_ENDPOINT_URL`,
+and `N8N_ENCRYPTION_KEY` blank in committed examples and set them only in local
+untracked environment files.
 
 ## Cloud Readiness
 
