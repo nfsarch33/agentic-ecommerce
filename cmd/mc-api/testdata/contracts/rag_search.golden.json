@@ -1,0 +1,13 @@
+{
+  "query": "five resistance levels",
+  "results": [
+    {
+      "chunk_id": "doc-seed:0000",
+      "document_id": "doc-seed",
+      "score": 0.99,
+      "source": "contract",
+      "text": "Resistance Band Set includes five resistance levels for progressive workouts",
+      "title": "Seed Doc"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "events": [
+    {
+      "id": "evt-contract",
+      "message": "Product was created",
+      "metadata": {
+        "payload": {
+          "sku": "RB-SET-5"
+        },
+        "source": "contract-test",
+        "tenant_id": "default"
+      },
+      "occurred_at": "2026-05-07T00:00:00Z",
+      "severity": "info",
+      "type": "product.created"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "agents": [
+    {
+      "capabilities": [
+        "content_policy",
+        "quality_gate"
+      ],
+      "description": "Runs structured content compliance checks and returns pass/fail reasons.",
+      "id": "compliance",
+      "name": "Compliance Agent"
+    },
+    {
+      "capabilities": [
+        "price_recommendation",
+        "margin_analysis",
+        "competition_pricing",
+        "demand_pricing_stub"
+      ],
+      "description": "Computes deterministic recommended price and margin using configurable strategy inputs.",
+      "id": "pricing",
+      "name": "Pricing Agent"
+    },
+    {
+      "capabilities": [
+        "candidate_scoring",
+        "opportunity_ranking"
+      ],
+      "description": "Scores supplier candidates using deterministic cost, demand, competition, and reliability inputs.",
+      "id": "sourcing",
+      "name": "Sourcing Agent"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke tf-fmt tf-fmt-check tf-validate
+.PHONY: test build vet coverage coverage-check lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -16,6 +16,7 @@ N8N_PROFILE := --profile n8n
 N8N_WORKFLOWS_DIR := deploy/n8n/workflows
 IMAGE        ?= ghcr.io/nfsarch33/agentic-ecommerce
 TAG          ?= dev
+K6_SCRIPT    ?= tests/load/k6/backend-comprehensive.js
 TF_DIR       := deploy/terraform
 TF_VALIDATE_DIRS := \
 	$(TF_DIR)/modules/network \
@@ -27,22 +28,25 @@ TF_VALIDATE_DIRS := \
 	$(TF_DIR)/gcp-cloudrun
 
 test:
-	go test -race ./...
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test -race ./...
 
 vet:
-	go vet ./...
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go vet ./...
 
 build:
 	mkdir -p bin
-	go build -o bin/mc-api ./cmd/mc-api
-	go build -o bin/wc-sync ./cmd/wc-sync
-	go build -o bin/content-worker ./cmd/content-worker
-	go build -o bin/agent-worker ./cmd/agent-worker
-	go build -o bin/temporal-worker ./cmd/temporal-worker
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/mc-api ./cmd/mc-api
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/wc-sync ./cmd/wc-sync
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/content-worker ./cmd/content-worker
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/agent-worker ./cmd/agent-worker
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/temporal-worker ./cmd/temporal-worker
 
 coverage:
-	go test -race -coverprofile=coverage.out ./...
-	go tool cover -func=coverage.out
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test -race -coverprofile=coverage.out ./...
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go tool cover -func=coverage.out
+
+coverage-check: coverage
+	@GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go tool cover -func=coverage.out | awk '/^total:/ { sub(/%/,"",$$3); if ($$3 + 0 < 80) { printf("coverage %.1f%% is below 80%%\n", $$3); exit 1 } printf("coverage %.1f%% >= 80%%\n", $$3) }'
 
 lint:
 	golangci-lint run ./...
@@ -78,6 +82,11 @@ docker-build:
 	docker build --build-arg TARGET=content-worker -t $(IMAGE):$(TAG)-content-worker .
 	docker build --build-arg TARGET=agent-worker -t $(IMAGE):$(TAG)-agent-worker .
 	docker build --build-arg TARGET=temporal-worker -t $(IMAGE):$(TAG)-temporal-worker .
+
+docker-image-size:
+	docker build --build-arg TARGET=mc-api -t $(IMAGE):$(TAG)-size-audit .
+	docker image ls $(IMAGE):$(TAG)-size-audit
+	docker history --no-trunc $(IMAGE):$(TAG)-size-audit
 
 docker-push:
 	docker push $(IMAGE):$(TAG)
@@ -141,6 +150,56 @@ agent-run-once:
 
 release-perf-smoke:
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test -run TestReleasePerformanceSmoke -count=1 -v ./cmd/mc-api
+
+contract-test:
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test -run 'Test.*OpenAPI|Test.*Contract|TestRepresentativeGoldenJSONResponseShapes' -count=1 ./cmd/mc-api
+
+load-test:
+	@if ! command -v k6 >/dev/null 2>&1; then \
+		echo "k6 not installed; install Grafana k6 and run: BASE_URL=http://127.0.0.1:8080 k6 run $(K6_SCRIPT)"; \
+		exit 0; \
+	fi; \
+	k6 run $(K6_SCRIPT)
+
+db-perf-audit:
+	$(COMPOSE) exec -T postgres psql "$(DB_URL)" -f /dev/stdin < scripts/db_performance_audit.sql
+
+govulncheck-scan:
+	@if command -v govulncheck >/dev/null 2>&1; then \
+		GOTOOLCHAIN=auto GOSUMDB=sum.golang.org govulncheck ./...; \
+	else \
+		GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go run golang.org/x/vuln/cmd/govulncheck@latest ./...; \
+	fi
+
+gitleaks-scan:
+	@if command -v gitleaks >/dev/null 2>&1; then \
+		gitleaks detect --source=. --no-git --redact --verbose; \
+	elif command -v docker >/dev/null 2>&1; then \
+		docker run --rm -v "$$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 detect --source=/repo --no-git --redact --verbose; \
+	else \
+		echo "gitleaks and docker not installed; skipping gitleaks local scan"; \
+	fi
+
+trivy-fs-scan:
+	@if command -v trivy >/dev/null 2>&1; then \
+		trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 .; \
+	else \
+		echo "trivy not installed; skipping local Trivy fs scan"; \
+	fi
+
+security-refresh: govulncheck-scan gitleaks-scan trivy-fs-scan
+
+sentrux-gate:
+	@if command -v sentrux >/dev/null 2>&1; then \
+		sentrux gate .; \
+	else \
+		echo "sentrux not installed; skipping local Sentrux gate"; \
+	fi
+
+shell-leak:
+	runx shell-leak-scan --repo ecommerce
+
+qa-v180: contract-test release-perf-smoke coverage-check vet monitoring-validate compose-config compose-config-prod security-refresh sentrux-gate shell-leak
 
 migrate-up:
 	@echo "==> Running migrations UP against $(DB_URL)"
