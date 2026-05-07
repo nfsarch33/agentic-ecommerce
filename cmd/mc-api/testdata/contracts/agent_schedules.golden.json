@@ -1,0 +1,34 @@
+{
+  "schedules": [
+    {
+      "agent_id": "pricing",
+      "created_at": "2026-05-07T00:00:00Z",
+      "enabled": false,
+      "id": "pricing-competition-hourly",
+      "interval_seconds": 3600,
+      "next_run_at": "2026-05-07T00:00:00Z",
+      "payload": {
+        "cost_cents": 1800,
+        "current_price_cents": 4995,
+        "shipping_cents": 250,
+        "sku": "RB-SET",
+        "strategy": "competition_based"
+      },
+      "priority": 2,
+      "updated_at": "2026-05-07T00:00:00Z"
+    },
+    {
+      "agent_id": "sourcing",
+      "created_at": "2026-05-07T00:00:00Z",
+      "enabled": false,
+      "id": "sourcing-recommendations-daily",
+      "interval_seconds": 86400,
+      "next_run_at": "2026-05-07T00:00:00Z",
+      "payload": {
+        "sku": "RB-SET"
+      },
+      "priority": 1,
+      "updated_at": "2026-05-07T00:00:00Z"
+    }
+  ]
+}

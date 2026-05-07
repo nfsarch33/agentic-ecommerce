@@ -1,0 +1,34 @@
+{
+  "rules": [
+    {
+      "description": "Product title must be present before publish.",
+      "id": "required_title",
+      "severity": "critical"
+    },
+    {
+      "description": "Product description must be useful and within length limits.",
+      "id": "description_length",
+      "severity": "error"
+    },
+    {
+      "description": "Product copy must not contain prohibited medical or deceptive claims.",
+      "id": "prohibited_words",
+      "severity": "critical"
+    },
+    {
+      "description": "Every product image must include useful alt text.",
+      "id": "image_alt_text",
+      "severity": "error"
+    },
+    {
+      "description": "SEO title, meta description, slug, and keyword density must meet minimum quality.",
+      "id": "seo_minimum_score",
+      "severity": "error"
+    },
+    {
+      "description": "Regulated product claims must include an appropriate disclaimer.",
+      "id": "legal_disclaimer",
+      "severity": "critical"
+    }
+  ]
+}
