@@ -8,21 +8,30 @@ locals {
   runtime_service_account = "${var.project_name}-${var.environment}-run@${var.gcp_project_id}.iam.gserviceaccount.com"
 
   common_backend_env = {
-    ECOMMERCE_ALLOWED_ORIGIN        = var.allowed_origin
-    ECOMMERCE_JWT_ISSUER            = "agentic-ecommerce"
-    ECOMMERCE_JWT_AUDIENCE          = "mc-api"
-    ECOMMERCE_JWT_ACCESS_TTL        = "15m"
-    ECOMMERCE_REFRESH_TTL           = "24h"
-    ECOMMERCE_ADMIN_ROLE            = "admin"
-    ECOMMERCE_RATE_LIMIT_CAPACITY   = "120"
-    ECOMMERCE_RATE_LIMIT_REFILL     = "1m"
-    ECOMMERCE_EVENTBUS_DRIVER       = "redis"
-    ECOMMERCE_EVENTBUS_CHANNEL_SYNC = "ec.sync.events"
-    ECOMMERCE_EVENTBUS_CHANNEL_DLQ  = "ec.sync.deadletter"
-    ECOMMERCE_EMBEDDING_MODEL       = "minimax-embedding-01"
-    ECOMMERCE_EMBEDDING_DIMENSIONS  = "1536"
-    ECOMMERCE_RAG_CHUNK_SIZE        = "1000"
-    ECOMMERCE_MEDIA_STORE           = "object"
+    ECOMMERCE_ALLOWED_ORIGIN                  = var.allowed_origin
+    ECOMMERCE_JWT_ISSUER                      = "agentic-ecommerce"
+    ECOMMERCE_JWT_AUDIENCE                    = "mc-api"
+    ECOMMERCE_JWT_ACCESS_TTL                  = "15m"
+    ECOMMERCE_REFRESH_TTL                     = "24h"
+    ECOMMERCE_ADMIN_ROLE                      = "admin"
+    ECOMMERCE_RATE_LIMIT_CAPACITY             = "120"
+    ECOMMERCE_RATE_LIMIT_REFILL               = "1m"
+    ECOMMERCE_EVENTBUS_DRIVER                 = "redis"
+    ECOMMERCE_EVENTBUS_CHANNEL_SYNC           = "ec.sync.events"
+    ECOMMERCE_EVENTBUS_CHANNEL_DLQ            = "ec.sync.deadletter"
+    ECOMMERCE_EMBEDDING_MODEL                 = "minimax-embedding-01"
+    ECOMMERCE_EMBEDDING_DIMENSIONS            = "1536"
+    ECOMMERCE_RAG_CHUNK_SIZE                  = "1000"
+    ECOMMERCE_MEDIA_STORAGE_DRIVER            = module.media_store.storage_driver
+    ECOMMERCE_MEDIA_STORE                     = module.media_store.storage_driver
+    ECOMMERCE_MEDIA_BASE_PATH                 = module.media_store.object_prefix
+    ECOMMERCE_MEDIA_BUCKET                    = module.media_store.bucket_name
+    ECOMMERCE_MEDIA_PUBLIC_BASE_URL           = module.media_store.public_base_url_placeholder
+    ECOMMERCE_MEDIA_REGION                    = var.gcp_region
+    ECOMMERCE_MEDIA_MAX_SIZE_BYTES            = tostring(var.media_max_size_bytes)
+    ECOMMERCE_MEDIA_ALLOWED_MIME_TYPES        = join(",", var.media_allowed_mime_types)
+    ECOMMERCE_COMPLIANCE_MAX_IMAGE_SIZE_BYTES = tostring(var.media_max_size_bytes)
+    ECOMMERCE_COMPLIANCE_ALLOWED_MIME_TYPES   = join(",", var.media_allowed_mime_types)
   }
 
   common_backend_secrets = {
@@ -74,6 +83,18 @@ module "redis" {
   node_type                  = "basic"
   memory_size_gb             = 1
   transit_encryption_enabled = true
+}
+
+module "media_store" {
+  source = "../modules/objectstore"
+
+  provider_name                = local.provider_name
+  name_prefix                  = var.project_name
+  environment                  = var.environment
+  bucket_name                  = var.media_bucket_name
+  object_prefix                = var.media_object_prefix
+  public_base_url              = var.media_public_base_url
+  runtime_service_account_name = local.runtime_service_account
 }
 
 module "mc_api_service" {

@@ -112,6 +112,36 @@ variable "embedding_bridge_url_secret_name" {
   default     = "agentic-ecommerce-embedding-bridge-url"
 }
 
+variable "media_bucket_name" {
+  description = "Optional GCS media bucket name placeholder. Leave empty to derive one from project and environment."
+  type        = string
+  default     = ""
+}
+
+variable "media_object_prefix" {
+  description = "Object key prefix reserved for media assets."
+  type        = string
+  default     = "media/"
+}
+
+variable "media_public_base_url" {
+  description = "Optional Cloud CDN or GCS public URL placeholder for media assets."
+  type        = string
+  default     = ""
+}
+
+variable "media_max_size_bytes" {
+  description = "Maximum media object size accepted by backend validation."
+  type        = number
+  default     = 5242880
+}
+
+variable "media_allowed_mime_types" {
+  description = "Allowed media MIME types for backend validation."
+  type        = list(string)
+  default     = ["image/jpeg", "image/png", "image/webp"]
+}
+
 variable "sync_dry_run" {
   description = "Keep WooCommerce sync dry-run by default for cloud dry-runs."
   type        = bool

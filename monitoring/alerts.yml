@@ -96,6 +96,20 @@ groups:
           summary: "Embedding bridge failures detected"
           description: "The backend observed embedding generation failures from the approved bridge."
 
+      - alert: AgenticEcommerceMediaValidationFailuresHigh
+        expr: |
+          (
+            (sum(increase(agentic_ecommerce_media_validation_failures_total[15m])) or vector(0))
+            +
+            (sum(increase(agentic_ecommerce_agent_worker_media_validation_failures_total[15m])) or vector(0))
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Media validation failure spike detected"
+          description: "Backend and worker media validation failures exceeded the v1.4.0 warning threshold in 15 minutes."
+
       - alert: AgenticEcommerceAgentSuccessMissing
         expr: increase(agentic_ecommerce_agent_success_total[30m]) == 0
         for: 30m

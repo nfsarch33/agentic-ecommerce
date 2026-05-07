@@ -64,19 +64,23 @@ ECOMMERCE_RAG_CHUNK_SIZE=1000
 enabled. Do not point app containers or MacBook-local runs directly at MiniMax
 provider endpoints.
 
-## Local Media Directory
+## Local Media Storage
 
-v0.7.0 reserves `.local/media-uploads/` for filesystem-backed media storage in
-development. The directory is ignored by git and mounted into `mc-api` by
-`docker-compose.dev.yml`.
+v1.4.0 uses `.local/media-uploads/` for filesystem-backed media storage in
+development. The directory is ignored by git and mounted into backend services
+by `docker-compose.dev.yml`.
 
 ```bash
-make media-seed
-make media-clean
+make media-store-seed
+make media-store-clean
 ```
 
 The seed target copies only synthetic fixtures from `seed/media/`. Do not place
 supplier, customer, or production media in git.
+
+Use `make compose-media-config` to validate the optional MinIO profile before
+testing an S3-compatible adapter. See `docs/media-storage.md` for the full
+filesystem, MinIO, S3, and GCS mapping.
 
 ## Redis Session Infrastructure
 
