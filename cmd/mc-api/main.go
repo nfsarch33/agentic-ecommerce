@@ -229,7 +229,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	}
 }
 
-func (s *server) mux() *http.ServeMux {
+func (s *server) mux() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthzHandler)
 	mux.HandleFunc("/metrics", metricsHandler)
@@ -250,7 +250,7 @@ func (s *server) mux() *http.ServeMux {
 	mux.HandleFunc("/api/v1/webhooks/woocommerce/orders", s.woocommerceOrderWebhookHandler)
 	mux.HandleFunc("/api/v1/webhooks/woocommerce/products", s.woocommerceProductWebhookHandler)
 
-	return mux
+	return s.withRequestLogging(mux)
 }
 
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
@@ -481,7 +481,7 @@ func (s *server) withCORS(next http.HandlerFunc) http.HandlerFunc {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -489,6 +489,57 @@ func (s *server) withCORS(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+
+func (s *server) withRequestLogging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		requestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+		if requestID == "" {
+			requestID = uuid.NewString()
+		}
+		w.Header().Set("X-Request-ID", requestID)
+
+		rec := &responseStatusRecorder{ResponseWriter: w}
+		next.ServeHTTP(rec, r)
+		status := rec.status
+		if status == 0 {
+			status = http.StatusOK
+		}
+		duration := time.Since(start)
+
+		logger := s.log
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Info("http.request",
+			"request_id", requestID,
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", status,
+			"duration_ms", duration.Milliseconds(),
+		)
+	})
+}
+
+type responseStatusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *responseStatusRecorder) WriteHeader(status int) {
+	if r.status != 0 {
+		return
+	}
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *responseStatusRecorder) Write(body []byte) (int, error) {
+	if r.status == 0 {
+		r.WriteHeader(http.StatusOK)
+	}
+	return r.ResponseWriter.Write(body)
 }
 
 func (s *server) withBearerAuth(next http.HandlerFunc) http.HandlerFunc {

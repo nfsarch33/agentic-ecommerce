@@ -101,6 +101,37 @@ func TestMetricsEndpointExposesPrometheusText(t *testing.T) {
 	}
 }
 
+func TestRequestLoggingAddsRequestIDAndStructuredFields(t *testing.T) {
+	t.Parallel()
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	srv, _ := testServer(t)
+	srv.log = logger
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("X-Request-ID", "req-test-123")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("X-Request-ID"); got != "req-test-123" {
+		t.Fatalf("X-Request-ID = %q, want req-test-123", got)
+	}
+
+	logLine := logs.String()
+	for _, want := range []string{
+		`"msg":"http.request"`,
+		`"request_id":"req-test-123"`,
+		`"method":"GET"`,
+		`"path":"/healthz"`,
+		`"status":200`,
+		`"duration_ms":`,
+	} {
+		if !strings.Contains(logLine, want) {
+			t.Fatalf("log line missing %q:\n%s", want, logLine)
+		}
+	}
+}
+
 func TestIsHealthcheckArgs(t *testing.T) {
 	t.Parallel()
 
