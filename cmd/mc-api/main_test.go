@@ -199,6 +199,24 @@ func TestMetricsEndpointExposesPrometheusText(t *testing.T) {
 	}
 }
 
+func TestSeedDefaultProductsCreatesStorefrontFixtures(t *testing.T) {
+	t.Parallel()
+
+	repo := inmemory.NewProductRepository()
+	seedDefaultProducts(repo)
+
+	result, err := repo.List(context.Background(), 1, 10)
+	if err != nil {
+		t.Fatalf("list products: %v", err)
+	}
+	if result.Total != 2 {
+		t.Fatalf("total = %d, want 2", result.Total)
+	}
+	if result.Products[0].Status() != catalog.StatusActive || result.Products[1].Status() != catalog.StatusActive {
+		t.Fatalf("seeded statuses = %s/%s, want active", result.Products[0].Status(), result.Products[1].Status())
+	}
+}
+
 func TestRecentEventsReturnsFrontendContract(t *testing.T) {
 	t.Parallel()
 	srv, _ := testServer(t)
