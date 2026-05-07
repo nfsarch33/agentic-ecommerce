@@ -22,6 +22,7 @@ cp .env.compose.example .env.compose
 docker compose --env-file .env.compose -f docker-compose.yml config
 docker compose --env-file .env.compose -f docker-compose.yml up -d --build
 curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:8080/readyz
 curl http://127.0.0.1:8080/metrics
 ```
 
@@ -54,6 +55,18 @@ Keep `.env.compose` untracked. The committed `.env.compose.example` contains pla
 The backend and frontend should call MiniMax only through a fleet bridge URL. The optional bridge service is a local placeholder for wiring and health validation; leave `ECOMMERCE_AI_BRIDGE_URL`, `FLEET_AI_BRIDGE_URL`, and `MINIMAX_API_KEY_*` blank unless you are intentionally testing against a controlled local bridge.
 
 `wc-sync` defaults to `ECOMMERCE_SYNC_DRY_RUN=true`. Do not run live WooCommerce sync from this stack until credentials, webhook secrets, and target store ownership have been reviewed.
+
+## Cloud Readiness
+
+`mc-api` exposes three unauthenticated platform endpoints:
+
+- `/healthz`: liveness only; it does not call Postgres, Redis, WooCommerce, or AI bridges.
+- `/readyz`: readiness; configured `ECOMMERCE_DB_URL` and `ECOMMERCE_REDIS_ADDR` dependencies must pass lightweight checks or the endpoint returns `503`.
+- `/metrics`: Prometheus text exposition with build metadata, HTTP request counters/duration buckets, and stack-level placeholders for sync, agent, compliance, and media dashboards.
+
+`ECOMMERCE_READINESS_TIMEOUT` defaults to `2s`. Keep it below the load balancer health-check timeout so an unhealthy dependency fails fast. `ECOMMERCE_SHUTDOWN_TIMEOUT` defaults to `10s` and bounds graceful HTTP shutdown after SIGTERM.
+
+`mc-api` writes structured JSON access logs with `request_id`, mirrors `X-Request-ID` to every response, and supports optional OpenTelemetry HTTP spans with `ECOMMERCE_OTEL_ENABLED=true`. Probe endpoints are excluded from spans to reduce noise.
 
 ## Media and Compliance Placeholders
 

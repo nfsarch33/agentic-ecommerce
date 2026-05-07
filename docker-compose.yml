@@ -53,7 +53,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${VERSION:-v0.6.0}
+        VERSION: ${VERSION:-v0.8.0}
         COMMIT: ${COMMIT:-local}
         TARGET: mc-api
     read_only: true
@@ -70,6 +70,9 @@ services:
       ECOMMERCE_REDIS_ADDR: redis:6379
       ECOMMERCE_REDIS_DB: ${ECOMMERCE_REDIS_DB:-0}
       ECOMMERCE_REDIS_KEY_PREFIX: ${ECOMMERCE_REDIS_KEY_PREFIX:-ec:prod:}
+      ECOMMERCE_READINESS_TIMEOUT: ${ECOMMERCE_READINESS_TIMEOUT:-2s}
+      ECOMMERCE_SHUTDOWN_TIMEOUT: ${ECOMMERCE_SHUTDOWN_TIMEOUT:-10s}
+      ECOMMERCE_OTEL_ENABLED: ${ECOMMERCE_OTEL_ENABLED:-false}
       ECOMMERCE_EVENTBUS_DRIVER: ${ECOMMERCE_EVENTBUS_DRIVER:-redis}
       ECOMMERCE_EVENTBUS_REDIS_ADDR: redis:6379
       ECOMMERCE_EVENTBUS_REDIS_DB: ${ECOMMERCE_EVENTBUS_REDIS_DB:-0}
@@ -128,7 +131,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${VERSION:-v0.6.0}
+        VERSION: ${VERSION:-v0.8.0}
         COMMIT: ${COMMIT:-local}
         TARGET: wc-sync
     profiles: ["workers", "sync"]
@@ -164,7 +167,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${VERSION:-v0.6.0}
+        VERSION: ${VERSION:-v0.8.0}
         COMMIT: ${COMMIT:-local}
         TARGET: content-worker
     profiles: ["workers"]
@@ -189,7 +192,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${VERSION:-v0.6.0}
+        VERSION: ${VERSION:-v0.8.0}
         COMMIT: ${COMMIT:-local}
         TARGET: agent-worker
     profiles: ["workers"]
