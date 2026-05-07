@@ -32,3 +32,15 @@ type CartRepository interface {
 	Save(ctx context.Context, cart orderdomain.Cart) error
 	GetBySessionID(ctx context.Context, sessionID string) (orderdomain.Cart, error)
 }
+
+type TenantProductRepository interface {
+	ProductRepository
+	CreateWithTenant(ctx context.Context, product catalog.Product, tenantID string) error
+	ListByTenant(ctx context.Context, tenantID string, page, perPage int) (ListResult, error)
+	GetByIDAndTenant(ctx context.Context, id uuid.UUID, tenantID string) (catalog.Product, error)
+}
+
+type TenantOrderRepository interface {
+	OrderRepository
+	CreateWithTenant(ctx context.Context, order orderdomain.Order, tenantID string) error
+}
