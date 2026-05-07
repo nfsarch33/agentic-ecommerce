@@ -23,6 +23,7 @@ credentials/
 .DS_Store
 
 # local databases, dumps, and generated state
+.local/
 *.db
 *.sqlite
 *.sqlite3
