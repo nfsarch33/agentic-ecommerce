@@ -32,6 +32,18 @@ func TestLoadConfigUsesSchedulerDefaults(t *testing.T) {
 	if cfg.MetricsAddr != "127.0.0.1:8081" {
 		t.Fatalf("MetricsAddr = %q, want loopback default", cfg.MetricsAddr)
 	}
+	if cfg.ScheduleEnabled {
+		t.Fatal("ScheduleEnabled = true, want disabled by default")
+	}
+	if cfg.ScheduleDefaultInterval != 15*time.Minute {
+		t.Fatalf("ScheduleDefaultInterval = %s, want 15m", cfg.ScheduleDefaultInterval)
+	}
+	if cfg.ScheduleMaxConcurrentRuns != 1 {
+		t.Fatalf("ScheduleMaxConcurrentRuns = %d, want 1", cfg.ScheduleMaxConcurrentRuns)
+	}
+	if cfg.ScheduleTaskQueue != "ec-workflows" {
+		t.Fatalf("ScheduleTaskQueue = %q, want ec-workflows", cfg.ScheduleTaskQueue)
+	}
 }
 
 func TestLoadConfigRejectsInvalidSchedulerValues(t *testing.T) {
@@ -50,19 +62,76 @@ func TestLoadConfigRejectsInvalidSchedulerValues(t *testing.T) {
 	}
 }
 
+func TestLoadConfigUsesAgentScheduleOverrides(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := loadConfig(func(key string) string {
+		switch key {
+		case "ECOMMERCE_AGENT_SCHEDULES_ENABLED":
+			return "true"
+		case "ECOMMERCE_AGENT_SCHEDULES_DEFAULT_INTERVAL":
+			return "30m"
+		case "ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS":
+			return "3"
+		case "ECOMMERCE_AGENT_SCHEDULES_TASK_QUEUE":
+			return "agent-schedules"
+		default:
+			return ""
+		}
+	})
+	if err != nil {
+		t.Fatalf("loadConfig returned error: %v", err)
+	}
+
+	if !cfg.ScheduleEnabled {
+		t.Fatal("ScheduleEnabled = false, want true")
+	}
+	if cfg.ScheduleDefaultInterval != 30*time.Minute {
+		t.Fatalf("ScheduleDefaultInterval = %s, want 30m", cfg.ScheduleDefaultInterval)
+	}
+	if cfg.ScheduleMaxConcurrentRuns != 3 {
+		t.Fatalf("ScheduleMaxConcurrentRuns = %d, want 3", cfg.ScheduleMaxConcurrentRuns)
+	}
+	if cfg.ScheduleTaskQueue != "agent-schedules" {
+		t.Fatalf("ScheduleTaskQueue = %q, want agent-schedules", cfg.ScheduleTaskQueue)
+	}
+}
+
+func TestLoadConfigFallsBackToTemporalTaskQueueForSchedules(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := loadConfig(func(key string) string {
+		if key == "ECOMMERCE_TEMPORAL_TASK_QUEUE" {
+			return "custom-workflows"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("loadConfig returned error: %v", err)
+	}
+
+	if cfg.ScheduleTaskQueue != "custom-workflows" {
+		t.Fatalf("ScheduleTaskQueue = %q, want custom-workflows", cfg.ScheduleTaskQueue)
+	}
+}
+
 func TestRunOnceExecutesDeterministicAgentThroughOrchestrator(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
 	cfg := Config{
-		Enabled:        true,
-		RunOnce:        true,
-		Concurrency:    2,
-		Interval:       time.Minute,
-		MetricsAddr:    "127.0.0.1:0",
-		EventBusDriver: "redis",
-		SyncChannel:    "ec.sync.events",
-		DLQChannel:     "ec.sync.deadletter",
+		Enabled:                   true,
+		RunOnce:                   true,
+		Concurrency:               2,
+		Interval:                  time.Minute,
+		ScheduleEnabled:           true,
+		ScheduleDefaultInterval:   time.Minute,
+		ScheduleMaxConcurrentRuns: 2,
+		ScheduleTaskQueue:         "ec-workflows",
+		MetricsAddr:               "127.0.0.1:0",
+		EventBusDriver:            "redis",
+		SyncChannel:               "ec.sync.events",
+		DLQChannel:                "ec.sync.deadletter",
 	}
 
 	if err := run(context.Background(), slog.New(slog.NewJSONHandler(&buf, nil)), cfg); err != nil {
@@ -77,6 +146,38 @@ func TestRunOnceExecutesDeterministicAgentThroughOrchestrator(t *testing.T) {
 	}
 	if strings.Contains(logs, "agent-worker.scheduler_placeholder") {
 		t.Fatalf("logs still contain placeholder scheduler hook:\n%s", logs)
+	}
+}
+
+func TestRunOnceSkipsSchedulerWhenAgentSchedulesDisabled(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	cfg := Config{
+		Enabled:                   true,
+		RunOnce:                   true,
+		Concurrency:               2,
+		Interval:                  time.Minute,
+		ScheduleEnabled:           false,
+		ScheduleDefaultInterval:   time.Minute,
+		ScheduleMaxConcurrentRuns: 2,
+		ScheduleTaskQueue:         "ec-workflows",
+		MetricsAddr:               "127.0.0.1:0",
+		EventBusDriver:            "redis",
+		SyncChannel:               "ec.sync.events",
+		DLQChannel:                "ec.sync.deadletter",
+	}
+
+	if err := run(context.Background(), slog.New(slog.NewJSONHandler(&buf, nil)), cfg); err != nil {
+		t.Fatalf("run returned error: %v", err)
+	}
+
+	logs := buf.String()
+	if !strings.Contains(logs, "agent-worker.schedules_disabled") {
+		t.Fatalf("logs missing schedules disabled event:\n%s", logs)
+	}
+	if strings.Contains(logs, "agent-worker.scheduler_run_succeeded") {
+		t.Fatalf("disabled schedules still ran jobs:\n%s", logs)
 	}
 }
 
@@ -101,13 +202,17 @@ func TestRunStartsMetricsServerAndShutsDownOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	cfg := Config{
-		Enabled:        true,
-		Concurrency:    1,
-		Interval:       time.Hour,
-		MetricsAddr:    "127.0.0.1:0",
-		EventBusDriver: "redis",
-		SyncChannel:    "ec.sync.events",
-		DLQChannel:     "ec.sync.deadletter",
+		Enabled:                   true,
+		Concurrency:               1,
+		Interval:                  time.Hour,
+		ScheduleEnabled:           false,
+		ScheduleDefaultInterval:   time.Hour,
+		ScheduleMaxConcurrentRuns: 1,
+		ScheduleTaskQueue:         "ec-workflows",
+		MetricsAddr:               "127.0.0.1:0",
+		EventBusDriver:            "redis",
+		SyncChannel:               "ec.sync.events",
+		DLQChannel:                "ec.sync.deadletter",
 	}
 
 	go func() {
@@ -133,13 +238,17 @@ func TestMetricsHandlerExposesAgentWorkerMetrics(t *testing.T) {
 	t.Parallel()
 
 	cfg := Config{
-		Enabled:        true,
-		Concurrency:    3,
-		Interval:       30 * time.Second,
-		MetricsAddr:    "127.0.0.1:0",
-		EventBusDriver: "redis",
-		SyncChannel:    "ec.sync.events",
-		DLQChannel:     "ec.sync.deadletter",
+		Enabled:                   true,
+		Concurrency:               3,
+		Interval:                  30 * time.Second,
+		ScheduleEnabled:           true,
+		ScheduleDefaultInterval:   15 * time.Minute,
+		ScheduleMaxConcurrentRuns: 2,
+		ScheduleTaskQueue:         "ec-workflows",
+		MetricsAddr:               "127.0.0.1:0",
+		EventBusDriver:            "redis",
+		SyncChannel:               "ec.sync.events",
+		DLQChannel:                "ec.sync.deadletter",
 	}
 	handler := metricsHandler(cfg)
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
@@ -156,6 +265,11 @@ func TestMetricsHandlerExposesAgentWorkerMetrics(t *testing.T) {
 		"agentic_ecommerce_agent_worker_enabled",
 		"agentic_ecommerce_agent_worker_concurrency",
 		"agentic_ecommerce_agent_worker_scheduler_interval_seconds",
+		"agentic_ecommerce_agent_schedules_enabled",
+		"agentic_ecommerce_agent_schedule_default_interval_seconds",
+		"agentic_ecommerce_agent_schedule_max_concurrent_runs",
+		"agentic_ecommerce_agent_schedule_config_info",
+		"agentic_ecommerce_agent_scheduled_runs_total",
 		"agentic_ecommerce_agent_worker_runs_total",
 		`agentic_ecommerce_agent_worker_runs_total{eventbus_driver="redis",sync_channel="ec.sync.events",status="succeeded"}`,
 		`agentic_ecommerce_agent_worker_runs_total{eventbus_driver="redis",sync_channel="ec.sync.events",status="failed"}`,
