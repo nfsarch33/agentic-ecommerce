@@ -1,6 +1,9 @@
 package rag
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestChunkDocumentSplitsWithOverlapAndMetadata(t *testing.T) {
 	t.Parallel()
@@ -44,5 +47,45 @@ func TestChunkDocumentRejectsEmptyContent(t *testing.T) {
 	_, err := ChunkDocument(Document{ID: "doc-empty", Content: "   "}, ChunkOptions{})
 	if err == nil {
 		t.Fatal("expected empty content error")
+	}
+}
+
+func TestChunkDocumentGoldenStability(t *testing.T) {
+	t.Parallel()
+
+	createdAt := time.Date(2026, 5, 8, 1, 0, 0, 0, time.UTC)
+	doc := Document{
+		ID:        "doc-golden",
+		TenantID:  "tenant-golden",
+		Title:     "Resistance Band Golden Spec",
+		Source:    "supplier-golden",
+		Content:   "Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu.",
+		Metadata:  map[string]string{"sku": "RB-GOLD"},
+		CreatedAt: createdAt,
+	}
+
+	chunks, err := ChunkDocument(doc, ChunkOptions{MaxWords: 5, OverlapWords: 2})
+	if err != nil {
+		t.Fatalf("ChunkDocument: %v", err)
+	}
+	wantTexts := []string{
+		"Alpha beta gamma delta epsilon",
+		"delta epsilon zeta eta theta",
+		"eta theta iota kappa lambda",
+		"kappa lambda mu",
+	}
+	if len(chunks) != len(wantTexts) {
+		t.Fatalf("chunks = %d, want %d: %+v", len(chunks), len(wantTexts), chunks)
+	}
+	for i, wantText := range wantTexts {
+		if chunks[i].ID != "doc-golden:000"+string(rune('0'+i)) {
+			t.Fatalf("chunk[%d] id = %q", i, chunks[i].ID)
+		}
+		if chunks[i].Index != i || chunks[i].Text != wantText {
+			t.Fatalf("chunk[%d] = %+v, want text %q", i, chunks[i], wantText)
+		}
+		if !chunks[i].CreatedAt.Equal(createdAt) || chunks[i].TenantID != doc.TenantID || chunks[i].Metadata["sku"] != "RB-GOLD" {
+			t.Fatalf("chunk[%d] metadata drifted: %+v", i, chunks[i])
+		}
 	}
 }
