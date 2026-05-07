@@ -1,14 +1,15 @@
-# v1.0.0 Release Checklist
+# v2.0.0 Release Checklist
 
-Use this checklist before tagging `agentic-ecommerce` v1.0.0.
+Use this checklist before tagging `agentic-ecommerce` v2.0.0.
 
 ## Version and Docs
 
-- `VERSION` contains `1.0.0`.
-- `api/openapi.yaml` has `info.version: 1.0.0`.
-- `CHANGELOG.md` includes the v1.0.0 release entry.
-- `README.md` links quickstart, architecture, API docs, Docker Compose, cloud deployment, and security boundaries.
-- `docs/adr/adr-024-v1-release-decisions.md` is accepted and linked from `docs/adr/README.md`.
+- `VERSION` contains `2.0.0`.
+- `api/openapi.yaml` has `info.version: 2.0.0`.
+- `CHANGELOG.md` includes the v2.0.0 release entry summarising v1.1.0-v2.0.0 capabilities.
+- `README.md` links quickstart, architecture, API docs, Temporal, n8n, media storage, cloud deployment, and security boundaries.
+- `docs/api-reference.md`, `docs/temporal-workflow-specs.md`, and `docs/webhook-contracts.md` reflect the v2.0.0 API, workflow, and automation surfaces.
+- `docs/adr/adr-025-v2-release-decisions.md` is accepted and linked from `docs/adr/README.md`.
 
 ## Backend Quality Gates
 
@@ -16,17 +17,32 @@ Use this checklist before tagging `agentic-ecommerce` v1.0.0.
 go test -race ./...
 go vet ./...
 make build
-go test -race -coverprofile=coverage.out ./...
-go tool cover -func=coverage.out
+make coverage-check
+make contract-test
+make release-perf-smoke
 make monitoring-validate
 ```
 
 Target release threshold: at least 80% backend coverage, no `go vet` findings, and no monitoring config regressions.
 
+## Workflow and Automation Gates
+
+```bash
+make compose-temporal-config
+go test ./internal/workflow/...
+make compose-agent-schedules-config
+make n8n-config
+make n8n-workflows-validate
+```
+
+Expected result: Temporal workflow specs remain deterministic, the `ec-workflows` task queue is documented, n8n templates stay inactive and credential-free, and outbound webhook contracts match `api/openapi.yaml`.
+
 ## Compose and Deployment Gates
 
 ```bash
 docker compose --env-file .env.compose -f docker-compose.yml config --quiet
+make compose-config
+make compose-config-prod
 make compose-workers-config
 make tf-fmt-check
 make tf-validate
@@ -34,7 +50,7 @@ terraform -chdir=deploy/terraform/aws-ecs plan -var "image_tag=$IMAGE_TAG"
 terraform -chdir=deploy/terraform/gcp-cloudrun plan -var "image_tag=$IMAGE_TAG"
 ```
 
-The Terraform commands are dry-run only for v1.0.0. Do not apply cloud resources until account, project, state backend, IAM, TLS, DNS, and secret-manager ownership are approved.
+The Terraform commands are dry-run only for v2.0.0. Do not apply cloud resources until account, project, state backend, IAM, TLS, DNS, secret-manager ownership, Temporal persistence topology, and n8n exposure boundaries are approved.
 
 ## Runtime Smoke Gates
 
@@ -47,13 +63,13 @@ curl http://127.0.0.1:8080/metrics
 docker compose --env-file .env.compose -f docker-compose.yml down
 ```
 
-Expected result: the stack boots in under 60 seconds on a healthy local Docker runtime, `mc-api` is live, configured dependencies are ready, and metrics expose build information plus HTTP RED counters.
+Expected result: the stack boots in under 90 seconds on a healthy local Docker runtime, `mc-api` is live, configured dependencies are ready, and metrics expose build information plus HTTP RED counters.
 
 ## Security and Public Boundary Gates
 
 ```bash
 runx shell-leak-scan --repo ecommerce
-sentrux scan .
+sentrux gate .
 ```
 
 Review docs-inclusive output before merge. Public docs must not contain live credentials, private fleet hostnames, internal IPs, personal filesystem paths, account IDs, project IDs, `.tfvars`, browser profiles, or direct MiniMax app-service calls.
