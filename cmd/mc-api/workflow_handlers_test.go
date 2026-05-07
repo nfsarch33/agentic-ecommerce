@@ -56,6 +56,35 @@ func TestStartProductPublishWorkflowStartsTemporalExecution(t *testing.T) {
 	}
 }
 
+func TestStartContentGenerationWorkflowStartsTemporalExecution(t *testing.T) {
+	t.Parallel()
+
+	srv, repo := testServer(t)
+	product := addProduct(t, repo, "CW-START", "Content Workflow Product", 1295)
+	fake := &fakeTemporalWorkflowClient{run: fakeWorkflowRun{id: "content-generation-" + product.ID().String(), runID: "run-content-123"}}
+	srv.workflowClient = fake
+
+	body := bytes.NewBufferString(`{"product_id":"` + product.ID().String() + `","requested_by":"operator@example.com","style":"technical","max_words":90}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/content-generation", body)
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.startedOptions.TaskQueue != ecworkflow.TaskQueue {
+		t.Fatalf("task queue = %q, want %q", fake.startedOptions.TaskQueue, ecworkflow.TaskQueue)
+	}
+	input, ok := fake.startedArgs[0].(ecworkflow.ContentGenerationInput)
+	if !ok {
+		t.Fatalf("workflow arg = %#v, want ContentGenerationInput", fake.startedArgs)
+	}
+	if input.Product.ID != product.ID().String() || input.Request.Style != "technical" || input.Request.MaxWords != 90 {
+		t.Fatalf("input = %+v", input)
+	}
+}
+
 func TestStartProductPublishWorkflowRequiresConfiguredTemporalClient(t *testing.T) {
 	t.Parallel()
 
