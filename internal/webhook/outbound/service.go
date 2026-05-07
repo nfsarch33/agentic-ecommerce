@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,7 +48,29 @@ func (s *Service) List(ctx context.Context) ([]Registration, error) {
 	return s.store.ListRegistrations(ctx)
 }
 
+func (s *Service) ListForTenant(ctx context.Context, tenantID string) ([]Registration, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	registrations, err := s.store.ListRegistrations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Registration, 0, len(registrations))
+	for _, reg := range registrations {
+		if reg.TenantID == tenantID {
+			out = append(out, reg)
+		}
+	}
+	return out, nil
+}
+
 func (s *Service) Delete(ctx context.Context, id string) error {
+	return s.store.DeleteRegistration(ctx, id)
+}
+
+func (s *Service) DeleteForTenant(ctx context.Context, id, tenantID string) error {
+	if _, err := s.registrationForTenant(ctx, id, tenantID); err != nil {
+		return err
+	}
 	return s.store.DeleteRegistration(ctx, id)
 }
 
@@ -58,6 +81,9 @@ func (s *Service) DeliverEvent(ctx context.Context, event eventbus.Event) ([]Del
 	}
 	results := make([]DeliveryResult, 0, len(registrations))
 	for _, reg := range registrations {
+		if event.TenantID != "" && reg.TenantID != "" && reg.TenantID != event.TenantID {
+			continue
+		}
 		secret, err := s.store.SecretForRegistration(ctx, reg.ID)
 		if err != nil {
 			return results, fmt.Errorf("load webhook secret metadata: %w", err)
@@ -114,6 +140,24 @@ func (s *Service) Test(ctx context.Context, id string, eventType eventbus.EventT
 		return result, err
 	}
 	return recorded, nil
+}
+
+func (s *Service) TestForTenant(ctx context.Context, id, tenantID string, eventType eventbus.EventType) (DeliveryResult, error) {
+	if _, err := s.registrationForTenant(ctx, id, tenantID); err != nil {
+		return DeliveryResult{}, err
+	}
+	return s.Test(ctx, id, eventType)
+}
+
+func (s *Service) registrationForTenant(ctx context.Context, id, tenantID string) (Registration, error) {
+	reg, err := s.store.GetRegistration(ctx, id)
+	if err != nil {
+		return Registration{}, err
+	}
+	if reg.TenantID != strings.TrimSpace(tenantID) {
+		return Registration{}, ErrNotFound
+	}
+	return reg, nil
 }
 
 func (s *Service) Subscribe(ctx context.Context, consumer eventbus.Consumer, group string) error {

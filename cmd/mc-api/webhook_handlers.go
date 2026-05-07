@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	tenantpkg "github.com/nfsarch33/agentic-ecommerce/internal/tenant"
 	"github.com/nfsarch33/agentic-ecommerce/internal/webhook/outbound"
 )
 
@@ -22,6 +23,7 @@ type createWebhookRequest struct {
 
 type webhookRegistrationResponse struct {
 	ID         string    `json:"id"`
+	TenantID   string    `json:"tenant_id,omitempty"`
 	URL        string    `json:"url"`
 	EventTypes []string  `json:"event_types"`
 	SecretRef  string    `json:"secret_ref,omitempty"`
@@ -86,7 +88,13 @@ func (s *server) createWebhook(w http.ResponseWriter, r *http.Request) {
 	for i, value := range req.EventTypes {
 		eventTypes[i] = eventbus.EventType(strings.TrimSpace(value))
 	}
+	tenantID, scoped, tenantErr := s.tenantIDForScopedRequest(r)
+	if tenantErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+		return
+	}
 	reg, err := s.ensureWebhookService().Register(r.Context(), outbound.CreateRegistrationInput{
+		TenantID:   tenantValue(tenantID, scoped),
 		URL:        req.URL,
 		EventTypes: eventTypes,
 		Secret:     req.Secret,
@@ -101,7 +109,20 @@ func (s *server) createWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listWebhooks(w http.ResponseWriter, r *http.Request) {
-	registrations, err := s.ensureWebhookService().List(r.Context())
+	tenantID, scoped, tenantErr := s.tenantIDForScopedRequest(r)
+	if tenantErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+		return
+	}
+	var (
+		registrations []outbound.Registration
+		err           error
+	)
+	if scoped {
+		registrations, err = s.ensureWebhookService().ListForTenant(r.Context(), string(tenantID))
+	} else {
+		registrations, err = s.ensureWebhookService().List(r.Context())
+	}
 	if err != nil {
 		s.log.Error("list webhooks", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
@@ -115,7 +136,18 @@ func (s *server) listWebhooks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteWebhook(w http.ResponseWriter, r *http.Request, id string) {
-	if err := s.ensureWebhookService().Delete(r.Context(), id); err != nil {
+	tenantID, scoped, tenantErr := s.tenantIDForScopedRequest(r)
+	if tenantErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+		return
+	}
+	var err error
+	if scoped {
+		err = s.ensureWebhookService().DeleteForTenant(r.Context(), id, string(tenantID))
+	} else {
+		err = s.ensureWebhookService().Delete(r.Context(), id)
+	}
+	if err != nil {
 		writeWebhookError(w, err)
 		return
 	}
@@ -134,7 +166,18 @@ func (s *server) testWebhook(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 
-	result, err := s.ensureWebhookService().Test(r.Context(), id, eventbus.EventType(strings.TrimSpace(req.EventType)))
+	tenantID, scoped, tenantErr := s.tenantIDForScopedRequest(r)
+	if tenantErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+		return
+	}
+	var result outbound.DeliveryResult
+	var err error
+	if scoped {
+		result, err = s.ensureWebhookService().TestForTenant(r.Context(), id, string(tenantID), eventbus.EventType(strings.TrimSpace(req.EventType)))
+	} else {
+		result, err = s.ensureWebhookService().Test(r.Context(), id, eventbus.EventType(strings.TrimSpace(req.EventType)))
+	}
 	if err != nil {
 		writeWebhookError(w, err)
 		return
@@ -167,6 +210,7 @@ func toWebhookRegistrationResponse(reg outbound.Registration) webhookRegistratio
 	}
 	return webhookRegistrationResponse{
 		ID:         reg.ID,
+		TenantID:   reg.TenantID,
 		URL:        reg.URL,
 		EventTypes: eventTypes,
 		SecretRef:  reg.SecretRef,
@@ -174,6 +218,13 @@ func toWebhookRegistrationResponse(reg outbound.Registration) webhookRegistratio
 		Enabled:    reg.Enabled,
 		CreatedAt:  reg.CreatedAt,
 	}
+}
+
+func tenantValue(tenantID tenantpkg.ID, scoped bool) string {
+	if !scoped {
+		return ""
+	}
+	return string(tenantID)
 }
 
 func toWebhookDeliveryResultResponse(result outbound.DeliveryResult) webhookDeliveryResultResponse {

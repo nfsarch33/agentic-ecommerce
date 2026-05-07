@@ -2390,6 +2390,9 @@ components:
         id:
           type: string
           format: uuid
+        tenant_id:
+          type: string
+          description: Tenant scope for tenant-scoped webhook registrations.
         url:
           type: string
           format: uri

@@ -146,6 +146,33 @@ func TestList_EmptyOnBeyondPage(t *testing.T) {
 	}
 }
 
+func TestTenantProductMethodsIsolateProducts(t *testing.T) {
+	t.Parallel()
+	repo := NewProductRepository()
+	ctx := context.Background()
+
+	productA := seedProduct(t, "TENANT-A-SKU", "Tenant A Product")
+	productB := seedProduct(t, "TENANT-B-SKU", "Tenant B Product")
+	if err := repo.CreateWithTenant(ctx, productA, "tenant-a"); err != nil {
+		t.Fatalf("create tenant A product: %v", err)
+	}
+	if err := repo.CreateWithTenant(ctx, productB, "tenant-b"); err != nil {
+		t.Fatalf("create tenant B product: %v", err)
+	}
+
+	listA, err := repo.ListByTenant(ctx, "tenant-a", 1, 10)
+	if err != nil {
+		t.Fatalf("list tenant A products: %v", err)
+	}
+	if listA.Total != 1 || listA.Products[0].ID() != productA.ID() {
+		t.Fatalf("tenant A list = %+v, want only %s", listA, productA.ID())
+	}
+
+	if _, err := repo.GetByIDAndTenant(ctx, productA.ID(), "tenant-b"); !errors.Is(err, ErrProductNotFound) {
+		t.Fatalf("cross-tenant get error = %v, want ErrProductNotFound", err)
+	}
+}
+
 func TestUpdate_ModifiesProduct(t *testing.T) {
 	t.Parallel()
 	repo := NewProductRepository()

@@ -132,6 +132,31 @@ func (r *OrderRepository) GetByID(ctx context.Context, id uuid.UUID) (orderdomai
 	}), nil
 }
 
+func (r *OrderRepository) GetByIDAndTenant(ctx context.Context, id uuid.UUID, tenantID string) (orderdomain.Order, error) {
+	tenantID, err := requireTenantID(tenantID)
+	if err != nil {
+		return orderdomain.Order{}, err
+	}
+	order, err := r.getOrderByTenant(ctx, id, tenantID)
+	if err != nil {
+		return orderdomain.Order{}, err
+	}
+	items, err := r.getOrderItems(ctx, id)
+	if err != nil {
+		return orderdomain.Order{}, err
+	}
+	return orderdomain.ReconstructOrder(orderdomain.OrderRecord{
+		ID:              order.ID(),
+		CustomerEmail:   order.CustomerEmail(),
+		Items:           items,
+		Status:          order.Status(),
+		Totals:          order.Totals(),
+		ShippingAddress: order.ShippingAddress(),
+		CreatedAt:       order.CreatedAt(),
+		UpdatedAt:       order.UpdatedAt(),
+	}), nil
+}
+
 func (r *OrderRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status orderdomain.Status) (orderdomain.Order, error) {
 	order, err := r.GetByID(ctx, id)
 	if err != nil {
@@ -144,6 +169,29 @@ func (r *OrderRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status
 	tag, err := r.pool.Exec(ctx, `UPDATE orders SET status = $2, updated_at = $3 WHERE id = $1`, id, status.String(), order.UpdatedAt())
 	if err != nil {
 		return orderdomain.Order{}, fmt.Errorf("update order status %s: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return orderdomain.Order{}, ErrOrderNotFound
+	}
+	return order, nil
+}
+
+func (r *OrderRepository) UpdateStatusWithTenant(ctx context.Context, id uuid.UUID, status orderdomain.Status, tenantID string) (orderdomain.Order, error) {
+	tenantID, err := requireTenantID(tenantID)
+	if err != nil {
+		return orderdomain.Order{}, err
+	}
+	order, err := r.GetByIDAndTenant(ctx, id, tenantID)
+	if err != nil {
+		return orderdomain.Order{}, err
+	}
+	if err := order.AdvanceStatus(status); err != nil {
+		return orderdomain.Order{}, err
+	}
+
+	tag, err := r.pool.Exec(ctx, `UPDATE orders SET status = $3, updated_at = $4 WHERE id = $1 AND tenant_id = $2`, id, tenantID, status.String(), order.UpdatedAt())
+	if err != nil {
+		return orderdomain.Order{}, fmt.Errorf("update order status %s (tenant %s): %w", id, tenantID, err)
 	}
 	if tag.RowsAffected() == 0 {
 		return orderdomain.Order{}, ErrOrderNotFound
@@ -180,6 +228,22 @@ func (r *OrderRepository) getOrder(ctx context.Context, id uuid.UUID) (orderdoma
 		       shipping_postal_code, shipping_country, created_at, updated_at
 		FROM orders WHERE id = $1`
 	order, err := scanOrderRow(r.pool.QueryRow(ctx, q, id), nil)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return orderdomain.Order{}, ErrOrderNotFound
+		}
+		return orderdomain.Order{}, err
+	}
+	return order, nil
+}
+
+func (r *OrderRepository) getOrderByTenant(ctx context.Context, id uuid.UUID, tenantID string) (orderdomain.Order, error) {
+	const q = `
+		SELECT id, customer_email, status, subtotal_amount, currency, shipping_amount, total_amount,
+		       shipping_name, shipping_line1, shipping_line2, shipping_city, shipping_region,
+		       shipping_postal_code, shipping_country, created_at, updated_at
+		FROM orders WHERE id = $1 AND tenant_id = $2`
+	order, err := scanOrderRow(r.pool.QueryRow(ctx, q, id, tenantID), nil)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return orderdomain.Order{}, ErrOrderNotFound
