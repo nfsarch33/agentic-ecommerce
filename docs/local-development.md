@@ -68,6 +68,27 @@ ECOMMERCE_RAG_CHUNK_SIZE=1000
 enabled. Do not point app containers or MacBook-local runs directly at MiniMax
 provider endpoints.
 
+## Tenant Isolation Fixtures
+
+v1.9.0 adds synthetic tenant fixtures for backend admin/compliance QA support.
+Apply migrations, then seed and assert the fixture boundaries:
+
+```bash
+make migrate-up
+make tenant-isolation-smoke
+```
+
+For fast Go-only coverage without a running database:
+
+```bash
+make tenant-isolation-test
+```
+
+The fixture tenant IDs are `tenant-alpha-demo` and `tenant-beta-demo`. They are
+not provisioned tenants and do not require real credentials. See
+`docs/tenant-isolation.md` for the migration matrix, current limitations, and
+monitoring label policy.
+
 ## Local Media Storage
 
 v1.4.0 uses `.local/media-uploads/` for filesystem-backed media storage in
