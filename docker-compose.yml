@@ -34,11 +34,12 @@ services:
   redis:
     image: redis:7-alpine
     <<: *app-common
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     ports:
       - "${BIND_HOST:-127.0.0.1}:${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
+      - ./configs/redis-streams.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -78,6 +79,8 @@ services:
       ECOMMERCE_EVENTBUS_REDIS_DB: ${ECOMMERCE_EVENTBUS_REDIS_DB:-0}
       ECOMMERCE_EVENTBUS_CHANNEL_SYNC: ${ECOMMERCE_EVENTBUS_CHANNEL_SYNC:-ec.sync.events}
       ECOMMERCE_EVENTBUS_CHANNEL_DLQ: ${ECOMMERCE_EVENTBUS_CHANNEL_DLQ:-ec.sync.deadletter}
+      ECOMMERCE_EVENTBUS_CONSUMER_GROUP: ${ECOMMERCE_EVENTBUS_CONSUMER_GROUP:-ec-api-group}
+      ECOMMERCE_EVENTBUS_STREAMS: ${ECOMMERCE_EVENTBUS_STREAMS:-ec.product.events,ec.order.events,ec.sync.events,ec.agent.events,ec.compliance.events}
       ECOMMERCE_JWT_SECRET: ${ECOMMERCE_JWT_SECRET:-}
       ECOMMERCE_JWT_ISSUER: ${ECOMMERCE_JWT_ISSUER:-agentic-ecommerce}
       ECOMMERCE_JWT_AUDIENCE: ${ECOMMERCE_JWT_AUDIENCE:-mc-api}
