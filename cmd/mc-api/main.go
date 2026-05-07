@@ -19,7 +19,11 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/minimax"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
+	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
+	complianceagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/compliance"
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	pricingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/pricing"
+	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
@@ -72,14 +76,16 @@ type serverConfig struct {
 }
 
 type server struct {
-	cfg           serverConfig
-	repo          port.ProductRepository
-	orderRepo     port.OrderRepository
-	cartRepo      port.CartRepository
-	syncEngine    *enginesync.Engine
-	contentAgent  contentGenerator
-	webhookSecret string
-	log           *slog.Logger
+	cfg            serverConfig
+	repo           port.ProductRepository
+	orderRepo      port.OrderRepository
+	cartRepo       port.CartRepository
+	syncEngine     *enginesync.Engine
+	contentAgent   contentGenerator
+	agentRegistry  *orchestrator.Registry
+	agentScheduler *orchestrator.Scheduler
+	webhookSecret  string
+	log            *slog.Logger
 }
 
 type contentGenerator interface {
@@ -213,25 +219,57 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		}
 	}
 	webhookSecret := getenv("ECOMMERCE_WC_WEBHOOK_SECRET", "")
+	registry := defaultAgentRegistry()
 	return &server{
 		cfg: serverConfig{
 			allowedOrigin: getenv("ECOMMERCE_ALLOWED_ORIGIN", ""),
 			apiToken:      getenv("ECOMMERCE_API_TOKEN", ""),
 			webhookSecret: webhookSecret,
 		},
-		repo:          repo,
-		orderRepo:     orderRepo,
-		cartRepo:      cartRepo,
-		syncEngine:    enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
-		contentAgent:  generator,
-		webhookSecret: webhookSecret,
-		log:           logger,
+		repo:           repo,
+		orderRepo:      orderRepo,
+		cartRepo:       cartRepo,
+		syncEngine:     enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
+		contentAgent:   generator,
+		agentRegistry:  registry,
+		agentScheduler: orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), orchestrator.NewEventRecorder(), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
+		webhookSecret:  webhookSecret,
+		log:            logger,
 	}
 }
 
+func (s *server) ensureAgentScheduler() {
+	if s.agentRegistry == nil {
+		s.agentRegistry = defaultAgentRegistry()
+	}
+	if s.agentScheduler == nil {
+		s.agentScheduler = orchestrator.NewScheduler(
+			s.agentRegistry,
+			orchestrator.NewInMemoryStore(),
+			orchestrator.NewEventRecorder(),
+			nil,
+			orchestrator.SchedulerOptions{MaxConcurrent: 2},
+		)
+	}
+}
+
+func defaultAgentRegistry() *orchestrator.Registry {
+	registry := orchestrator.NewRegistry()
+	for _, candidate := range []orchestrator.Agent{
+		complianceagent.NewAgent(),
+		pricingagent.NewAgent(),
+		sourcingagent.NewAgent(),
+	} {
+		_ = registry.Register(candidate)
+	}
+	return registry
+}
+
 func (s *server) mux() http.Handler {
+	s.ensureAgentScheduler()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthzHandler)
+	mux.HandleFunc("/readyz", s.readyzHandler)
 	mux.HandleFunc("/metrics", metricsHandler)
 
 	api := s.withCORS(s.withBearerAuth(s.productsHandler))
@@ -249,6 +287,11 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/sync/products/", syncAPI)
 	mux.HandleFunc("/api/v1/webhooks/woocommerce/orders", s.woocommerceOrderWebhookHandler)
 	mux.HandleFunc("/api/v1/webhooks/woocommerce/products", s.woocommerceProductWebhookHandler)
+	agentsAPI := s.withCORS(s.withBearerAuth(s.agentsHandler))
+	mux.HandleFunc("/api/v1/agents", agentsAPI)
+	mux.HandleFunc("/api/v1/agents/", agentsAPI)
+	agentRunsAPI := s.withCORS(s.withBearerAuth(s.agentRunsHandler))
+	mux.HandleFunc("/api/v1/agent-runs/", agentRunsAPI)
 
 	return s.withRequestLogging(mux)
 }
@@ -257,6 +300,15 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
 		"service": "agentic-ecommerce-mc-api",
+	})
+}
+
+func (s *server) readyzHandler(w http.ResponseWriter, r *http.Request) {
+	s.ensureAgentScheduler()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":  "ready",
+		"service": "agentic-ecommerce-mc-api",
+		"agents":  len(s.agentRegistry.List()),
 	})
 }
 
