@@ -1,0 +1,79 @@
+{
+  "description": "Resistance Band Set includes five resistance levels.",
+  "evaluation": {
+    "factual_issues": [],
+    "keyword_density": {},
+    "length": {
+      "max_words": 0,
+      "within_limit": false,
+      "word_count": 0
+    },
+    "pass": true,
+    "readability_score": 0,
+    "score": 0.99,
+    "tone": {
+      "issues": [],
+      "pass": false,
+      "style": ""
+    }
+  },
+  "fact_check": {
+    "checked_at": "2026-05-07T00:00:00Z",
+    "claims": [
+      {
+        "claim": {
+          "text": "Resistance Band Set includes five resistance levels."
+        },
+        "confidence": 0.99,
+        "evidence": [
+          {
+            "chunk_id": "doc-contract:0000",
+            "document_id": "doc-contract",
+            "metadata": {
+              "sku": "RB-SET"
+            },
+            "score": 0.99,
+            "source": "contract",
+            "text": "Resistance Band Set includes five resistance levels",
+            "title": "Contract Doc"
+          }
+        ],
+        "status": "supported",
+        "text": "Resistance Band Set includes five resistance levels."
+      },
+      {
+        "claim": {
+          "text": "Resistance Band Set Resistance Band Set includes five resistance levels."
+        },
+        "confidence": 0.99,
+        "evidence": [
+          {
+            "chunk_id": "doc-contract:0000",
+            "document_id": "doc-contract",
+            "metadata": {
+              "sku": "RB-SET"
+            },
+            "score": 0.99,
+            "source": "contract",
+            "text": "Resistance Band Set includes five resistance levels",
+            "title": "Contract Doc"
+          }
+        ],
+        "status": "supported",
+        "text": "Resistance Band Set Resistance Band Set includes five resistance levels."
+      }
+    ],
+    "confidence": 0.99,
+    "id": "00000000-0000-0000-0000-000000000000",
+    "issues": null,
+    "pass": true,
+    "product_id": "00000000-0000-0000-0000-000000000000"
+  },
+  "fact_check_id": "00000000-0000-0000-0000-000000000000",
+  "meta_description": "Resistance Band Set includes five resistance levels.",
+  "pass": true,
+  "product_id": "00000000-0000-0000-0000-000000000000",
+  "score": 0.99,
+  "seo_title": "Resistance Band Set",
+  "tokens_used": 42
+}

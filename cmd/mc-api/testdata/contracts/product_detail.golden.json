@@ -1,0 +1,15 @@
+{
+  "created_at": "2026-05-07T00:00:00Z",
+  "description": "Progressive resistance band set with 5 tension levels.",
+  "id": "00000000-0000-0000-0000-000000000000",
+  "price": {
+    "amount": 4995,
+    "currency": "AUD"
+  },
+  "sku": "RB-SET-5",
+  "slug": "resistance-band-set",
+  "status": "active",
+  "stock": 120,
+  "title": "Resistance Band Set",
+  "updated_at": "2026-05-07T00:00:00Z"
+}

@@ -13,6 +13,14 @@ coverage.out
 tmp
 node_modules
 
+deploy
+docs
+migrations
+monitoring
+scripts
+seed
+tests
+
 .DS_Store
 *.log
 *.db
