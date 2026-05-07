@@ -1,0 +1,43 @@
+{
+  "issues": [
+    {
+      "blocking": true,
+      "id": "resolution_too_small",
+      "message": "image dimensions are below the minimum display size",
+      "severity": "error"
+    },
+    {
+      "blocking": true,
+      "id": "aspect_ratio_out_of_range",
+      "message": "image aspect ratio is outside the ecommerce display range",
+      "severity": "error"
+    },
+    {
+      "blocking": true,
+      "id": "unsupported_format",
+      "message": "image format must be jpeg, png, webp, or gif",
+      "severity": "error"
+    },
+    {
+      "blocking": true,
+      "id": "image_too_large",
+      "message": "image exceeds the maximum allowed size",
+      "severity": "error"
+    },
+    {
+      "blocking": true,
+      "id": "alt_text_generic",
+      "message": "image alt text must describe the product image",
+      "severity": "error"
+    },
+    {
+      "blocking": false,
+      "id": "brand_safety_pending",
+      "message": "brand safety classifier is pending ML integration",
+      "severity": "info"
+    }
+  ],
+  "pass": false,
+  "score": 0
+}
+
