@@ -75,6 +75,92 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
+func TestReadyzReportsSkippedOptionalDependencies(t *testing.T) {
+	t.Parallel()
+	srv, _ := testServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var got readyzResponse
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if got.Status != "ready" {
+		t.Fatalf("status = %q, want ready", got.Status)
+	}
+	if got.Checks["database"].Status != "skipped" || got.Checks["redis"].Status != "skipped" {
+		t.Fatalf("dependency checks = %#v", got.Checks)
+	}
+	if !got.AgentWorker.Ready || got.AgentWorker.RegisteredAgents == 0 {
+		t.Fatalf("agent readiness = %#v", got.AgentWorker)
+	}
+}
+
+func TestReadyzFailsWhenConfiguredDatabaseIsUnavailable(t *testing.T) {
+	t.Setenv("ECOMMERCE_DB_URL", "postgres://postgres:postgres@127.0.0.1:1/ecommerce?sslmode=disable")
+	t.Setenv("ECOMMERCE_READINESS_TIMEOUT", "10ms")
+	repo := inmemory.NewProductRepository()
+	srv := newServer(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)), repo, inmemory.NewOrderRepository(), inmemory.NewCartRepository())
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body=%s", rec.Code, rec.Body.String())
+	}
+	var got readyzResponse
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if got.Status != "not_ready" || got.Checks["database"].Status != "fail" {
+		t.Fatalf("readiness response = %#v", got)
+	}
+}
+
+func TestReadyzFailsWhenConfiguredRedisIsUnavailable(t *testing.T) {
+	t.Setenv("ECOMMERCE_REDIS_ADDR", "127.0.0.1:1")
+	t.Setenv("ECOMMERCE_READINESS_TIMEOUT", "10ms")
+	repo := inmemory.NewProductRepository()
+	srv := newServer(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)), repo, inmemory.NewOrderRepository(), inmemory.NewCartRepository())
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body=%s", rec.Code, rec.Body.String())
+	}
+	var got readyzResponse
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if got.Status != "not_ready" || got.Checks["redis"].Status != "fail" {
+		t.Fatalf("readiness response = %#v", got)
+	}
+}
+
+func TestNewServerReadsOperationalTimeouts(t *testing.T) {
+	t.Setenv("ECOMMERCE_READINESS_TIMEOUT", "75ms")
+	t.Setenv("ECOMMERCE_SHUTDOWN_TIMEOUT", "3s")
+	repo := inmemory.NewProductRepository()
+
+	srv := newServer(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)), repo, inmemory.NewOrderRepository(), inmemory.NewCartRepository())
+	defer srv.Close()
+
+	if srv.cfg.readinessTimeout.String() != "75ms" {
+		t.Fatalf("readiness timeout = %s, want 75ms", srv.cfg.readinessTimeout)
+	}
+	if srv.cfg.shutdownTimeout.String() != "3s" {
+		t.Fatalf("shutdown timeout = %s, want 3s", srv.cfg.shutdownTimeout)
+	}
+}
+
 func TestMetricsEndpointExposesPrometheusText(t *testing.T) {
 	t.Parallel()
 	srv, _ := testServer(t)
@@ -139,6 +225,26 @@ func TestRequestLoggingAddsRequestIDAndStructuredFields(t *testing.T) {
 		if !strings.Contains(logLine, want) {
 			t.Fatalf("log line missing %q:\n%s", want, logLine)
 		}
+	}
+}
+
+func TestRequestLoggingGeneratesRequestID(t *testing.T) {
+	t.Parallel()
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	srv, _ := testServer(t)
+	srv.log = logger
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	requestID := rec.Header().Get("X-Request-ID")
+	if requestID == "" {
+		t.Fatal("expected generated X-Request-ID response header")
+	}
+	if !strings.Contains(logs.String(), `"request_id":"`+requestID+`"`) {
+		t.Fatalf("log line missing generated request ID %q:\n%s", requestID, logs.String())
 	}
 }
 

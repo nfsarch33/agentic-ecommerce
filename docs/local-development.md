@@ -21,6 +21,7 @@ This repo owns the Go backend services for the Agentic Ecommerce stack. The publ
 
    ```bash
    curl http://127.0.0.1:8080/healthz
+   curl http://127.0.0.1:8080/readyz
    make redis-ping
    ```
 
@@ -46,13 +47,19 @@ supplier, customer, or production media in git.
 
 Redis 7 is available at `redis:6379` inside compose and `127.0.0.1:${REDIS_HOST_PORT:-6379}` from the host. It is reserved for v0.2.0 cart/session storage and later Redis-backed event bus work.
 
-Current backend code does not consume Redis yet. When cart/session storage is wired, add a `/readyz` endpoint that verifies:
+`/healthz` remains a liveness check that does not depend on downstream services. `/readyz` is the cloud readiness check:
 
-- PostgreSQL can accept a lightweight query through the configured pool.
-- Redis responds to `PING` using `ECOMMERCE_REDIS_ADDR`, `ECOMMERCE_REDIS_DB`, and `ECOMMERCE_REDIS_KEY_PREFIX`.
-- `/healthz` remains a liveness check that does not depend on downstream services.
+- PostgreSQL is checked with a lightweight pgxpool ping when `ECOMMERCE_DB_URL` is set.
+- Redis is checked with `PING` when `ECOMMERCE_REDIS_ADDR` is set, selecting `ECOMMERCE_REDIS_DB` first when non-zero.
+- Unset dependencies are returned as `skipped` and do not gate readiness.
 
-Until then, Redis readiness is covered by the compose healthcheck and `make redis-ping`.
+The readiness timeout is controlled by `ECOMMERCE_READINESS_TIMEOUT` and defaults to `2s`. Graceful HTTP shutdown is bounded by `ECOMMERCE_SHUTDOWN_TIMEOUT`, defaulting to `10s`.
+
+## Request IDs and Traces
+
+Every request gets an `X-Request-ID` response header. If the caller supplies `X-Request-ID`, the backend reuses it; otherwise it generates one and includes the value in structured JSON access logs.
+
+Set `ECOMMERCE_OTEL_ENABLED=true` to wrap application routes with OpenTelemetry HTTP instrumentation and W3C trace-context propagation. Health, readiness, and metrics endpoints are excluded from spans to keep probes quiet.
 
 ## Frontend Flow
 

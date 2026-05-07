@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agentic Ecommerce Mission Control API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     Public contract for the Agentic Ecommerce Go backend consumed by
     agentic-ecommerce-web. This spec intentionally excludes private
@@ -32,6 +32,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReadyResponse'
+        '503':
+          description: Service is live but not ready because a configured dependency check failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Prometheus text exposition for build metadata, HTTP RED metrics, sync, agent, compliance, and media placeholders.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '405':
+          description: Only GET is supported.
   /api/v1/products:
     get:
       summary: List storefront products
@@ -877,11 +896,11 @@ components:
           const: agentic-ecommerce-mc-api
     ReadyResponse:
       type: object
-      required: [status, service, agents, agent_worker]
+      required: [status, service, agents, agent_worker, checks]
       properties:
         status:
           type: string
-          const: ready
+          enum: [ready, not_ready]
         service:
           type: string
           const: agentic-ecommerce-mc-api
@@ -890,6 +909,30 @@ components:
           minimum: 0
         agent_worker:
           $ref: '#/components/schemas/AgentWorkerReadiness'
+        checks:
+          type: object
+          required: [database, redis]
+          properties:
+            database:
+              $ref: '#/components/schemas/DependencyReadiness'
+            redis:
+              $ref: '#/components/schemas/DependencyReadiness'
+    DependencyReadiness:
+      type: object
+      required: [status, optional, latency_ms]
+      properties:
+        status:
+          type: string
+          enum: [ok, fail, skipped]
+        optional:
+          type: boolean
+          description: True when the dependency is not configured and therefore does not gate readiness.
+        latency_ms:
+          type: integer
+          minimum: 0
+        error:
+          type: string
+          description: Present only for failed checks. The value is intentionally generic to avoid leaking connection details.
     AgentWorkerReadiness:
       type: object
       required: [ready, scheduler, registered_agents]
