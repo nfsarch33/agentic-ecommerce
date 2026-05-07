@@ -16,12 +16,20 @@ locals {
     : "https://${local.normalized_name}.run.app"
   )
 
+  endpoint_placeholder = (
+    var.protocol == "grpc"
+    ? "${local.normalized_name}.service.local:${var.container_port}"
+    : var.protocol == "worker" ? "worker://${local.normalized_name}" : local.url_placeholder
+  )
+
   deployment_contract = {
     service_name         = var.service_name
     runtime_target       = var.runtime_target
     runtime_label        = local.runtime_label
     image_ref            = local.image_ref
     container_port       = var.container_port
+    protocol             = var.protocol
+    command              = var.command
     cpu                  = var.cpu
     memory_mb            = var.memory_mb
     min_instances        = var.min_instances
@@ -37,5 +45,7 @@ locals {
     secret_env_names     = sort(keys(var.secret_env_vars))
     log_destination      = local.log_destination
     service_url_preview  = local.url_placeholder
+    endpoint_preview     = local.endpoint_placeholder
+    autoscaling_policy   = var.autoscaling_policy
   }
 }

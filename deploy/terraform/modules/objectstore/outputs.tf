@@ -18,6 +18,11 @@ output "public_base_url_placeholder" {
   value       = local.public_base_url_placeholder
 }
 
+output "cdn_contract" {
+  description = "Provider-specific CDN placeholder contract for media assets."
+  value       = local.cdn_contract
+}
+
 output "deployment_contract" {
   description = "Provider-neutral object-store deployment contract for dry-run review."
   value       = local.deployment_contract

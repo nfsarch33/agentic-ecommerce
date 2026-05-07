@@ -50,6 +50,23 @@ variable "container_port" {
   default     = 8080
 }
 
+variable "protocol" {
+  description = "Primary service protocol for contract review. Supported values: http, grpc, worker."
+  type        = string
+  default     = "http"
+
+  validation {
+    condition     = contains(["http", "grpc", "worker"], var.protocol)
+    error_message = "protocol must be http, grpc, or worker."
+  }
+}
+
+variable "command" {
+  description = "Optional container command placeholder for provider task definitions."
+  type        = list(string)
+  default     = []
+}
+
 variable "cpu" {
   description = "Runtime CPU placeholder. ECS examples use CPU units; Cloud Run examples use vCPU count."
   type        = number
@@ -126,4 +143,22 @@ variable "allow_public_ingress" {
   description = "Whether this service is intended to receive public ingress through a managed load balancer or HTTPS endpoint."
   type        = bool
   default     = false
+}
+
+variable "autoscaling_policy" {
+  description = "Provider-neutral autoscaling policy contract. It describes the intended policy but does not create provider resources."
+  type = object({
+    enabled                    = bool
+    metric                     = string
+    target_value               = number
+    scale_in_cooldown_seconds  = number
+    scale_out_cooldown_seconds = number
+  })
+  default = {
+    enabled                    = false
+    metric                     = "disabled"
+    target_value               = 0
+    scale_in_cooldown_seconds  = 300
+    scale_out_cooldown_seconds = 60
+  }
 }

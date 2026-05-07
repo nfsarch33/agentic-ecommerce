@@ -46,6 +46,54 @@ variable "image_tag" {
   default     = "sha-placeholder"
 }
 
+variable "temporal_image" {
+  description = "Temporal server image repository without tag."
+  type        = string
+  default     = "temporalio/temporal"
+}
+
+variable "temporal_image_tag" {
+  description = "Temporal server image tag placeholder. Pin before real deployment."
+  type        = string
+  default     = "1.26.2"
+}
+
+variable "temporal_namespace" {
+  description = "Temporal namespace used by backend workflow clients and workers."
+  type        = string
+  default     = "default"
+}
+
+variable "temporal_task_queue" {
+  description = "Temporal task queue used by ecommerce workflows."
+  type        = string
+  default     = "ec-workflows"
+}
+
+variable "mc_api_min_instances" {
+  description = "Minimum Cloud Run instance count for mc-api."
+  type        = number
+  default     = 1
+}
+
+variable "mc_api_max_instances" {
+  description = "Maximum Cloud Run instance count for mc-api."
+  type        = number
+  default     = 20
+}
+
+variable "temporal_worker_min_instances" {
+  description = "Minimum Cloud Run instance count for temporal-worker."
+  type        = number
+  default     = 1
+}
+
+variable "temporal_worker_max_instances" {
+  description = "Maximum Cloud Run instance count for temporal-worker."
+  type        = number
+  default     = 10
+}
+
 variable "allowed_origin" {
   description = "Public frontend origin allowed by mc-api CORS."
   type        = string
@@ -94,10 +142,22 @@ variable "wc_consumer_key_secret_name" {
   default     = "agentic-ecommerce-wc-consumer-key"
 }
 
+variable "wc_store_url_secret_name" {
+  description = "GCP Secret Manager name for WooCommerce store URL."
+  type        = string
+  default     = "agentic-ecommerce-wc-store-url"
+}
+
 variable "wc_consumer_secret_secret_name" {
   description = "GCP Secret Manager name for WooCommerce consumer secret."
   type        = string
   default     = "agentic-ecommerce-wc-consumer-secret"
+}
+
+variable "wc_webhook_secret_name" {
+  description = "GCP Secret Manager name for WooCommerce webhook HMAC secret."
+  type        = string
+  default     = "agentic-ecommerce-wc-webhook-secret"
 }
 
 variable "fleet_ai_bridge_url_secret_name" {

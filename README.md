@@ -118,7 +118,7 @@ WooCommerce plugin installation and REST API key creation are explicit local ste
 
 ## Cloud Deployment
 
-The v1.0.0 release keeps Docker Compose as the deploy-contract source of truth and provides credential-free Terraform scaffolding for AWS ECS Fargate and GCP Cloud Run under `deploy/terraform/`. See `docs/cloud-deploy.md` for SHA-tagged image promotion, secret-manager mapping, Docker Compose references, database migration workflow, security boundaries, and cloud observability notes.
+The v1.7.0 cloud-hardening path keeps Docker Compose as the deploy-contract source of truth and provides credential-free Terraform scaffolding for AWS ECS Fargate and GCP Cloud Run under `deploy/terraform/`. See `docs/cloud-deploy.md` for SHA-tagged image promotion, secret-manager mapping, Docker Compose references, database migration workflow, security boundaries, and cloud observability notes, and `docs/cloud-hardening.md` for Temporal, media storage, CDN, and autoscaling contracts.
 
 ## Gates
 

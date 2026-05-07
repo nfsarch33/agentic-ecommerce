@@ -7,12 +7,17 @@ The modules are intentionally provider-neutral contracts. They do not create liv
 ## Layout
 
 - `modules/network`: VPC or Serverless VPC Access connector contract.
-- `modules/objectstore`: S3 or GCS media bucket contract with public URL and lifecycle placeholders.
+- `modules/objectstore`: S3 or GCS media bucket contract with CDN, public URL, and lifecycle placeholders.
 - `modules/postgres`: RDS PostgreSQL or Cloud SQL PostgreSQL contract and migration output.
 - `modules/redis`: ElastiCache Redis or Memorystore Redis contract.
-- `modules/service`: ECS Fargate or Cloud Run service contract for `mc-api`, workers, and frontend.
+- `modules/service`: ECS Fargate or Cloud Run service contract for `mc-api`, Temporal, workers, and frontend.
 - `aws-ecs`: Credential-free AWS ECS Fargate example root.
 - `gcp-cloudrun`: Credential-free GCP Cloud Run example root.
+
+The v1.7.0 cloud-hardening pass adds Temporal server/worker placeholders,
+S3/GCS media bucket contracts, CloudFront/Cloud CDN stubs, expanded
+Secrets Manager mappings, and autoscaling policy intent while preserving the
+no-credentials/no-apply boundary. See `../../docs/cloud-hardening.md`.
 
 ## Validation
 
