@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -32,6 +33,18 @@ import (
 var (
 	version = "dev"
 	commit  = "unknown"
+
+	httpRequestsTotal              atomic.Int64
+	httpRequestDurationMicros      atomic.Int64
+	httpRequestDurationBucketLe01  atomic.Int64
+	httpRequestDurationBucketLe025 atomic.Int64
+	httpRequestDurationBucketLe05  atomic.Int64
+	httpRequestDurationBucketLe1   atomic.Int64
+	httpRequestDurationBucketInf   atomic.Int64
+	httpResponses2xx               atomic.Int64
+	httpResponses3xx               atomic.Int64
+	httpResponses4xx               atomic.Int64
+	httpResponses5xx               atomic.Int64
 )
 
 type moneyResponse struct {
@@ -70,9 +83,12 @@ type listResponse struct {
 }
 
 type serverConfig struct {
-	allowedOrigin string
-	apiToken      string
-	webhookSecret string
+	allowedOrigin    string
+	apiToken         string
+	webhookSecret    string
+	readinessTimeout time.Duration
+	shutdownTimeout  time.Duration
+	otelEnabled      bool
 }
 
 type server struct {
@@ -85,6 +101,8 @@ type server struct {
 	agentRegistry  *orchestrator.Registry
 	agentScheduler *orchestrator.Scheduler
 	webhookSecret  string
+	readiness      []readinessProbe
+	cleanup        []func()
 	log            *slog.Logger
 }
 
@@ -111,6 +129,7 @@ func main() {
 	logger.Info("mc-api.start", "addr", addr)
 
 	srv := newServer(logger, repo, orderRepo, cartRepo)
+	defer srv.Close()
 	httpServer := &http.Server{
 		Addr:              addr,
 		Handler:           srv.mux(),
@@ -132,7 +151,11 @@ func main() {
 		}
 	case <-ctx.Done():
 		logger.Info("mc-api.shutdown")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		shutdownTimeout := srv.cfg.shutdownTimeout
+		if shutdownTimeout <= 0 {
+			shutdownTimeout = 10 * time.Second
+		}
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			logger.Error("mc-api.shutdown_failed", "error", err)
@@ -178,18 +201,21 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(w, `# HELP agentic_ecommerce_build_info Build metadata for the running mc-api binary.
 # TYPE agentic_ecommerce_build_info gauge
 agentic_ecommerce_build_info{version=%q,commit=%q} 1
-# HELP agentic_ecommerce_http_requests_total HTTP request count placeholder for RED dashboards.
+# HELP agentic_ecommerce_http_requests_total HTTP request count for RED dashboards.
 # TYPE agentic_ecommerce_http_requests_total counter
-agentic_ecommerce_http_requests_total{handler="stub",method="GET",code="200"} 0
-# HELP agentic_ecommerce_http_request_duration_seconds HTTP request duration placeholder for RED dashboards.
+agentic_ecommerce_http_requests_total{code_class="2xx"} %d
+agentic_ecommerce_http_requests_total{code_class="3xx"} %d
+agentic_ecommerce_http_requests_total{code_class="4xx"} %d
+agentic_ecommerce_http_requests_total{code_class="5xx"} %d
+# HELP agentic_ecommerce_http_request_duration_seconds HTTP request duration for RED dashboards.
 # TYPE agentic_ecommerce_http_request_duration_seconds histogram
-agentic_ecommerce_http_request_duration_seconds_bucket{le="0.1"} 0
-agentic_ecommerce_http_request_duration_seconds_bucket{le="0.25"} 0
-agentic_ecommerce_http_request_duration_seconds_bucket{le="0.5"} 0
-agentic_ecommerce_http_request_duration_seconds_bucket{le="1"} 0
-agentic_ecommerce_http_request_duration_seconds_bucket{le="+Inf"} 0
-agentic_ecommerce_http_request_duration_seconds_sum 0
-agentic_ecommerce_http_request_duration_seconds_count 0
+agentic_ecommerce_http_request_duration_seconds_bucket{le="0.1"} %d
+agentic_ecommerce_http_request_duration_seconds_bucket{le="0.25"} %d
+agentic_ecommerce_http_request_duration_seconds_bucket{le="0.5"} %d
+agentic_ecommerce_http_request_duration_seconds_bucket{le="1"} %d
+agentic_ecommerce_http_request_duration_seconds_bucket{le="+Inf"} %d
+agentic_ecommerce_http_request_duration_seconds_sum %.6f
+agentic_ecommerce_http_request_duration_seconds_count %d
 # HELP agentic_ecommerce_sync_lag_seconds WooCommerce sync lag placeholder.
 # TYPE agentic_ecommerce_sync_lag_seconds gauge
 agentic_ecommerce_sync_lag_seconds 0
@@ -205,7 +231,21 @@ agentic_ecommerce_compliance_failures_total{source="stub"} 0
 # HELP agentic_ecommerce_media_validation_failures_total Media uploads rejected by validation.
 # TYPE agentic_ecommerce_media_validation_failures_total counter
 agentic_ecommerce_media_validation_failures_total{reason="stub"} 0
-`, version, commit)
+`,
+		version,
+		commit,
+		httpResponses2xx.Load(),
+		httpResponses3xx.Load(),
+		httpResponses4xx.Load(),
+		httpResponses5xx.Load(),
+		httpRequestDurationBucketLe01.Load(),
+		httpRequestDurationBucketLe025.Load(),
+		httpRequestDurationBucketLe05.Load(),
+		httpRequestDurationBucketLe1.Load(),
+		httpRequestDurationBucketInf.Load(),
+		float64(httpRequestDurationMicros.Load())/1_000_000,
+		httpRequestsTotal.Load(),
+	)
 }
 
 func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.OrderRepository, cartRepo port.CartRepository) *server {
@@ -228,12 +268,22 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		}
 	}
 	webhookSecret := getenv("ECOMMERCE_WC_WEBHOOK_SECRET", "")
+	readinessTimeout := parseDurationEnv("ECOMMERCE_READINESS_TIMEOUT", 2*time.Second)
+	shutdownTimeout := parseDurationEnv("ECOMMERCE_SHUTDOWN_TIMEOUT", 10*time.Second)
+	readinessChecks, cleanup := newReadinessChecksFromEnv(readinessTimeout)
+	otelEnabled := parseBoolEnv("ECOMMERCE_OTEL_ENABLED", false)
+	if otelEnabled {
+		configureTelemetry()
+	}
 	registry := defaultAgentRegistry()
 	return &server{
 		cfg: serverConfig{
-			allowedOrigin: getenv("ECOMMERCE_ALLOWED_ORIGIN", ""),
-			apiToken:      getenv("ECOMMERCE_API_TOKEN", ""),
-			webhookSecret: webhookSecret,
+			allowedOrigin:    getenv("ECOMMERCE_ALLOWED_ORIGIN", ""),
+			apiToken:         getenv("ECOMMERCE_API_TOKEN", ""),
+			webhookSecret:    webhookSecret,
+			readinessTimeout: readinessTimeout,
+			shutdownTimeout:  shutdownTimeout,
+			otelEnabled:      otelEnabled,
 		},
 		repo:           repo,
 		orderRepo:      orderRepo,
@@ -243,7 +293,17 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		agentRegistry:  registry,
 		agentScheduler: orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), orchestrator.NewEventRecorder(), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
 		webhookSecret:  webhookSecret,
+		readiness:      readinessChecks,
+		cleanup:        cleanup,
 		log:            logger,
+	}
+}
+
+func (s *server) Close() {
+	for _, cleanup := range s.cleanup {
+		if cleanup != nil {
+			cleanup()
+		}
 	}
 }
 
@@ -304,7 +364,7 @@ func (s *server) mux() http.Handler {
 	agentRunsAPI := s.withCORS(s.withBearerAuth(s.agentRunsHandler))
 	mux.HandleFunc("/api/v1/agent-runs/", agentRunsAPI)
 
-	return s.withRequestLogging(mux)
+	return s.withTelemetry(s.withRequestLogging(mux))
 }
 
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
@@ -317,16 +377,23 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) readyzHandler(w http.ResponseWriter, r *http.Request) {
 	s.ensureAgentScheduler()
 	agents := s.agentRegistry.List()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":  "ready",
-		"service": "agentic-ecommerce-mc-api",
-		"agents":  len(agents),
-		"agent_worker": map[string]any{
-			"ready":             s.agentScheduler != nil && len(agents) > 0,
-			"scheduler":         "in_process",
-			"registered_agents": len(agents),
+	resp := readyzResponse{
+		Status:  "ready",
+		Service: "agentic-ecommerce-mc-api",
+		Agents:  len(agents),
+		AgentWorker: agentWorkerReadiness{
+			Ready:            s.agentScheduler != nil && len(agents) > 0,
+			Scheduler:        "in_process",
+			RegisteredAgents: len(agents),
 		},
-	})
+		Checks: s.runReadinessChecks(r.Context()),
+	}
+	status := http.StatusOK
+	if !resp.AgentWorker.Ready || hasFailedReadinessCheck(resp.Checks) {
+		resp.Status = "not_ready"
+		status = http.StatusServiceUnavailable
+	}
+	writeJSON(w, status, resp)
 }
 
 func (s *server) productsHandler(w http.ResponseWriter, r *http.Request) {
@@ -572,6 +639,7 @@ func (s *server) withRequestLogging(next http.Handler) http.Handler {
 			requestID = uuid.NewString()
 		}
 		w.Header().Set("X-Request-ID", requestID)
+		r = r.WithContext(context.WithValue(r.Context(), requestIDContextKey{}, requestID))
 
 		rec := &responseStatusRecorder{ResponseWriter: w}
 		next.ServeHTTP(rec, r)
@@ -580,19 +648,54 @@ func (s *server) withRequestLogging(next http.Handler) http.Handler {
 			status = http.StatusOK
 		}
 		duration := time.Since(start)
+		recordHTTPRequest(status, duration)
 
 		logger := s.log
 		if logger == nil {
 			logger = slog.Default()
 		}
-		logger.Info("http.request",
+		attrs := []any{
 			"request_id", requestID,
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", status,
 			"duration_ms", duration.Milliseconds(),
-		)
+		}
+		if traceID := traceIDFromContext(r.Context()); traceID != "" {
+			attrs = append(attrs, "trace_id", traceID)
+		}
+		logger.Info("http.request", attrs...)
 	})
+}
+
+func recordHTTPRequest(status int, duration time.Duration) {
+	httpRequestsTotal.Add(1)
+	httpRequestDurationMicros.Add(duration.Microseconds())
+	seconds := duration.Seconds()
+	if seconds <= 0.1 {
+		httpRequestDurationBucketLe01.Add(1)
+	}
+	if seconds <= 0.25 {
+		httpRequestDurationBucketLe025.Add(1)
+	}
+	if seconds <= 0.5 {
+		httpRequestDurationBucketLe05.Add(1)
+	}
+	if seconds <= 1 {
+		httpRequestDurationBucketLe1.Add(1)
+	}
+	httpRequestDurationBucketInf.Add(1)
+
+	switch {
+	case status >= 200 && status < 300:
+		httpResponses2xx.Add(1)
+	case status >= 300 && status < 400:
+		httpResponses3xx.Add(1)
+	case status >= 400 && status < 500:
+		httpResponses4xx.Add(1)
+	case status >= 500:
+		httpResponses5xx.Add(1)
+	}
 }
 
 type responseStatusRecorder struct {
