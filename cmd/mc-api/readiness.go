@@ -35,6 +35,7 @@ type readinessCheckResponse struct {
 	Optional  bool   `json:"optional"`
 	LatencyMS int64  `json:"latency_ms"`
 	Error     string `json:"error,omitempty"`
+	Detail    string `json:"detail,omitempty"`
 }
 
 type readinessProbe struct {
@@ -56,7 +57,13 @@ func newReadinessChecksFromEnv(time.Duration) ([]readinessProbe, []func()) {
 	var cleanup []func()
 
 	if dsn := strings.TrimSpace(os.Getenv("ECOMMERCE_DB_URL")); dsn != "" {
-		pool, err := pgxpool.New(context.Background(), dsn)
+		poolCfg, err := databasePoolConfigFromEnv(dsn)
+		var pool *pgxpool.Pool
+		if err == nil {
+			connectCtx, cancel := context.WithTimeout(context.Background(), poolCfg.ConnConfig.ConnectTimeout)
+			pool, err = pgxpool.NewWithConfig(connectCtx, poolCfg)
+			cancel()
+		}
 		checks[0] = readinessProbe{
 			name:     "database",
 			optional: false,
@@ -122,11 +129,17 @@ func (s *server) runReadinessChecks(ctx context.Context) map[string]readinessChe
 		if probe.check != nil {
 			checkCtx, cancel := context.WithTimeout(ctx, timeout)
 			err := probe.check(checkCtx)
+			timedOut := errors.Is(err, context.DeadlineExceeded) || errors.Is(checkCtx.Err(), context.DeadlineExceeded)
 			cancel()
 			result.LatencyMS = time.Since(start).Milliseconds()
 			if err != nil {
 				result.Status = "fail"
 				result.Error = "check_failed"
+				result.Detail = "dependency_failed"
+				if timedOut {
+					result.Error = "timeout"
+					result.Detail = "dependency_timeout"
+				}
 			} else {
 				result.Status = "ok"
 			}
@@ -143,6 +156,22 @@ func hasFailedReadinessCheck(checks map[string]readinessCheckResponse) bool {
 		}
 	}
 	return false
+}
+
+func databasePoolConfigFromEnv(dsn string) (*pgxpool.Config, error) {
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, err
+	}
+	cfg.MaxConns = int32(parseIntEnv("ECOMMERCE_DB_POOL_MAX_CONNS", 10))
+	cfg.MinConns = int32(parseIntEnv("ECOMMERCE_DB_POOL_MIN_CONNS", 1))
+	if cfg.MinConns > cfg.MaxConns {
+		cfg.MinConns = cfg.MaxConns
+	}
+	cfg.MaxConnLifetime = parseDurationEnv("ECOMMERCE_DB_POOL_MAX_CONN_LIFETIME", 30*time.Minute)
+	cfg.MaxConnIdleTime = parseDurationEnv("ECOMMERCE_DB_POOL_MAX_CONN_IDLE_TIME", 5*time.Minute)
+	cfg.ConnConfig.ConnectTimeout = parseDurationEnv("ECOMMERCE_DB_CONNECT_TIMEOUT", 5*time.Second)
+	return cfg, nil
 }
 
 // pingRedisStreams verifies that the event bus Redis instance is reachable and

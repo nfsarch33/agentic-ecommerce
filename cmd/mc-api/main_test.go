@@ -15,6 +15,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/agentic-ecommerce/internal/security"
 )
 
 func testServer(t *testing.T) (*server, *inmemory.ProductRepository) {
@@ -149,6 +150,7 @@ func TestReadyzFailsWhenConfiguredRedisIsUnavailable(t *testing.T) {
 
 func TestNewServerReadsOperationalTimeouts(t *testing.T) {
 	t.Setenv("ECOMMERCE_READINESS_TIMEOUT", "75ms")
+	t.Setenv("ECOMMERCE_REDIS_TIMEOUT", "150ms")
 	t.Setenv("ECOMMERCE_SHUTDOWN_TIMEOUT", "3s")
 	repo := inmemory.NewProductRepository()
 
@@ -157,6 +159,9 @@ func TestNewServerReadsOperationalTimeouts(t *testing.T) {
 
 	if srv.cfg.readinessTimeout.String() != "75ms" {
 		t.Fatalf("readiness timeout = %s, want 75ms", srv.cfg.readinessTimeout)
+	}
+	if srv.cfg.redisTimeout.String() != "150ms" {
+		t.Fatalf("redis timeout = %s, want 150ms", srv.cfg.redisTimeout)
 	}
 	if srv.cfg.shutdownTimeout.String() != "3s" {
 		t.Fatalf("shutdown timeout = %s, want 3s", srv.cfg.shutdownTimeout)
@@ -327,6 +332,43 @@ func TestRequestLoggingAddsRequestIDAndStructuredFields(t *testing.T) {
 		`"path":"/healthz"`,
 		`"status":200`,
 		`"duration_ms":`,
+	} {
+		if !strings.Contains(logLine, want) {
+			t.Fatalf("log line missing %q:\n%s", want, logLine)
+		}
+	}
+}
+
+func TestRequestLoggingAddsCloudCorrelationFields(t *testing.T) {
+	var logs bytes.Buffer
+	srv := secureTestServer(t, &logs)
+	defer srv.Close()
+	viewerToken := mintTestAccessToken(t, srv, "viewer@example.com", security.RoleViewer)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil)
+	req.Header.Set("Authorization", "Bearer "+viewerToken)
+	req.Header.Set("X-Request-ID", "req-cloud-123")
+	req.Header.Set("X-Tenant-ID", "tenant-cloud")
+	req.Header.Set("Traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	req.Header.Set("User-Agent", "cloud-lb-probe/1.0")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	logLine := logs.String()
+	for _, want := range []string{
+		`"msg":"http.request"`,
+		`"request_id":"req-cloud-123"`,
+		`"trace_id":"4bf92f3577b34da6a3ce929d0e0e4736"`,
+		`"tenant_id":"tenant-cloud"`,
+		`"actor_id":"viewer@example.com"`,
+		`"route":"/api/v1/agents"`,
+		`"http_method":"GET"`,
+		`"http_status":200`,
+		`"duration_seconds":`,
+		`"user_agent":"cloud-lb-probe/1.0"`,
 	} {
 		if !strings.Contains(logLine, want) {
 			t.Fatalf("log line missing %q:\n%s", want, logLine)

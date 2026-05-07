@@ -1913,11 +1913,13 @@ components:
           $ref: '#/components/schemas/AgentWorkerReadiness'
         checks:
           type: object
-          required: [database, redis]
+          required: [database, redis, eventbus]
           properties:
             database:
               $ref: '#/components/schemas/DependencyReadiness'
             redis:
+              $ref: '#/components/schemas/DependencyReadiness'
+            eventbus:
               $ref: '#/components/schemas/DependencyReadiness'
     DependencyReadiness:
       type: object
@@ -1935,6 +1937,10 @@ components:
         error:
           type: string
           description: Present only for failed checks. The value is intentionally generic to avoid leaking connection details.
+        detail:
+          type: string
+          enum: [dependency_failed, dependency_timeout]
+          description: Cloud load-balancer-safe failure detail without connection strings, credentials, hosts, or provider secrets.
     AgentWorkerReadiness:
       type: object
       required: [ready, scheduler, registered_agents]
