@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agentic Ecommerce Mission Control API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Public contract for the Agentic Ecommerce Go backend consumed by
     agentic-ecommerce-web. This spec intentionally excludes private
@@ -203,6 +203,102 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/products/{id}/generate-description:
+    post:
+      summary: Generate AI product content suggestions
+      operationId: generateProductDescription
+      description: Uses the configured fleet AI bridge. The backend never calls MiniMax directly.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateDescriptionRequest'
+      responses:
+        '200':
+          description: Generated content suggestion and quality evaluation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentSuggestion'
+        '400':
+          description: Invalid JSON body or product ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Fleet bridge generation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Content agent is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/products/{id}/ai-suggestions:
+    get:
+      summary: Get AI content suggestions for a product
+      operationId: getProductAISuggestions
+      description: Generates non-persisted product description, SEO title, and meta description suggestions.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Generated content suggestion and quality evaluation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentSuggestion'
+        '400':
+          description: Invalid product ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Fleet bridge generation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Content agent is not configured.
           content:
             application/json:
               schema:
@@ -656,6 +752,100 @@ components:
         per_page:
           type: integer
           minimum: 1
+    GenerateDescriptionRequest:
+      type: object
+      properties:
+        style:
+          type: string
+          enum: [professional, casual, luxury, technical]
+          default: professional
+        language:
+          type: string
+          default: en-AU
+        max_words:
+          type: integer
+          minimum: 20
+          maximum: 500
+          default: 120
+        keywords:
+          type: array
+          items:
+            type: string
+    ContentSuggestion:
+      type: object
+      required: [product_id, description, seo_title, meta_description, score, pass, tokens_used, evaluation]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        description:
+          type: string
+        seo_title:
+          type: string
+          maxLength: 60
+        meta_description:
+          type: string
+          maxLength: 160
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        pass:
+          type: boolean
+        tokens_used:
+          type: integer
+          minimum: 0
+        evaluation:
+          $ref: '#/components/schemas/ContentEvaluation'
+    ContentEvaluation:
+      type: object
+      required: [score, pass, readability_score, keyword_density, tone, length, factual_issues]
+      properties:
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        pass:
+          type: boolean
+        readability_score:
+          type: number
+        keyword_density:
+          type: object
+          additionalProperties:
+            type: number
+        tone:
+          $ref: '#/components/schemas/ContentToneEvaluation'
+        length:
+          $ref: '#/components/schemas/ContentLengthEvaluation'
+        factual_issues:
+          type: array
+          items:
+            type: string
+    ContentToneEvaluation:
+      type: object
+      required: [style, pass, issues]
+      properties:
+        style:
+          type: string
+          enum: [professional, casual, luxury, technical]
+        pass:
+          type: boolean
+        issues:
+          type: array
+          items:
+            type: string
+    ContentLengthEvaluation:
+      type: object
+      required: [word_count, max_words, within_limit]
+      properties:
+        word_count:
+          type: integer
+          minimum: 0
+        max_words:
+          type: integer
+          minimum: 0
+        within_limit:
+          type: boolean
     ShippingAddress:
       type: object
       required: [name, line1, city, postal_code, country]

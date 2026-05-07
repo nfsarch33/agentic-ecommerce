@@ -1,0 +1,21 @@
+{
+  "factual_issues": [],
+  "keyword_density": {
+    "home workouts": 6.82,
+    "resistance band set": 9.09
+  },
+  "length": {
+    "max_words": 55,
+    "within_limit": true,
+    "word_count": 23
+  },
+  "pass": true,
+  "readability_score": 66.42,
+  "score": 96,
+  "tone": {
+    "issues": [],
+    "pass": true,
+    "style": "professional"
+  }
+}
+
