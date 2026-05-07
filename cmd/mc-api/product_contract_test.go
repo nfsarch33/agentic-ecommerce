@@ -160,6 +160,27 @@ func TestOrderHandlersMatchOpenAPIContract(t *testing.T) {
 	assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/orders/{id}/status", http.MethodPatch, "200"), patched)
 }
 
+func TestOrderResponseGoldenShape(t *testing.T) {
+	t.Parallel()
+	srv, _ := testServer(t)
+
+	body := `{"customer_email":"shopper@example.com","items":[{"product_id":"c1000000-0000-0000-0000-000000000001","sku":"BAND-001","title":"Resistance Band","quantity":1,"unit_price":{"amount":2495,"currency":"AUD"}}],"shipping_address":{"name":"Jane Shopper","line1":"1 Market Street","city":"Sydney","region":"NSW","postal_code":"2000","country":"AU"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/orders", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSONPayload(t, rec.Body.Bytes(), &payload)
+	payload["id"] = "00000000-0000-0000-0000-000000000000"
+	payload["created_at"] = "2026-05-07T00:00:00Z"
+	payload["updated_at"] = "2026-05-07T00:00:00Z"
+	assertGoldenJSONPayload(t, filepath.Join("testdata", "order_response.golden.json"), payload)
+}
+
 func TestCartHandlersMatchOpenAPIContract(t *testing.T) {
 	t.Parallel()
 	spec := loadOpenAPIContract(t)
@@ -297,4 +318,13 @@ func assertGoldenJSON(t *testing.T, goldenPath string, actual []byte) {
 		pretty.WriteByte('\n')
 		t.Fatalf("golden JSON mismatch\nwant:\n%s\ngot:\n%s", want, pretty.Bytes())
 	}
+}
+
+func assertGoldenJSONPayload(t *testing.T, goldenPath string, actualPayload any) {
+	t.Helper()
+	actual, err := json.Marshal(actualPayload)
+	if err != nil {
+		t.Fatalf("marshal actual payload: %v", err)
+	}
+	assertGoldenJSON(t, goldenPath, actual)
 }
