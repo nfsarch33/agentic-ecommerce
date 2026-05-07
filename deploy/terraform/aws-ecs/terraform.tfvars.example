@@ -23,4 +23,5 @@ redis_auth_secret_name           = "example/agentic-ecommerce/redis"
 wc_consumer_key_secret_name      = "example/agentic-ecommerce/wc-consumer-key"
 wc_consumer_secret_secret_name   = "example/agentic-ecommerce/wc-consumer-secret"
 fleet_ai_bridge_url_secret_name  = "example/agentic-ecommerce/fleet-ai-bridge-url"
+embedding_bridge_url_secret_name = "example/agentic-ecommerce/embedding-bridge-url"
 sync_dry_run                     = true

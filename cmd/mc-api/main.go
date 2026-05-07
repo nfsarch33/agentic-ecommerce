@@ -256,6 +256,18 @@ agentic_ecommerce_compliance_failures_total{source="stub"} 0
 # HELP agentic_ecommerce_media_validation_failures_total Media uploads rejected by validation.
 # TYPE agentic_ecommerce_media_validation_failures_total counter
 agentic_ecommerce_media_validation_failures_total{reason="stub"} 0
+# HELP agentic_ecommerce_rag_search_duration_seconds RAG vector search latency for content grounding.
+# TYPE agentic_ecommerce_rag_search_duration_seconds histogram
+agentic_ecommerce_rag_search_duration_seconds_bucket{le="0.1"} 0
+agentic_ecommerce_rag_search_duration_seconds_bucket{le="0.25"} 0
+agentic_ecommerce_rag_search_duration_seconds_bucket{le="0.5"} 0
+agentic_ecommerce_rag_search_duration_seconds_bucket{le="1"} 0
+agentic_ecommerce_rag_search_duration_seconds_bucket{le="+Inf"} 0
+agentic_ecommerce_rag_search_duration_seconds_sum 0
+agentic_ecommerce_rag_search_duration_seconds_count 0
+# HELP agentic_ecommerce_embedding_failures_total Embedding generation failures returned by the approved bridge.
+# TYPE agentic_ecommerce_embedding_failures_total counter
+agentic_ecommerce_embedding_failures_total{provider="bridge",reason="stub"} 0
 `,
 		version,
 		commit,

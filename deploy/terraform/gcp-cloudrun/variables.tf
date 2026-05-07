@@ -106,6 +106,12 @@ variable "fleet_ai_bridge_url_secret_name" {
   default     = "agentic-ecommerce-fleet-ai-bridge-url"
 }
 
+variable "embedding_bridge_url_secret_name" {
+  description = "GCP Secret Manager name for the fleet embedding bridge URL."
+  type        = string
+  default     = "agentic-ecommerce-embedding-bridge-url"
+}
+
 variable "sync_dry_run" {
   description = "Keep WooCommerce sync dry-run by default for cloud dry-runs."
   type        = bool

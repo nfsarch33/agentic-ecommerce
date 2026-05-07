@@ -6,7 +6,7 @@ This stack is production-like for local and single-host validation. It keeps pub
 
 - `mc-api`: Go API built from this repo and exposed on `127.0.0.1:${MC_API_HOST_PORT:-8080}`.
 - `frontend`: public image `ghcr.io/nfsarch33/agentic-ecommerce-web:${WEB_IMAGE_TAG:-main}`.
-- `postgres`: PostgreSQL 16 with pgvector.
+- `postgres`: PostgreSQL 16 with pgvector via `pgvector/pgvector:pg16`.
 - `redis`: Redis 7 for cache/session/event-bus plumbing.
 - `prometheus`: scrapes `mc-api:/metrics` and loads local alert rules.
 - `grafana`: provisions the Prometheus datasource and the Agentic Ecommerce overview dashboard.
@@ -16,6 +16,25 @@ This stack is production-like for local and single-host validation. It keeps pub
 - `temporal`: v1.2.0 Temporal CLI dev server under the `temporal` profile. It exposes gRPC on loopback port `${TEMPORAL_GRPC_HOST_PORT:-7233}` and the Web UI on `${TEMPORAL_UI_HOST_PORT:-8233}`.
 - `temporal-worker`: image-only placeholder under the `temporal-worker` profile until `cmd/temporal-worker` lands. Its task queue contract is `ECOMMERCE_TEMPORAL_TASK_QUEUE=ec-workflows`.
 - `minimax-openai-bridge`: optional placeholder under the `ai-bridge` profile. Real keys must come from local secret management, never from committed files.
+
+## RAG and Embedding Configuration
+
+v1.3.0 adds `migrations/0005_enable_pgvector_rag.*.sql` for the `vector`
+extension, RAG document/chunk tables, and a cosine HNSW index for
+1536-dimensional embeddings. Compose passes these placeholders to the services
+that will own content generation and workflow execution:
+
+```bash
+ECOMMERCE_EMBEDDING_BRIDGE_URL=
+ECOMMERCE_EMBEDDING_MODEL=minimax-embedding-01
+ECOMMERCE_EMBEDDING_DIMENSIONS=1536
+ECOMMERCE_RAG_CHUNK_SIZE=1000
+```
+
+`ECOMMERCE_EMBEDDING_BRIDGE_URL` must point to the approved fleet bridge when
+enabled; app containers must not call MiniMax provider URLs directly. For local
+infra validation, `make rag-seed` and `make rag-search-smoke` use checked-in
+fixture vectors from `seed/` and make no live embedding calls.
 
 ## Bring-Up
 
@@ -51,15 +70,17 @@ open http://127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}/rules
 open http://127.0.0.1:${GRAFANA_HOST_PORT:-3001}
 ```
 
-Expected v1.0.0 rules:
+Expected baseline and v1.3.0 rules:
 
 - `AgenticEcommerceHighApiLatency`: API p95 latency above 500ms for 5 minutes.
 - `AgenticEcommerceHighErrorRate`: API 5xx error rate above 1% for 5 minutes.
 - `AgenticEcommerceSyncLagHigh`: WooCommerce sync lag above 5 minutes.
 - `AgenticEcommerceAgentFailureRateHigh`: agent-worker failure rate above 5% for 10 minutes.
 - `AgenticEcommerceComplianceFailureSpike`: backend plus worker compliance failures above the 15-minute spike threshold.
+- `AgenticEcommerceRAGSearchLatencyHigh`: RAG vector search p95 above 1 second.
+- `AgenticEcommerceEmbeddingFailuresHigh`: approved embedding bridge failures detected.
 
-The `Agentic Ecommerce Overview` dashboard should show API latency/error rate, WooCommerce sync lag/conflicts, agent run success/failure, and compliance pass/fail rates. The worker-backed panels populate when the `workers` profile is running.
+The `Agentic Ecommerce Overview` dashboard should show API latency/error rate, WooCommerce sync lag/conflicts, agent run success/failure, compliance pass/fail rates, RAG search p95 latency, and embedding bridge failures. The worker-backed panels populate when the `workers` profile is running.
 
 Temporal local infrastructure is intentionally excluded from default full-stack
 boot. Start it when workflow development needs a server:
@@ -98,6 +119,12 @@ Keep `.env.compose` untracked. The committed `.env.compose.example` contains pla
 
 The backend and frontend should call MiniMax only through a fleet bridge URL. The optional bridge service is a local placeholder for wiring and health validation; leave `ECOMMERCE_AI_BRIDGE_URL`, `FLEET_AI_BRIDGE_URL`, and `MINIMAX_API_KEY_*` blank unless you are intentionally testing against a controlled local bridge.
 
+RAG embeddings follow the same bridge-only boundary. App containers must not
+call MiniMax directly; configure `ECOMMERCE_EMBEDDING_BRIDGE_URL` only with an
+approved fleet bridge endpoint. `ECOMMERCE_EMBEDDING_MODEL` defaults to
+`minimax-embedding-01`, `ECOMMERCE_EMBEDDING_DIMENSIONS` defaults to `1536`,
+and `ECOMMERCE_RAG_CHUNK_SIZE` defaults to `1000`.
+
 `wc-sync` defaults to `ECOMMERCE_SYNC_DRY_RUN=true`. Do not run live WooCommerce sync from this stack until credentials, webhook secrets, and target store ownership have been reviewed.
 
 ## Cloud Readiness
@@ -107,6 +134,9 @@ The backend and frontend should call MiniMax only through a fleet bridge URL. Th
 - `/healthz`: liveness only; it does not call Postgres, Redis, WooCommerce, or AI bridges.
 - `/readyz`: readiness; configured `ECOMMERCE_DB_URL` and `ECOMMERCE_REDIS_ADDR` dependencies must pass lightweight checks or the endpoint returns `503`.
 - `/metrics`: Prometheus text exposition with build metadata, HTTP request counters/duration buckets, and stack-level placeholders for sync, agent, compliance, and media dashboards.
+- RAG observability stubs expose `agentic_ecommerce_rag_search_duration_seconds`
+  and `agentic_ecommerce_embedding_failures_total` so dashboards and alerts can
+  be wired before live bridge calls are enabled.
 
 `ECOMMERCE_READINESS_TIMEOUT` defaults to `2s`. Keep it below the load balancer health-check timeout so an unhealthy dependency fails fast. `ECOMMERCE_SHUTDOWN_TIMEOUT` defaults to `10s` and bounds graceful HTTP shutdown after SIGTERM.
 
