@@ -21,8 +21,10 @@ var (
 type ClaimStatus string
 
 const (
-	ClaimSupported   ClaimStatus = "supported"
-	ClaimUnsupported ClaimStatus = "unsupported"
+	ClaimSupported    ClaimStatus = "supported"
+	ClaimUnsupported  ClaimStatus = "unsupported"
+	ClaimContradicted ClaimStatus = "contradicted"
+	ClaimAmbiguous    ClaimStatus = "ambiguous"
 )
 
 type Claim struct {
@@ -106,14 +108,13 @@ func (c *FactChecker) Check(ctx context.Context, generated GeneratedContent) (Fa
 		check := ClaimCheck{
 			Claim:      claim,
 			Text:       claim.Text,
-			Status:     ClaimSupported,
+			Status:     classifyClaim(claim.Text, evidence, confidence, c.options.MinConfidence),
 			Confidence: confidence,
 			Evidence:   evidence,
 		}
-		if confidence < c.options.MinConfidence {
-			check.Status = ClaimUnsupported
+		if check.Status != ClaimSupported {
 			result.Pass = false
-			result.Issues = append(result.Issues, "unsupported claim: "+claim.Text)
+			result.Issues = append(result.Issues, string(check.Status)+" claim: "+claim.Text)
 		}
 		result.Claims = append(result.Claims, check)
 		total += confidence
@@ -134,6 +135,54 @@ func evidenceConfidence(claim string, evidence []rag.SearchResult) float64 {
 		}
 	}
 	return roundFactConfidence(best)
+}
+
+func classifyClaim(claim string, evidence []rag.SearchResult, confidence, minConfidence float64) ClaimStatus {
+	if len(evidence) == 0 {
+		return ClaimUnsupported
+	}
+	if hasNumericContradiction(claim, evidence) {
+		return ClaimContradicted
+	}
+	if confidence >= minConfidence {
+		return ClaimSupported
+	}
+	return ClaimAmbiguous
+}
+
+func hasNumericContradiction(claim string, evidence []rag.SearchResult) bool {
+	claimNumbers := numericFacts(claim)
+	if len(claimNumbers) == 0 {
+		return false
+	}
+	for _, item := range evidence {
+		evidenceNumbers := numericFacts(item.Text)
+		if len(evidenceNumbers) == 0 {
+			continue
+		}
+		for number := range claimNumbers {
+			if evidenceNumbers[number] {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func numericFacts(text string) map[string]bool {
+	words := wordsOf(text)
+	out := make(map[string]bool)
+	for _, word := range words {
+		if normalized, ok := numberWords[word]; ok {
+			out[normalized] = true
+			continue
+		}
+		if digitFactRe.MatchString(word) {
+			out[word] = true
+		}
+	}
+	return out
 }
 
 func lexicalOverlap(a, b string) float64 {
@@ -168,6 +217,17 @@ var factStopWords = map[string]bool{
 	"includes": true, "include": true, "into": true, "the": true, "this": true,
 	"with": true, "made": true,
 }
+
+var (
+	digitFactRe = regexp.MustCompile(`^\d+$`)
+	numberWords = map[string]string{
+		"zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+		"five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+		"ten": "10", "eleven": "11", "twelve": "12", "thirteen": "13",
+		"fourteen": "14", "fifteen": "15", "sixteen": "16", "seventeen": "17",
+		"eighteen": "18", "nineteen": "19", "twenty": "20",
+	}
+)
 
 func roundFactConfidence(v float64) float64 {
 	if v < 0 {
