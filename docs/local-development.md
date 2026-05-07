@@ -55,6 +55,20 @@ Redis 7 is available at `redis:6379` inside compose and `127.0.0.1:${REDIS_HOST_
 
 The readiness timeout is controlled by `ECOMMERCE_READINESS_TIMEOUT` and defaults to `2s`. Graceful HTTP shutdown is bounded by `ECOMMERCE_SHUTDOWN_TIMEOUT`, defaulting to `10s`.
 
+## Local Auth and Rate Limits
+
+Set `ECOMMERCE_JWT_SECRET` to a local-only value of at least 32 bytes and configure `ECOMMERCE_ADMIN_USERNAME` plus `ECOMMERCE_ADMIN_PASSWORD` before exercising protected admin/operator endpoints. The login endpoint is:
+
+```bash
+curl -s http://127.0.0.1:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin@example.invalid","password":"replace-with-local-admin-password"}'
+```
+
+The returned JWT access token is used as `Authorization: Bearer <token>`. Roles are `admin`, `operator`, and `viewer`; product reads, carts, checkout order creation, `/healthz`, `/readyz`, and `/metrics` remain unauthenticated for storefront and platform probes. Mutations emit structured `audit.event` logs without request bodies or secret values.
+
+Rate limiting defaults to `ECOMMERCE_RATE_LIMIT_CAPACITY=60` requests per `ECOMMERCE_RATE_LIMIT_REFILL=1m`, keyed by bearer token hash when present or client IP otherwise. When `ECOMMERCE_REDIS_ADDR` is configured, the limiter uses Redis for shared token buckets; tests and no-Redis local runs use an in-memory bucket.
+
 ## Request IDs and Traces
 
 Every request gets an `X-Request-ID` response header. If the caller supplies `X-Request-ID`, the backend reuses it; otherwise it generates one and includes the value in structured JSON access logs.

@@ -70,6 +70,24 @@ variable "api_token_secret_name" {
   default     = "example/agentic-ecommerce/api-token"
 }
 
+variable "jwt_secret_name" {
+  description = "AWS Secrets Manager name for ECOMMERCE_JWT_SECRET."
+  type        = string
+  default     = "example/agentic-ecommerce/jwt-secret"
+}
+
+variable "admin_username_secret_name" {
+  description = "AWS Secrets Manager name for ECOMMERCE_ADMIN_USERNAME."
+  type        = string
+  default     = "example/agentic-ecommerce/admin-username"
+}
+
+variable "admin_password_secret_name" {
+  description = "AWS Secrets Manager name for ECOMMERCE_ADMIN_PASSWORD."
+  type        = string
+  default     = "example/agentic-ecommerce/admin-password"
+}
+
 variable "postgres_password_secret_name" {
   description = "AWS Secrets Manager name for the database password or full DB_URL."
   type        = string
