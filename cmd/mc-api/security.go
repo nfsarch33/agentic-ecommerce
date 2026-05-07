@@ -72,6 +72,7 @@ func (s *server) configureSecurity() {
 	}
 	if redisAddr := strings.TrimSpace(os.Getenv("ECOMMERCE_REDIS_ADDR")); redisAddr != "" {
 		s.rateLimiter = security.NewRedisTokenBucket(redisAddr, os.Getenv("ECOMMERCE_REDIS_DB"), rateConfig)
+		s.rateLimitFallback = security.NewInMemoryTokenBucket(rateConfig)
 		return
 	}
 	s.rateLimiter = security.NewInMemoryTokenBucket(rateConfig)
@@ -82,6 +83,7 @@ func (s *server) withSecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 		next.ServeHTTP(w, r)
 	})
@@ -96,7 +98,7 @@ func (s *server) withRBAC(resolve roleResolver, next http.HandlerFunc) http.Hand
 		}
 		actor, ok := s.authenticateRequest(r)
 		if !ok {
-			if s.tokenManager == nil && s.cfg.apiToken == "" {
+			if s.tokenManager == nil && s.cfg.apiToken == "" && s.cfg.jwtSecret == "" {
 				next(w, r)
 				return
 			}
@@ -141,9 +143,18 @@ func (s *server) withRateLimit(next http.HandlerFunc) http.HandlerFunc {
 		}
 		decision, err := s.rateLimiter.Allow(r.Context(), rateLimitKey(r))
 		if err != nil {
-			s.log.Error("rate limit", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
-			return
+			if s.rateLimitFallback == nil {
+				s.log.Error("rate limit", "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+				return
+			}
+			s.log.Warn("rate limit primary failed; using fallback", "error", err)
+			decision, err = s.rateLimitFallback.Allow(r.Context(), rateLimitKey(r))
+			if err != nil {
+				s.log.Error("rate limit fallback", "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+				return
+			}
 		}
 		if !decision.Allowed {
 			if decision.RetryAfter > 0 {
