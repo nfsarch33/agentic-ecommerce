@@ -59,6 +59,10 @@ make wc-down
 
 WooCommerce plugin installation and REST API key creation are explicit local steps, not automatic boot actions. See `docs/dev-compose.md` for the full local WooCommerce flow and the Redis event bus channel contract.
 
+## Cloud Deployment
+
+v0.8.0 introduces credential-free Terraform deployment scaffolding for AWS ECS Fargate and GCP Cloud Run under `deploy/terraform/`. See `docs/cloud-deploy.md` for SHA-tagged image promotion, secret-manager mapping, database migration workflow, and cloud observability notes.
+
 ## Gates
 
 ```bash

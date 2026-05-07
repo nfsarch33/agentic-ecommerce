@@ -30,3 +30,9 @@ credentials/
 *.dump
 *.bak
 *.log
+
+# Terraform local state and provider cache
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
