@@ -19,19 +19,19 @@ variable "aws_region" {
 variable "vpc_cidr" {
   description = "Example VPC CIDR for the AWS ECS Fargate path."
   type        = string
-  default     = "10.80.0.0/16"
+  default     = "198.51.100.0/24"
 }
 
 variable "public_subnet_cidrs" {
   description = "Example public subnet CIDRs for ALB ingress."
   type        = list(string)
-  default     = ["10.80.0.0/24", "10.80.1.0/24"]
+  default     = ["198.51.100.0/26", "198.51.100.64/26"]
 }
 
 variable "private_subnet_cidrs" {
   description = "Example private subnet CIDRs for ECS tasks and data stores."
   type        = list(string)
-  default     = ["10.80.10.0/24", "10.80.11.0/24"]
+  default     = ["198.51.100.128/26", "198.51.100.192/26"]
 }
 
 variable "allowed_ingress_cidrs" {
@@ -55,7 +55,7 @@ variable "frontend_image" {
 variable "image_tag" {
   description = "Immutable image tag, preferably the git SHA used by CI."
   type        = string
-  default     = "000000000000"
+  default     = "sha-placeholder"
 }
 
 variable "allowed_origin" {

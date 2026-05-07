@@ -16,7 +16,7 @@ concurrency:
 jobs:
   go:
     name: Go gates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
@@ -51,7 +51,7 @@ jobs:
 
   compose:
     name: Compose and Docker build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
