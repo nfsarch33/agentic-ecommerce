@@ -13,9 +13,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/minimax"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/objectstore"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
@@ -54,10 +56,12 @@ func main() {
 		Recorder:  logRecorder{logger: logger},
 	})
 	contentActivities := newContentGenerationActivitiesFromEnv(logger)
+	mediaActivities := newMediaProcessingActivitiesFromEnv(logger, repo)
 
 	w := worker.New(c, ecworkflow.TaskQueue, worker.Options{})
 	w.RegisterWorkflow(ecworkflow.ProductPublishWorkflow)
 	w.RegisterWorkflow(ecworkflow.ContentGenerationWorkflow)
+	w.RegisterWorkflow(ecworkflow.MediaProcessingWorkflow)
 	w.RegisterActivityWithOptions(activities.CheckCompliance, activity.RegisterOptions{Name: ecworkflow.CheckComplianceActivity})
 	w.RegisterActivityWithOptions(activities.ValidateMedia, activity.RegisterOptions{Name: ecworkflow.ValidateMediaActivity})
 	w.RegisterActivityWithOptions(activities.PublishToWooCommerce, activity.RegisterOptions{Name: ecworkflow.PublishToWooCommerceActivity})
@@ -66,12 +70,40 @@ func main() {
 	w.RegisterActivityWithOptions(contentActivities.FactCheckContent, activity.RegisterOptions{Name: ecworkflow.ContentFactCheckActivity})
 	w.RegisterActivityWithOptions(contentActivities.EvaluateContent, activity.RegisterOptions{Name: ecworkflow.ContentEvaluateActivity})
 	w.RegisterActivityWithOptions(contentActivities.RecordContentFactCheck, activity.RegisterOptions{Name: ecworkflow.RecordContentFactCheckActivity})
+	w.RegisterActivityWithOptions(mediaActivities.SourceMedia, activity.RegisterOptions{Name: ecworkflow.MediaSourceActivity})
+	w.RegisterActivityWithOptions(mediaActivities.ProcessMedia, activity.RegisterOptions{Name: ecworkflow.MediaProcessActivity})
+	w.RegisterActivityWithOptions(mediaActivities.AssessMediaQuality, activity.RegisterOptions{Name: ecworkflow.MediaQualityActivity})
+	w.RegisterActivityWithOptions(mediaActivities.StoreMedia, activity.RegisterOptions{Name: ecworkflow.MediaStoreActivity})
+	w.RegisterActivityWithOptions(mediaActivities.LinkMediaToProduct, activity.RegisterOptions{Name: ecworkflow.MediaLinkProductActivity})
 
 	logger.Info("temporal_worker.start", "task_queue", ecworkflow.TaskQueue, "addr", temporalAddr)
 	if err := w.Run(worker.InterruptCh()); err != nil {
 		logger.Error("temporal_worker.run", "error", err)
 		os.Exit(1)
 	}
+}
+
+func newMediaProcessingActivitiesFromEnv(logger *slog.Logger, repo port.ProductRepository) *ecworkflow.MediaProcessingActivities {
+	store, err := objectstore.New(objectstore.Config{
+		Provider:      objectstore.Provider(getenv("ECOMMERCE_MEDIA_STORE_PROVIDER", "local")),
+		RootDir:       getenv("ECOMMERCE_MEDIA_STORE_ROOT", ".local/media-uploads"),
+		PublicBaseURL: getenv("ECOMMERCE_MEDIA_PUBLIC_BASE_URL", "/media"),
+		Bucket:        getenv("ECOMMERCE_MEDIA_BUCKET", ""),
+		Region:        getenv("ECOMMERCE_MEDIA_REGION", ""),
+		Endpoint:      getenv("ECOMMERCE_MEDIA_ENDPOINT", ""),
+		Prefix:        getenv("ECOMMERCE_MEDIA_PREFIX", ""),
+	})
+	if err != nil && logger != nil {
+		logger.Warn("temporal_worker.media_store_disabled", "error", err)
+	}
+	service := intelligence.NewService(intelligence.ServiceConfig{
+		HTTPClient: &http.Client{Timeout: 15 * time.Second},
+		Store:      store,
+	})
+	return ecworkflow.NewMediaProcessingActivities(ecworkflow.MediaProcessingActivityDeps{
+		Media:    service,
+		Products: repo,
+	})
 }
 
 func newContentGenerationActivitiesFromEnv(logger *slog.Logger) *ecworkflow.ContentGenerationActivities {
