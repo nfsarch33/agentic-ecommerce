@@ -296,6 +296,8 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/sync/products/", syncAPI)
 	mux.HandleFunc("/api/v1/webhooks/woocommerce/orders", s.woocommerceOrderWebhookHandler)
 	mux.HandleFunc("/api/v1/webhooks/woocommerce/products", s.woocommerceProductWebhookHandler)
+	complianceAPI := s.withCORS(s.withBearerAuth(s.complianceRulesHandler))
+	mux.HandleFunc("/api/v1/compliance/rules", complianceAPI)
 	agentsAPI := s.withCORS(s.withBearerAuth(s.agentsHandler))
 	mux.HandleFunc("/api/v1/agents", agentsAPI)
 	mux.HandleFunc("/api/v1/agents/", agentsAPI)
@@ -340,6 +342,10 @@ func (s *server) productsHandler(w http.ResponseWriter, r *http.Request) {
 		s.generateDescription(w, r, path)
 	case strings.HasSuffix(path, "/ai-suggestions") && r.Method == http.MethodGet:
 		s.aiSuggestions(w, r, path)
+	case strings.HasSuffix(path, "/compliance-check") && r.Method == http.MethodPost:
+		s.complianceCheck(w, r, path)
+	case strings.HasSuffix(path, "/seo-suggestions") && r.Method == http.MethodPost:
+		s.seoSuggestions(w, r, path)
 	case path != "" && r.Method == http.MethodGet:
 		s.getProduct(w, r, path)
 	case path != "" && r.Method == http.MethodPut:
