@@ -52,14 +52,12 @@ services:
       - --ui-port
       - "8233"
       - --db-filename
-      - /var/lib/temporal/temporal.db
+      - /tmp/temporal.db
       - --namespace
       - default
     ports:
       - "${BIND_HOST:-127.0.0.1}:${TEMPORAL_GRPC_HOST_PORT:-7233}:7233"
       - "${BIND_HOST:-127.0.0.1}:${TEMPORAL_UI_HOST_PORT:-8233}:8233"
-    volumes:
-      - ec-temporaldata:/var/lib/temporal
     healthcheck:
       test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
       interval: 10s
@@ -275,10 +273,14 @@ services:
       - no-new-privileges:true
 
   temporal-worker:
-    # TODO(v1.2 backend): switch to Dockerfile TARGET=temporal-worker once
-    # cmd/temporal-worker is merged. Keeping this image-only preserves config
-    # validation for the infra branch without pretending the binary exists.
     image: ${TEMPORAL_WORKER_IMAGE:-ghcr.io/nfsarch33/agentic-ecommerce:dev-temporal-worker}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+        TARGET: temporal-worker
     container_name: ec-temporal-worker
     profiles: ["temporal-worker"]
     restart: unless-stopped
@@ -290,7 +292,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      ECOMMERCE_TEMPORAL_ADDRESS: ${ECOMMERCE_TEMPORAL_ADDRESS:-temporal:7233}
+      ECOMMERCE_TEMPORAL_ADDR: ${ECOMMERCE_TEMPORAL_ADDR:-temporal:7233}
       ECOMMERCE_TEMPORAL_NAMESPACE: ${ECOMMERCE_TEMPORAL_NAMESPACE:-default}
       ECOMMERCE_TEMPORAL_TASK_QUEUE: ${ECOMMERCE_TEMPORAL_TASK_QUEUE:-ec-workflows}
       ECOMMERCE_DB_URL: "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ecommerce}?sslmode=disable"

@@ -10,8 +10,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
+	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 	"go.temporal.io/sdk/activity"
@@ -21,7 +24,7 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	temporalAddr := getenv("ECOMMERCE_TEMPORAL_ADDR", "127.0.0.1:7233")
+	temporalAddr := temporalAddressFromEnv()
 
 	c, err := client.Dial(client.Options{HostPort: temporalAddr})
 	if err != nil {
@@ -30,7 +33,12 @@ func main() {
 	}
 	defer c.Close()
 
-	repo := inmemory.NewProductRepository()
+	repo, cleanupRepo, err := newProductRepositoryFromEnv(context.Background(), logger)
+	if err != nil {
+		logger.Error("temporal_worker.repository", "error", err)
+		os.Exit(1)
+	}
+	defer cleanupRepo()
 	wcClient := woocommerce.NewClient(woocommerce.Config{
 		BaseURL:        getenv("ECOMMERCE_WC_BASE_URL", ""),
 		ConsumerKey:    getenv("ECOMMERCE_WC_CONSUMER_KEY", ""),
@@ -80,6 +88,45 @@ func (r logRecorder) RecordWorkflowEvent(_ context.Context, event ecworkflow.Wor
 		r.logger.Info("product_publish.event", "type", event.Type, "product_id", event.ProductID, "status", event.Status)
 	}
 	return nil
+}
+
+func temporalAddressFromEnv() string {
+	return firstNonEmpty(
+		getenv("ECOMMERCE_TEMPORAL_ADDR", ""),
+		getenv("ECOMMERCE_TEMPORAL_ADDRESS", ""),
+		"127.0.0.1:7233",
+	)
+}
+
+func newProductRepositoryFromEnv(ctx context.Context, logger *slog.Logger) (port.ProductRepository, func(), error) {
+	dsn := strings.TrimSpace(os.Getenv("ECOMMERCE_DB_URL"))
+	if dsn == "" {
+		if logger != nil {
+			logger.Warn("temporal_worker.repository_inmemory", "reason", "ECOMMERCE_DB_URL not set")
+		}
+		return inmemory.NewProductRepository(), func() {}, nil
+	}
+
+	connectCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	pool, err := pgxpool.New(connectCtx, dsn)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create product database pool: %w", err)
+	}
+	if err := pool.Ping(connectCtx); err != nil {
+		pool.Close()
+		return nil, nil, fmt.Errorf("connect product database: %w", err)
+	}
+	return postgres.NewProductRepository(pool), pool.Close, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func getenv(key, fallback string) string {
