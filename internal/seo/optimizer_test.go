@@ -1,8 +1,11 @@
 package seo
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -16,20 +19,20 @@ func TestOptimizerSuggestsDeterministicContentFromProductCopy(t *testing.T) {
 		Keywords:    []string{"resistance band set", "home workouts"},
 	})
 
-	raw, err := os.ReadFile("testdata/suggestion.golden.json")
-	if err != nil {
-		t.Fatalf("read golden: %v", err)
-	}
-	var want Suggestion
-	if err := json.Unmarshal(raw, &want); err != nil {
-		t.Fatalf("decode golden: %v", err)
-	}
-	if got.Title != want.Title || got.MetaDescription != want.MetaDescription || got.Slug != want.Slug {
-		t.Fatalf("suggestion = %#v, want %#v", got, want)
-	}
-	if got.Score != want.Score {
-		t.Fatalf("score = %d, want %d", got.Score, want.Score)
-	}
+	assertSEOGoldenJSONPayload(t, filepath.Join("testdata", "suggestion.golden.json"), got)
+}
+
+func TestOptimizerValidateGoldenCoversNormalizedFields(t *testing.T) {
+	t.Parallel()
+
+	got := NewOptimizer().Validate(Suggestion{
+		Title:           "  Premium Resistance Band Set for Home Workouts  ",
+		MetaDescription: "Premium resistance band set for strength training at home, rehab, and travel workouts.",
+		Slug:            " /Premium Resistance Band Set!! ",
+		KeywordDensity:  KeywordDensity("Premium resistance band set for resistance band set workouts", []string{"resistance band set", "workouts"}),
+	})
+
+	assertSEOGoldenJSONPayload(t, filepath.Join("testdata", "validation.golden.json"), got)
 }
 
 func TestValidateRejectsOverlongTitleAndMetaDescription(t *testing.T) {
@@ -109,5 +112,28 @@ func TestKeywordDensityNormalizesDuplicateAndEmptyKeywords(t *testing.T) {
 	}
 	if got["home workouts"] != 0 {
 		t.Fatalf("density = %.2f, want 0", got["home workouts"])
+	}
+}
+
+func assertSEOGoldenJSONPayload(t *testing.T, goldenPath string, actualPayload any) {
+	t.Helper()
+	actual, err := json.MarshalIndent(actualPayload, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal actual payload: %v", err)
+	}
+	actual = append(actual, '\n')
+	want, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read golden JSON: %v", err)
+	}
+	var wantPayload, actualDecoded any
+	if err := json.Unmarshal(want, &wantPayload); err != nil {
+		t.Fatalf("decode golden JSON: %v", err)
+	}
+	if err := json.Unmarshal(actual, &actualDecoded); err != nil {
+		t.Fatalf("decode actual JSON: %v", err)
+	}
+	if !reflect.DeepEqual(wantPayload, actualDecoded) {
+		t.Fatalf("golden JSON mismatch\nwant:\n%s\ngot:\n%s", want, bytes.TrimSpace(actual))
 	}
 }

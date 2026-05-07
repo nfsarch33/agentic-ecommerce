@@ -100,6 +100,26 @@ func TestValidateAltTextRejectsShortAndOverlongCopy(t *testing.T) {
 	}
 }
 
+func BenchmarkMediaValidation(b *testing.B) {
+	processor := NewProcessor(DefaultConstraints())
+	image := ImageMetadata{
+		URL:         "https://cdn.example.com/products/band.webp?width=1200",
+		MimeType:    "image/webp; charset=binary",
+		SizeBytes:   512_000,
+		Width:       1200,
+		Height:      900,
+		AltText:     "Resistance band set with handles, anchor, and carry bag",
+		ProductName: "Resistance Band Set",
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if result := processor.Validate(image); !result.Pass {
+			b.Fatalf("validation failed: %#v", result)
+		}
+	}
+}
+
 func hasMediaReason(reasons []Reason, id string) bool {
 	for _, reason := range reasons {
 		if reason.ID == id {
