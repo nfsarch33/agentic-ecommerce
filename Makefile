@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke tf-fmt tf-fmt-check tf-validate
+.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke tf-fmt tf-fmt-check tf-validate
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -11,11 +11,13 @@ SYNC_PROFILE := --profile sync
 WORKERS_PROFILE := --profile workers
 TEMPORAL_PROFILE := --profile temporal
 TEMPORAL_WORKER_PROFILE := --profile temporal-worker
+MEDIA_PROFILE := --profile media-objectstore
 IMAGE        ?= ghcr.io/nfsarch33/agentic-ecommerce
 TAG          ?= dev
 TF_DIR       := deploy/terraform
 TF_VALIDATE_DIRS := \
 	$(TF_DIR)/modules/network \
+	$(TF_DIR)/modules/objectstore \
 	$(TF_DIR)/modules/postgres \
 	$(TF_DIR)/modules/redis \
 	$(TF_DIR)/modules/service \
@@ -169,17 +171,25 @@ seed:
 	$(COMPOSE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < seed/products.sql
 
-media-seed:
+media-store-seed:
 	@echo "==> Seeding local media directory at $(MEDIA_DIR)"
 	mkdir -p "$(MEDIA_DIR)"
 	cp -R seed/media/. "$(MEDIA_DIR)/"
 
-media-clean:
+media-store-clean:
 	@echo "==> Removing local media directory at $(MEDIA_DIR)"
 	rm -rf "$(MEDIA_DIR)"
 
+media-seed: media-store-seed
+
+media-clean: media-store-clean
+
 compose-config:
 	$(COMPOSE) config --quiet
+
+compose-media-config:
+	$(PROD_COMPOSE) $(MEDIA_PROFILE) config --quiet
+	$(COMPOSE) $(MEDIA_PROFILE) config --quiet
 
 compose-wc-config:
 	$(COMPOSE) $(WC_PROFILES) $(SYNC_PROFILE) config --quiet

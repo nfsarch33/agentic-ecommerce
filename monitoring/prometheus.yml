@@ -14,6 +14,7 @@ scrape_configs:
         labels:
           service: mc-api
           stack: agentic-ecommerce
+          media_pipeline: v1.4.0
 
   - job_name: agent-worker
     metrics_path: /metrics
@@ -23,6 +24,7 @@ scrape_configs:
         labels:
           service: agent-worker
           stack: agentic-ecommerce
+          media_pipeline: v1.4.0
 
   - job_name: prometheus
     static_configs:

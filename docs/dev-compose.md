@@ -111,22 +111,31 @@ is `ECOMMERCE_TEMPORAL_TASK_QUEUE=ec-workflows`. See
 
 ## Media Storage and Compliance Placeholders
 
-The dev stack mounts a host media directory into `mc-api` for upload and
+The dev stack mounts a host media directory into backend services for upload and
 processor work:
 
 ```bash
 ECOMMERCE_MEDIA_HOST_DIR=./.local/media-uploads
+ECOMMERCE_MEDIA_STORAGE_DRIVER=filesystem
 ECOMMERCE_MEDIA_STORE=filesystem
+ECOMMERCE_MEDIA_BASE_PATH=/var/lib/agentic-ecommerce/media
 ECOMMERCE_MEDIA_ROOT=/var/lib/agentic-ecommerce/media
 ECOMMERCE_MEDIA_PUBLIC_BASE_URL=/media
+ECOMMERCE_MEDIA_MAX_SIZE_BYTES=5242880
+ECOMMERCE_MEDIA_ALLOWED_MIME_TYPES=image/jpeg,image/png,image/webp
 ```
 
 Use the Makefile helpers to reset local upload state:
 
 ```bash
-make media-seed
-make media-clean
+make media-store-seed
+make media-store-clean
 ```
+
+`make compose-media-config` validates the opt-in MinIO profile for S3-compatible
+adapter work. The profile uses placeholder environment variables only; set
+`MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD` locally before starting it. See
+`docs/media-storage.md` for details.
 
 The compliance thresholds are config placeholders for the v0.7.0 engine and
 should be consumed by the backend compliance rules when that implementation
