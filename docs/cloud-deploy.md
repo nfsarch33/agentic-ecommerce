@@ -89,12 +89,13 @@ Backend secrets:
 - `ECOMMERCE_WC_CONSUMER_SECRET`: WooCommerce REST consumer secret.
 - `ECOMMERCE_WC_WEBHOOK_SECRET`: WooCommerce webhook HMAC secret when webhook ingestion is enabled.
 - `ECOMMERCE_AI_BRIDGE_URL`: fleet-hosted MiniMax bridge URL; do not point app services directly at MiniMax.
+- `ECOMMERCE_EMBEDDING_BRIDGE_URL`: fleet-hosted embedding bridge URL for RAG; this may be the same approved bridge as chat completions when it exposes embeddings.
 
 Frontend secrets:
 
 - `FLEET_AI_BRIDGE_URL`: only if the frontend BFF route needs to call the approved fleet bridge.
 
-Non-secret environment variables can stay in Terraform state, including `ECOMMERCE_ALLOWED_ORIGIN`, `ECOMMERCE_JWT_ISSUER`, `ECOMMERCE_JWT_AUDIENCE`, `ECOMMERCE_JWT_ACCESS_TTL`, `ECOMMERCE_REFRESH_TTL`, `ECOMMERCE_RATE_LIMIT_CAPACITY`, `ECOMMERCE_RATE_LIMIT_REFILL`, `ECOMMERCE_CSP_CONNECT_SRC`, `ECOMMERCE_CSP_REPORT_URI`, `ECOMMERCE_EVENTBUS_DRIVER`, `ECOMMERCE_EVENTBUS_CHANNEL_SYNC`, `ECOMMERCE_EVENTBUS_CHANNEL_DLQ`, and worker scheduling flags.
+Non-secret environment variables can stay in Terraform state, including `ECOMMERCE_ALLOWED_ORIGIN`, `ECOMMERCE_JWT_ISSUER`, `ECOMMERCE_JWT_AUDIENCE`, `ECOMMERCE_JWT_ACCESS_TTL`, `ECOMMERCE_REFRESH_TTL`, `ECOMMERCE_RATE_LIMIT_CAPACITY`, `ECOMMERCE_RATE_LIMIT_REFILL`, `ECOMMERCE_CSP_CONNECT_SRC`, `ECOMMERCE_CSP_REPORT_URI`, `ECOMMERCE_EVENTBUS_DRIVER`, `ECOMMERCE_EVENTBUS_CHANNEL_SYNC`, `ECOMMERCE_EVENTBUS_CHANNEL_DLQ`, `ECOMMERCE_EMBEDDING_MODEL`, `ECOMMERCE_EMBEDDING_DIMENSIONS`, `ECOMMERCE_RAG_CHUNK_SIZE`, and worker scheduling flags.
 
 ## Browser Boundary Headers
 
@@ -106,7 +107,7 @@ Set Content Security Policy headers at the CDN, load balancer, reverse proxy, or
 
 The repo currently uses ordered SQL files under `migrations/` and the `make migrate-up` target. For cloud deployment:
 
-1. Provision PostgreSQL privately and enable required extensions such as pgvector.
+1. Provision PostgreSQL privately and enable required extensions such as pgvector. The local compose contract uses `pgvector/pgvector:pg16`; cloud PostgreSQL must provide the same `vector` extension before `migrations/0005_enable_pgvector_rag.up.sql` runs.
 2. Resolve `ECOMMERCE_DB_URL` from the cloud secret manager in a trusted runner.
 3. Run migrations from a one-off ECS task, Cloud Run job, or CI release job with network access to the database.
 4. Run migrations before shifting traffic to the new service revision.
