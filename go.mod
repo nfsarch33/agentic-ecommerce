@@ -1,6 +1,6 @@
 module github.com/nfsarch33/agentic-ecommerce
 
-go 1.24.11
+go 1.25.9
 
 require (
 	github.com/google/uuid v1.6.0

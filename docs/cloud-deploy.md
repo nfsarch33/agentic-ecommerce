@@ -89,12 +89,19 @@ Backend secrets:
 - `ECOMMERCE_WC_CONSUMER_SECRET`: WooCommerce REST consumer secret.
 - `ECOMMERCE_WC_WEBHOOK_SECRET`: WooCommerce webhook HMAC secret when webhook ingestion is enabled.
 - `ECOMMERCE_AI_BRIDGE_URL`: fleet-hosted MiniMax bridge URL; do not point app services directly at MiniMax.
+- `ECOMMERCE_JWT_SIGNING_KEY`: v0.9.0 JWT signing key or secret-manager reference when JWT sessions are enabled.
 
 Frontend secrets:
 
 - `FLEET_AI_BRIDGE_URL`: only if the frontend BFF route needs to call the approved fleet bridge.
 
-Non-secret environment variables can stay in Terraform state, including `ECOMMERCE_ALLOWED_ORIGIN`, `ECOMMERCE_EVENTBUS_DRIVER`, `ECOMMERCE_EVENTBUS_CHANNEL_SYNC`, `ECOMMERCE_EVENTBUS_CHANNEL_DLQ`, and worker scheduling flags.
+Non-secret environment variables can stay in Terraform state, including `ECOMMERCE_ALLOWED_ORIGIN`, `ECOMMERCE_JWT_ISSUER`, `ECOMMERCE_JWT_AUDIENCE`, `ECOMMERCE_RBAC_DEFAULT_ROLE`, `ECOMMERCE_RATE_LIMIT_REQUESTS_PER_MINUTE`, `ECOMMERCE_RATE_LIMIT_BURST`, `ECOMMERCE_CSP_CONNECT_SRC`, `ECOMMERCE_CSP_REPORT_URI`, `ECOMMERCE_EVENTBUS_DRIVER`, `ECOMMERCE_EVENTBUS_CHANNEL_SYNC`, `ECOMMERCE_EVENTBUS_CHANNEL_DLQ`, and worker scheduling flags.
+
+## Browser Boundary Headers
+
+Set `ECOMMERCE_ALLOWED_ORIGIN` to the exact HTTPS storefront origin before enabling authenticated browser traffic. Do not use wildcard CORS with JWT, refresh-token, or API-key authenticated routes.
+
+Set Content Security Policy headers at the CDN, load balancer, reverse proxy, or frontend platform. The baseline should be deny-by-default and allow only the deployed storefront, backend API, approved image/media hosts, and fleet bridge endpoints required by BFF routes. Keep report-only mode separate from enforcement by sending CSP reports to `ECOMMERCE_CSP_REPORT_URI` first, then promote the policy after violations are reviewed.
 
 ## Database Migrations
 
