@@ -7,6 +7,7 @@ The modules are intentionally provider-neutral contracts. They do not create liv
 ## Layout
 
 - `modules/network`: VPC or Serverless VPC Access connector contract.
+- `modules/objectstore`: S3 or GCS media bucket contract with public URL and lifecycle placeholders.
 - `modules/postgres`: RDS PostgreSQL or Cloud SQL PostgreSQL contract and migration output.
 - `modules/redis`: ElastiCache Redis or Memorystore Redis contract.
 - `modules/service`: ECS Fargate or Cloud Run service contract for `mc-api`, workers, and frontend.

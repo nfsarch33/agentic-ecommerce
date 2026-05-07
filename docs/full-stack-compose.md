@@ -144,16 +144,23 @@ and `ECOMMERCE_RAG_CHUNK_SIZE` defaults to `1000`.
 
 ## Media and Compliance Placeholders
 
-Production-like compose exposes media and compliance configuration without
-mounting a writable local upload volume:
+Production-like compose exposes media and compliance configuration with a named
+filesystem volume for local release-candidate smokes:
 
 ```bash
-ECOMMERCE_MEDIA_STORE=object
+ECOMMERCE_MEDIA_STORAGE_DRIVER=filesystem
+ECOMMERCE_MEDIA_STORE=filesystem
+ECOMMERCE_MEDIA_BASE_PATH=/var/lib/agentic-ecommerce/media
+ECOMMERCE_MEDIA_ROOT=/var/lib/agentic-ecommerce/media
 ECOMMERCE_MEDIA_BUCKET=
-ECOMMERCE_MEDIA_PUBLIC_BASE_URL=
+ECOMMERCE_MEDIA_PUBLIC_BASE_URL=/media
+ECOMMERCE_MEDIA_MAX_SIZE_BYTES=5242880
+ECOMMERCE_MEDIA_ALLOWED_MIME_TYPES=image/jpeg,image/png,image/webp
 ECOMMERCE_COMPLIANCE_MIN_SEO_SCORE=70
 ECOMMERCE_COMPLIANCE_MAX_IMAGE_SIZE_BYTES=5242880
 ECOMMERCE_COMPLIANCE_ALLOWED_MIME_TYPES=image/jpeg,image/png,image/webp
 ```
 
-Use `docker-compose.dev.yml` for filesystem-backed uploads during development.
+Use `make compose-media-config` to validate the optional MinIO profile when
+testing S3-compatible storage locally. Cloud deployments should set
+`ECOMMERCE_MEDIA_STORAGE_DRIVER` to `s3` or `gcs`; see `docs/media-storage.md`.
