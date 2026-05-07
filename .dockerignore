@@ -1,0 +1,13 @@
+.git
+.github
+.sentrux
+bin
+coverage.out
+tmp
+
+.DS_Store
+*.log
+
+.env
+.env.*
+!.env.example

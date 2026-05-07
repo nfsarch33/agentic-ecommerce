@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Test, vet, build, and containerize
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Run race tests
+        run: go test -race ./...
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run govulncheck when available
+        run: |
+          if command -v govulncheck >/dev/null 2>&1; then
+            govulncheck ./...
+          else
+            echo "govulncheck not installed; skipping optional vulnerability check"
+          fi
+
+      - name: Build binaries
+        run: make build
+
+      - name: Build Docker image
+        run: docker build --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }} .
