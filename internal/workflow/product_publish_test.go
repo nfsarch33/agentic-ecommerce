@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
 )
 
 func TestProductPublishWorkflowWaitsForReviewSignalBeforePublishing(t *testing.T) {
@@ -179,6 +181,225 @@ func TestProductPublishWorkflowStopsWhenMediaValidationFails(t *testing.T) {
 	}
 }
 
+func TestProductPublishWorkflowReportsAwaitingReviewViaQuery(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (ComplianceResult, error) {
+		return ComplianceResult{Pass: true, Score: 94}, nil
+	}, activity.RegisterOptions{Name: CheckComplianceActivity})
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (MediaValidationResult, error) {
+		return MediaValidationResult{Pass: true, Score: 100}, nil
+	}, activity.RegisterOptions{Name: ValidateMediaActivity})
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (PublishResult, error) {
+		return PublishResult{Published: true, RemoteID: "wc-query"}, nil
+	}, activity.RegisterOptions{Name: PublishToWooCommerceActivity})
+	registerNoopRecordActivity(env)
+
+	var queried ProductPublishResult
+	env.RegisterDelayedCallback(func() {
+		value, err := env.QueryWorkflow(ProductPublishStatusQuery)
+		if err != nil {
+			t.Fatalf("query workflow: %v", err)
+		}
+		if err := value.Get(&queried); err != nil {
+			t.Fatalf("decode query result: %v", err)
+		}
+	}, time.Minute)
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(ProductPublishReviewSignal, ReviewSignal{Approved: true, Reviewer: "lead@example.com"})
+	}, 2*time.Minute)
+
+	env.ExecuteWorkflow(ProductPublishWorkflow, ProductPublishInput{ProductID: "product-query"})
+
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("workflow error: %v", err)
+	}
+	if queried.Status != ProductPublishStatusAwaitingReview {
+		t.Fatalf("queried status = %q, want awaiting review", queried.Status)
+	}
+}
+
+func TestProductPublishWorkflowCanBeCanceledWhileAwaitingReview(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (ComplianceResult, error) {
+		return ComplianceResult{Pass: true, Score: 94}, nil
+	}, activity.RegisterOptions{Name: CheckComplianceActivity})
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (MediaValidationResult, error) {
+		return MediaValidationResult{Pass: true, Score: 100}, nil
+	}, activity.RegisterOptions{Name: ValidateMediaActivity})
+	registerNoopRecordActivity(env)
+
+	env.RegisterDelayedCallback(func() {
+		env.CancelWorkflow()
+	}, time.Minute)
+
+	env.ExecuteWorkflow(ProductPublishWorkflow, ProductPublishInput{ProductID: "product-cancel"})
+
+	err := env.GetWorkflowError()
+	if err == nil {
+		t.Fatal("expected workflow cancellation error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "canceled") {
+		t.Fatalf("workflow error = %v, want canceled", err)
+	}
+}
+
+func TestProductPublishWorkflowRetriesComplianceActivityBeforeReturningComplianceFailure(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	attempts := 0
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (ComplianceResult, error) {
+		attempts++
+		if attempts < 3 {
+			return ComplianceResult{}, errors.New("transient compliance outage")
+		}
+		return ComplianceResult{Pass: false, Score: 30, Reasons: []string{"product description is too short"}}, nil
+	}, activity.RegisterOptions{Name: CheckComplianceActivity})
+	registerNoopRecordActivity(env)
+
+	env.ExecuteWorkflow(ProductPublishWorkflow, ProductPublishInput{ProductID: "product-compliance-retry"})
+
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("workflow error: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("compliance attempts = %d, want 3", attempts)
+	}
+	var result ProductPublishResult
+	if err := env.GetWorkflowResult(&result); err != nil {
+		t.Fatalf("workflow result: %v", err)
+	}
+	if result.Status != ProductPublishStatusComplianceFailed {
+		t.Fatalf("status = %q, want compliance failed", result.Status)
+	}
+}
+
+func TestProductPublishWorkflowRetriesMediaValidationActivityBeforeReturningMediaFailure(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (ComplianceResult, error) {
+		return ComplianceResult{Pass: true, Score: 90}, nil
+	}, activity.RegisterOptions{Name: CheckComplianceActivity})
+	attempts := 0
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (MediaValidationResult, error) {
+		attempts++
+		if attempts < 3 {
+			return MediaValidationResult{}, errors.New("transient media outage")
+		}
+		return MediaValidationResult{Pass: false, Score: 20, Reasons: []string{"alt text is required"}}, nil
+	}, activity.RegisterOptions{Name: ValidateMediaActivity})
+	registerNoopRecordActivity(env)
+
+	env.ExecuteWorkflow(ProductPublishWorkflow, ProductPublishInput{ProductID: "product-media-retry"})
+
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("workflow error: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("media validation attempts = %d, want 3", attempts)
+	}
+	var result ProductPublishResult
+	if err := env.GetWorkflowResult(&result); err != nil {
+		t.Fatalf("workflow result: %v", err)
+	}
+	if result.Status != ProductPublishStatusMediaFailed {
+		t.Fatalf("status = %q, want media failed", result.Status)
+	}
+}
+
+func TestProductPublishWorkflowRetriesPublishActivityAndSurfacesFailure(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (ComplianceResult, error) {
+		return ComplianceResult{Pass: true, Score: 94}, nil
+	}, activity.RegisterOptions{Name: CheckComplianceActivity})
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (MediaValidationResult, error) {
+		return MediaValidationResult{Pass: true, Score: 100}, nil
+	}, activity.RegisterOptions{Name: ValidateMediaActivity})
+	attempts := 0
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (PublishResult, error) {
+		attempts++
+		return PublishResult{}, errors.New("woocommerce publish unavailable")
+	}, activity.RegisterOptions{Name: PublishToWooCommerceActivity})
+	registerNoopRecordActivity(env)
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(ProductPublishReviewSignal, ReviewSignal{Approved: true, Reviewer: "lead@example.com"})
+	}, time.Minute)
+
+	env.ExecuteWorkflow(ProductPublishWorkflow, ProductPublishInput{ProductID: "product-publish-retry"})
+
+	if err := env.GetWorkflowError(); err == nil {
+		t.Fatal("expected publish failure after retries")
+	}
+	if attempts != 3 {
+		t.Fatalf("publish attempts = %d, want 3", attempts)
+	}
+}
+
+func TestProductPublishWorkflowE2EWithRealActivities(t *testing.T) {
+	t.Parallel()
+
+	repo := newActivityProductRepo(t)
+	publisher := &fakeProductPublisher{}
+	recorder := &fakeWorkflowEventRecorder{}
+	activities := NewProductPublishActivities(ProductPublishActivityDeps{
+		Products:  repo,
+		Publisher: publisher,
+		Recorder:  recorder,
+	})
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(activities.CheckCompliance, activity.RegisterOptions{Name: CheckComplianceActivity})
+	env.RegisterActivityWithOptions(activities.ValidateMedia, activity.RegisterOptions{Name: ValidateMediaActivity})
+	env.RegisterActivityWithOptions(activities.PublishToWooCommerce, activity.RegisterOptions{Name: PublishToWooCommerceActivity})
+	env.RegisterActivityWithOptions(activities.RecordWorkflowEvent, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(ProductPublishReviewSignal, ReviewSignal{Approved: true, Reviewer: "qa@example.com", Note: "qa approved"})
+	}, time.Minute)
+
+	env.ExecuteWorkflow(ProductPublishWorkflow, ProductPublishInput{ProductID: repo.productID, RequestedBy: "qa@example.com"})
+
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("workflow error: %v", err)
+	}
+	var result ProductPublishResult
+	if err := env.GetWorkflowResult(&result); err != nil {
+		t.Fatalf("workflow result: %v", err)
+	}
+	if result.Status != ProductPublishStatusPublished || !result.Published {
+		t.Fatalf("result = %+v, want published", result)
+	}
+	if publisher.publishedID != repo.productID {
+		t.Fatalf("published id = %q, want %q", publisher.publishedID, repo.productID)
+	}
+	if len(recorder.events) != 5 {
+		t.Fatalf("recorded events = %d, want 5", len(recorder.events))
+	}
+}
+
+func TestProductPublishWorkflowReplaysSmokeFailureHistory(t *testing.T) {
+	t.Parallel()
+
+	replayer := worker.NewWorkflowReplayer()
+	replayer.RegisterWorkflow(ProductPublishWorkflow)
+
+	if err := replayer.ReplayWorkflowHistoryFromJSONFile(nil, "testdata/product_publish_failure_history.json"); err != nil {
+		t.Fatalf("replay workflow history: %v", err)
+	}
+}
+
 func TestProductPublishActivitiesUseBackendEngines(t *testing.T) {
 	t.Parallel()
 
@@ -287,6 +508,12 @@ type fakeWorkflowEventRecorder struct {
 func (f *fakeWorkflowEventRecorder) RecordWorkflowEvent(_ context.Context, event WorkflowEvent) error {
 	f.events = append(f.events, event)
 	return nil
+}
+
+func registerNoopRecordActivity(env *testsuite.TestWorkflowEnvironment) {
+	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
 }
 
 type activityProductRepo struct {

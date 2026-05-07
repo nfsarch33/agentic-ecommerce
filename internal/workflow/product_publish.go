@@ -145,62 +145,85 @@ func ProductPublishWorkflow(ctx temporalworkflow.Context, input ProductPublishIn
 	if err := record(ctx, input, "product_publish.started", ProductPublishStatusDraft, "product publish workflow started", ""); err != nil {
 		return state, err
 	}
-
-	if err := temporalworkflow.ExecuteActivity(ctx, CheckComplianceActivity, activityInput).Get(ctx, &state.Compliance); err != nil {
-		state.Status = ProductPublishStatusComplianceFailed
+	if shouldContinue, err := runComplianceGate(ctx, input, activityInput, &state); err != nil || !shouldContinue {
 		return state, err
 	}
-	if !state.Compliance.Pass {
-		state.Status = ProductPublishStatusComplianceFailed
-		if err := record(ctx, input, "product_publish.compliance_failed", state.Status, "compliance check failed", ""); err != nil {
-			return state, err
-		}
-		return state, nil
-	}
-	if err := record(ctx, input, "product_publish.compliance_passed", state.Status, "compliance check passed", ""); err != nil {
+	if shouldContinue, err := runMediaGate(ctx, input, activityInput, &state); err != nil || !shouldContinue {
 		return state, err
 	}
-
-	if err := temporalworkflow.ExecuteActivity(ctx, ValidateMediaActivity, activityInput).Get(ctx, &state.Media); err != nil {
-		state.Status = ProductPublishStatusMediaFailed
+	if approved, err := runReviewGate(ctx, input, &state); err != nil || !approved {
 		return state, err
 	}
-	if !state.Media.Pass {
-		state.Status = ProductPublishStatusMediaFailed
-		if err := record(ctx, input, "product_publish.media_failed", state.Status, "media validation failed", ""); err != nil {
-			return state, err
-		}
-		return state, nil
-	}
-	if err := record(ctx, input, "product_publish.media_validated", state.Status, "media validation passed", ""); err != nil {
-		return state, err
-	}
-
-	state.Status = ProductPublishStatusAwaitingReview
-	var review ReviewSignal
-	temporalworkflow.GetSignalChannel(ctx, ProductPublishReviewSignal).Receive(ctx, &review)
-	state.Review = review
-	if !review.Approved {
-		state.Status = ProductPublishStatusRejected
-		if err := record(ctx, input, "product_publish.review_rejected", state.Status, "human review rejected publish", review.Reviewer); err != nil {
-			return state, err
-		}
-		return state, nil
-	}
-	if err := record(ctx, input, "product_publish.review_approved", state.Status, "human review approved publish", review.Reviewer); err != nil {
-		return state, err
-	}
-
-	state.Status = ProductPublishStatusPublishing
-	if err := temporalworkflow.ExecuteActivity(ctx, PublishToWooCommerceActivity, activityInput).Get(ctx, &state.Publish); err != nil {
-		return state, err
-	}
-	state.Published = state.Publish.Published
-	state.Status = ProductPublishStatusPublished
-	if err := record(ctx, input, "product_publish.published", state.Status, "product published to WooCommerce", review.Reviewer); err != nil {
+	if err := runPublish(ctx, input, activityInput, &state); err != nil {
 		return state, err
 	}
 	return state, nil
+}
+
+func runComplianceGate(ctx temporalworkflow.Context, input ProductPublishInput, activityInput ProductPublishActivityInput, state *ProductPublishResult) (bool, error) {
+	if err := temporalworkflow.ExecuteActivity(ctx, CheckComplianceActivity, activityInput).Get(ctx, &state.Compliance); err != nil {
+		state.Status = ProductPublishStatusComplianceFailed
+		return false, err
+	}
+	if state.Compliance.Pass {
+		return true, record(ctx, input, "product_publish.compliance_passed", state.Status, "compliance check passed", "")
+	}
+	state.Status = ProductPublishStatusComplianceFailed
+	return false, record(ctx, input, "product_publish.compliance_failed", state.Status, "compliance check failed", "")
+}
+
+func runMediaGate(ctx temporalworkflow.Context, input ProductPublishInput, activityInput ProductPublishActivityInput, state *ProductPublishResult) (bool, error) {
+	if err := temporalworkflow.ExecuteActivity(ctx, ValidateMediaActivity, activityInput).Get(ctx, &state.Media); err != nil {
+		state.Status = ProductPublishStatusMediaFailed
+		return false, err
+	}
+	if state.Media.Pass {
+		return true, record(ctx, input, "product_publish.media_validated", state.Status, "media validation passed", "")
+	}
+	state.Status = ProductPublishStatusMediaFailed
+	return false, record(ctx, input, "product_publish.media_failed", state.Status, "media validation failed", "")
+}
+
+func runReviewGate(ctx temporalworkflow.Context, input ProductPublishInput, state *ProductPublishResult) (bool, error) {
+	state.Status = ProductPublishStatusAwaitingReview
+	review, err := receiveReviewSignal(ctx)
+	if err != nil {
+		return false, err
+	}
+	state.Review = review
+	if review.Approved {
+		return true, record(ctx, input, "product_publish.review_approved", state.Status, "human review approved publish", review.Reviewer)
+	}
+	state.Status = ProductPublishStatusRejected
+	return false, record(ctx, input, "product_publish.review_rejected", state.Status, "human review rejected publish", review.Reviewer)
+}
+
+func runPublish(ctx temporalworkflow.Context, input ProductPublishInput, activityInput ProductPublishActivityInput, state *ProductPublishResult) error {
+	state.Status = ProductPublishStatusPublishing
+	if err := temporalworkflow.ExecuteActivity(ctx, PublishToWooCommerceActivity, activityInput).Get(ctx, &state.Publish); err != nil {
+		return err
+	}
+	state.Published = state.Publish.Published
+	state.Status = ProductPublishStatusPublished
+	return record(ctx, input, "product_publish.published", state.Status, "product published to WooCommerce", state.Review.Reviewer)
+}
+
+func receiveReviewSignal(ctx temporalworkflow.Context) (ReviewSignal, error) {
+	var review ReviewSignal
+	canceled := false
+	selector := temporalworkflow.NewSelector(ctx)
+	signalCh := temporalworkflow.GetSignalChannel(ctx, ProductPublishReviewSignal)
+	selector.AddReceive(signalCh, func(ch temporalworkflow.ReceiveChannel, _ bool) {
+		ch.Receive(ctx, &review)
+	})
+	selector.AddReceive(ctx.Done(), func(temporalworkflow.ReceiveChannel, bool) {
+		canceled = true
+	})
+	selector.Select(ctx)
+	if canceled {
+		return ReviewSignal{}, temporal.NewCanceledError("product publish canceled while awaiting review")
+	}
+	return review, nil
 }
 
 func (a *ProductPublishActivities) CheckCompliance(ctx context.Context, input ProductPublishActivityInput) (ComplianceResult, error) {
