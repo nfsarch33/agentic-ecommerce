@@ -124,6 +124,7 @@ type server struct {
 	workflowClient    temporalWorkflowClient
 	agentRegistry     *orchestrator.Registry
 	agentScheduler    *orchestrator.Scheduler
+	agentSchedules    *orchestrator.ScheduleManager
 	schedulerMu       sync.Mutex
 	webhookService    *outbound.Service
 	webhookSecret     string
@@ -141,6 +142,7 @@ type contentGenerator interface {
 }
 
 type eventHistory interface {
+	eventbus.Publisher
 	Delivered() []eventbus.Event
 }
 
@@ -384,7 +386,8 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		mediaService:   intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
 		workflowClient: workflowClient,
 		agentRegistry:  registry,
-		agentScheduler: orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), orchestrator.NewEventRecorder(), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
+		agentScheduler: orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), eventbus.NewEventBusAdapter(bus, "mc-api.agent"), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
+		agentSchedules: defaultAgentScheduleManager(),
 		webhookService: webhookService,
 		webhookSecret:  webhookSecret,
 		readiness:      readinessChecks,
@@ -406,17 +409,27 @@ func (s *server) Close() {
 func (s *server) ensureAgentScheduler() {
 	s.schedulerMu.Lock()
 	defer s.schedulerMu.Unlock()
+	if s.eventBus == nil {
+		s.eventBus = eventbus.NewInMemoryBus()
+	}
 	if s.agentRegistry == nil {
 		s.agentRegistry = defaultAgentRegistry()
 	}
 	if s.agentScheduler == nil {
+		var sink orchestrator.EventSink = orchestrator.NewEventRecorder()
+		if s.eventBus != nil {
+			sink = eventbus.NewEventBusAdapter(s.eventBus, "mc-api.agent")
+		}
 		s.agentScheduler = orchestrator.NewScheduler(
 			s.agentRegistry,
 			orchestrator.NewInMemoryStore(),
-			orchestrator.NewEventRecorder(),
+			sink,
 			nil,
 			orchestrator.SchedulerOptions{MaxConcurrent: 2},
 		)
+	}
+	if s.agentSchedules == nil {
+		s.agentSchedules = defaultAgentScheduleManager()
 	}
 }
 
@@ -466,12 +479,16 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/agents/", agentsAPI)
 	agentRunsAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.agentRunsHandler)))
 	mux.HandleFunc("/api/v1/agent-runs/", agentRunsAPI)
+	agentSchedulesAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.withAudit(agentAuditAction, s.agentSchedulesHandler))))
+	mux.HandleFunc("/api/v1/agent-schedules", agentSchedulesAPI)
+	mux.HandleFunc("/api/v1/agent-schedules/", agentSchedulesAPI)
 	eventsAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.recentEventsHandler)))
 	mux.HandleFunc("/api/v1/events/recent", eventsAPI)
 	workflowsAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.withAudit(workflowAuditAction, s.workflowsHandler))))
 	mux.HandleFunc("/api/v1/workflows/product-publish", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/content-generation", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/media-processing", workflowsAPI)
+	mux.HandleFunc("/api/v1/workflows/sourcing", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/", workflowsAPI)
 	ragAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.ragHandler)))
 	mux.HandleFunc("/api/v1/rag/documents", ragAPI)

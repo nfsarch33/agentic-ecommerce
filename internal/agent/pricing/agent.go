@@ -13,18 +13,30 @@ var ErrInvalidCost = errors.New("cost_cents must be greater than zero")
 
 type Agent struct{}
 
+type Strategy string
+
+const (
+	StrategyMarginBased      Strategy = "margin_based"
+	StrategyCompetitionBased Strategy = "competition_based"
+	StrategyDemandBased      Strategy = "demand_based"
+)
+
 type Request struct {
-	SKU                   string  `json:"sku"`
-	CostCents             int     `json:"cost_cents"`
-	ShippingCents         int     `json:"shipping_cents"`
-	CurrentPriceCents     int     `json:"current_price_cents"`
-	CompetitorPricesCents []int   `json:"competitor_prices_cents"`
-	TargetMarginPct       float64 `json:"target_margin_pct"`
-	MinimumMarginPct      float64 `json:"minimum_margin_pct"`
+	SKU                   string   `json:"sku"`
+	Strategy              Strategy `json:"strategy,omitempty"`
+	CostCents             int      `json:"cost_cents"`
+	ShippingCents         int      `json:"shipping_cents"`
+	CurrentPriceCents     int      `json:"current_price_cents"`
+	CompetitorPricesCents []int    `json:"competitor_prices_cents"`
+	TargetMarginPct       float64  `json:"target_margin_pct"`
+	MinimumMarginPct      float64  `json:"minimum_margin_pct"`
+	DemandScore           float64  `json:"demand_score,omitempty"`
+	DemandLiftPct         float64  `json:"demand_lift_pct,omitempty"`
 }
 
 type Result struct {
 	SKU                    string   `json:"sku"`
+	Strategy               Strategy `json:"strategy"`
 	RecommendedPriceCents  int      `json:"recommended_price_cents"`
 	GrossMarginPct         float64  `json:"gross_margin_pct"`
 	CompetitorAverageCents int      `json:"competitor_average_cents"`
@@ -39,8 +51,8 @@ func (a *Agent) Descriptor() orchestrator.Descriptor {
 	return orchestrator.Descriptor{
 		ID:           "pricing",
 		Name:         "Pricing Agent",
-		Description:  "Computes deterministic recommended price and margin from cost and competition inputs.",
-		Capabilities: []string{"price_recommendation", "margin_analysis"},
+		Description:  "Computes deterministic recommended price and margin using configurable strategy inputs.",
+		Capabilities: []string{"price_recommendation", "margin_analysis", "competition_pricing", "demand_pricing_stub"},
 	}
 }
 
@@ -73,33 +85,61 @@ func (a *Agent) Recommend(ctx context.Context, req Request) (Result, error) {
 		minimumMargin = targetMargin * 0.75
 	}
 
-	targetPrice := priceForMargin(totalCost, targetMargin)
 	minimumPrice := priceForMargin(totalCost, minimumMargin)
 	competitorAverage := average(req.CompetitorPricesCents)
-	recommended := targetPrice
-	reasons := []string{"target_margin_floor_applied"}
-	if competitorAverage > 0 {
-		competitivePrice := charmPrice(competitorAverage - 100)
-		if competitivePrice > recommended {
-			recommended = competitivePrice
-			reasons = append(reasons, "positioned_below_competitor_average")
-		}
-	}
+	strategy := normalizeStrategy(req.Strategy)
+	recommended, reasons := recommendByStrategy(strategy, totalCost, targetMargin, competitorAverage, req)
 	if recommended < minimumPrice {
 		recommended = minimumPrice
 		reasons = append(reasons, "minimum_margin_floor_applied")
 	}
-	if req.CurrentPriceCents > 0 && recommended < req.CurrentPriceCents {
-		reasons = append(reasons, "recommended_price_below_current")
-	}
-
 	return Result{
 		SKU:                    req.SKU,
+		Strategy:               strategy,
 		RecommendedPriceCents:  recommended,
 		GrossMarginPct:         round4(float64(recommended-totalCost) / float64(recommended)),
 		CompetitorAverageCents: competitorAverage,
 		Reasons:                reasons,
 	}, nil
+}
+
+func normalizeStrategy(strategy Strategy) Strategy {
+	switch strategy {
+	case StrategyMarginBased, StrategyCompetitionBased, StrategyDemandBased:
+		return strategy
+	default:
+		return StrategyCompetitionBased
+	}
+}
+
+func recommendByStrategy(strategy Strategy, totalCost int, targetMargin float64, competitorAverage int, req Request) (int, []string) {
+	switch strategy {
+	case StrategyMarginBased:
+		return priceForMargin(totalCost, targetMargin), []string{"strategy_margin_based", "target_margin_floor_applied"}
+	case StrategyDemandBased:
+		lift := req.DemandLiftPct
+		if lift <= 0 {
+			lift = 0.05
+		}
+		demandAdjustedMargin := targetMargin
+		if req.DemandScore >= 0.75 {
+			demandAdjustedMargin += lift
+		}
+		if demandAdjustedMargin >= 0.95 {
+			demandAdjustedMargin = 0.94
+		}
+		return priceForMargin(totalCost, demandAdjustedMargin), []string{"strategy_demand_based", "demand_signal_stub_applied", "target_margin_floor_applied"}
+	default:
+		targetPrice := priceForMargin(totalCost, targetMargin)
+		if competitorAverage <= 0 {
+			return targetPrice, []string{"strategy_competition_based", "target_margin_floor_applied"}
+		}
+		competitivePrice := charmPrice(competitorAverage - 100)
+		if competitivePrice > targetPrice {
+			return competitivePrice, []string{"strategy_competition_based", "positioned_below_competitor_average"}
+		}
+		return targetPrice, []string{"strategy_competition_based", "target_margin_floor_applied"}
+	}
 }
 
 func decodePayload(payload map[string]any, out any) error {

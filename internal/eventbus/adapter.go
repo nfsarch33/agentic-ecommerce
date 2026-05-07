@@ -19,18 +19,23 @@ func NewEventBusAdapter(publisher Publisher, source string) *EventBusAdapter {
 }
 
 func (a *EventBusAdapter) Emit(ctx context.Context, agentEvent agent.AgentEvent) error {
+	timestamp := agentEvent.CreatedAt.UTC()
+	if timestamp.IsZero() {
+		timestamp = time.Now().UTC()
+	}
 	event := Event{
 		ID:        uuid.NewString(),
 		Type:      AgentRunCompleted,
 		TenantID:  "default",
-		Timestamp: time.Now().UTC(),
+		Timestamp: timestamp,
 		Source:    a.source,
 		Payload: map[string]any{
-			"run_id":     agentEvent.RunID,
-			"task_id":    agentEvent.TaskID,
-			"agent_id":   agentEvent.AgentID,
-			"state":      string(agentEvent.State),
-			"event_type": string(agentEvent.Type),
+			"run_id":           agentEvent.RunID,
+			"task_id":          agentEvent.TaskID,
+			"agent_id":         agentEvent.AgentID,
+			"state":            string(agentEvent.State),
+			"agent_event_type": string(agentEvent.Type),
+			"event_created_at": timestamp.Format(time.RFC3339),
 		},
 	}
 	if agentEvent.Payload != nil {
