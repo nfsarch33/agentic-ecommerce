@@ -2,6 +2,7 @@ package eventbus
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -9,16 +10,20 @@ import (
 )
 
 type mockRedisStreamer struct {
-	mu          sync.Mutex
-	xaddCalls   []XAddArgs
-	xgroupCalls []string
-	xreadCalls  int
-	xackCalls   []mockXAckCall
-	xreadResult []XStream
-	xreadErr    error
-	pingCalled  bool
-	pingErr     error
-	closeCalled bool
+	mu           sync.Mutex
+	xaddCalls    []XAddArgs
+	xgroupCalls  []string
+	xreadCalls   int
+	xreadArgs    []XReadGroupArgs
+	xackCalls    []mockXAckCall
+	xclaimCalls  []XAutoClaimArgs
+	xreadResult  []XStream
+	xreadErr     error
+	xclaimResult []XStream
+	xclaimErr    error
+	pingCalled   bool
+	pingErr      error
+	closeCalled  bool
 }
 
 type mockXAckCall struct {
@@ -41,14 +46,27 @@ func (m *mockRedisStreamer) XGroupCreateMkStream(_ context.Context, stream, grou
 	return nil
 }
 
-func (m *mockRedisStreamer) XReadGroup(_ context.Context, _ XReadGroupArgs) ([]XStream, error) {
+func (m *mockRedisStreamer) XReadGroup(_ context.Context, args XReadGroupArgs) ([]XStream, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.xreadCalls++
+	m.xreadArgs = append(m.xreadArgs, args)
 	if m.xreadErr != nil {
 		return nil, m.xreadErr
 	}
 	return m.xreadResult, nil
+}
+
+func (m *mockRedisStreamer) XAutoClaim(_ context.Context, args XAutoClaimArgs) ([]XStream, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.xclaimCalls = append(m.xclaimCalls, args)
+	if m.xclaimErr != nil {
+		return nil, m.xclaimErr
+	}
+	result := m.xclaimResult
+	m.xclaimResult = nil
+	return result, nil
 }
 
 func (m *mockRedisStreamer) XAck(_ context.Context, stream, group string, ids ...string) error {
@@ -116,6 +134,41 @@ func TestStreamsPublisher_Publish(t *testing.T) {
 	}
 	if call.Values["source"] != "unit-test" {
 		t.Errorf("source = %v, want unit-test", call.Values["source"])
+	}
+	if call.Values["idempotency_key"] != "evt-100" {
+		t.Errorf("idempotency_key = %v, want evt-100", call.Values["idempotency_key"])
+	}
+}
+
+func TestStreamsPublisher_PublishGeneratesIDBeforeMarshallingPayload(t *testing.T) {
+	mock := &mockRedisStreamer{}
+	pub := NewStreamsPublisher(mock, StreamsConfig{StreamPrefix: "test:events"})
+
+	event := Event{
+		Type:      ProductCreated,
+		TenantID:  "tenant-x",
+		Payload:   map[string]any{"sku": "ABC"},
+		Timestamp: time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC),
+		Source:    "unit-test",
+	}
+	if err := pub.Publish(context.Background(), event); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	call := mock.xaddCalls[0]
+	id, ok := call.Values["id"].(string)
+	if !ok || id == "" {
+		t.Fatalf("id = %v, want generated id", call.Values["id"])
+	}
+	if call.Values["idempotency_key"] != id {
+		t.Fatalf("idempotency_key = %v, want generated id %s", call.Values["idempotency_key"], id)
+	}
+	var payload Event
+	if err := json.Unmarshal([]byte(call.Values["payload"].(string)), &payload); err != nil {
+		t.Fatalf("payload json: %v", err)
+	}
+	if payload.ID != id {
+		t.Fatalf("payload id = %q, want generated id %q", payload.ID, id)
 	}
 }
 
@@ -237,6 +290,50 @@ func TestStreamsConsumer_HandlerFailureNoAck(t *testing.T) {
 				t.Error("should not ack message when handler fails")
 			}
 		}
+	}
+}
+
+func TestStreamsConsumer_ReclaimsPendingMessagesAndAcksOnSuccess(t *testing.T) {
+	mock := &mockRedisStreamer{
+		xclaimResult: []XStream{
+			{
+				Stream: "test:events:product.created",
+				Messages: []XMessage{
+					{ID: "1-1", Values: map[string]any{
+						"payload": `{"id":"e1","type":"product.created","tenant_id":"t1","payload":{},"timestamp":"2026-05-07T12:00:00Z","source":"test"}`,
+					}},
+				},
+			},
+		},
+	}
+	cfg := StreamsConfig{
+		StreamPrefix:  "test:events",
+		ConsumerGroup: "workers",
+		ConsumerID:    "w1",
+		ClaimMinIdle:  time.Millisecond,
+	}
+	consumer := NewStreamsConsumer(mock, cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_ = consumer.Subscribe(ctx, []EventType{ProductCreated}, "workers", func(_ context.Context, _ Event) error {
+		return nil
+	})
+
+	time.Sleep(250 * time.Millisecond)
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if len(mock.xclaimCalls) == 0 {
+		t.Fatal("expected pending message reclaim via XAUTOCLAIM")
+	}
+	call := mock.xclaimCalls[0]
+	if call.Stream != "test:events:product.created" || call.Group != "workers" || call.Consumer != "w1" {
+		t.Fatalf("xautoclaim call = %+v", call)
+	}
+	if len(mock.xackCalls) == 0 || mock.xackCalls[0].IDs[0] != "1-1" {
+		t.Fatalf("xack calls = %+v, want ack of reclaimed message 1-1", mock.xackCalls)
 	}
 }
 

@@ -178,6 +178,12 @@ func pingRedisStreams(ctx context.Context, addr, db string) error {
 	if err := readRedisSimpleResponse(rw.Reader, "PONG"); err != nil {
 		return fmt.Errorf("eventbus ping: %w", err)
 	}
+	if err := redisCommand(rw, "XINFO", "HELP"); err != nil {
+		return err
+	}
+	if err := readRedisNonErrorResponse(rw.Reader); err != nil {
+		return fmt.Errorf("eventbus streams: %w", err)
+	}
 	return nil
 }
 
@@ -239,6 +245,21 @@ func readRedisSimpleResponse(r *bufio.Reader, want string) error {
 		return fmt.Errorf("redis error: %s", strings.TrimPrefix(line, "-"))
 	}
 	return fmt.Errorf("redis response %q, want +%s", line, want)
+}
+
+func readRedisNonErrorResponse(r *bufio.Reader) error {
+	line, err := r.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+	if strings.HasPrefix(line, "-") {
+		return fmt.Errorf("redis error: %s", strings.TrimPrefix(line, "-"))
+	}
+	if line == "" {
+		return errors.New("empty redis response")
+	}
+	return nil
 }
 
 func parseDurationEnv(key string, fallback time.Duration) time.Duration {

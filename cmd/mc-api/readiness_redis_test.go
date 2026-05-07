@@ -41,6 +41,40 @@ func TestPingRedisSelectsConfiguredDatabaseAndPings(t *testing.T) {
 	}
 }
 
+func TestPingRedisStreamsChecksXInfoSupport(t *testing.T) {
+	t.Parallel()
+
+	commands := make(chan []string, 3)
+	addr := startReadinessRedisServer(t, func(cmd []string) string {
+		commands <- cmd
+		switch cmd[0] {
+		case "SELECT":
+			return "+OK\r\n"
+		case "PING":
+			return "+PONG\r\n"
+		case "XINFO":
+			return "*1\r\n$4\r\nHELP\r\n"
+		default:
+			return "-ERR unexpected command\r\n"
+		}
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	if err := pingRedisStreams(ctx, addr, "5"); err != nil {
+		t.Fatalf("pingRedisStreams: %v", err)
+	}
+	if got := nextReadinessCommand(t, commands); len(got) != 2 || got[0] != "SELECT" || got[1] != "5" {
+		t.Fatalf("select command = %#v", got)
+	}
+	if got := nextReadinessCommand(t, commands); len(got) != 1 || got[0] != "PING" {
+		t.Fatalf("ping command = %#v", got)
+	}
+	if got := nextReadinessCommand(t, commands); len(got) != 2 || got[0] != "XINFO" || got[1] != "HELP" {
+		t.Fatalf("xinfo command = %#v", got)
+	}
+}
+
 func TestPingRedisRejectsInvalidDatabaseBeforeCommands(t *testing.T) {
 	t.Parallel()
 
@@ -140,4 +174,15 @@ func readReadinessRedisCommand(reader *bufio.Reader) ([]string, error) {
 		out = append(out, string(buf[:size]))
 	}
 	return out, nil
+}
+
+func nextReadinessCommand(t *testing.T, commands <-chan []string) []string {
+	t.Helper()
+	select {
+	case cmd := <-commands:
+		return cmd
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("timed out waiting for Redis readiness command")
+		return nil
+	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	orderdomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/order"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 )
 
@@ -151,6 +152,20 @@ func TestProductRepository_CreateWithTenant(t *testing.T) {
 	}
 }
 
+func TestProductRepository_CreateWithTenantRejectsMissingTenant(t *testing.T) {
+	store := &mockProductStore{}
+	repo := &ProductRepository{pool: store}
+	product := testTenantProduct(t)
+
+	err := repo.CreateWithTenant(context.Background(), product, " ")
+	if err == nil {
+		t.Fatal("CreateWithTenant accepted a missing tenant")
+	}
+	if len(store.execCalls) != 0 {
+		t.Fatalf("exec calls = %d, want 0 when tenant is missing", len(store.execCalls))
+	}
+}
+
 func TestProductRepository_ListByTenant(t *testing.T) {
 	id1 := uuid.New()
 	now := time.Now().UTC()
@@ -196,6 +211,24 @@ func TestProductRepository_ListByTenant(t *testing.T) {
 	}
 }
 
+func TestProductRepository_ListByTenantRejectsMissingTenant(t *testing.T) {
+	store := &mockProductStore{
+		rowResult: &mockRow{scanFn: func(_ ...any) error {
+			t.Fatal("ListByTenant should fail before querying when tenant is missing")
+			return nil
+		}},
+	}
+	repo := &ProductRepository{pool: store}
+
+	_, err := repo.ListByTenant(context.Background(), "", 1, 20)
+	if err == nil {
+		t.Fatal("ListByTenant accepted a missing tenant")
+	}
+	if len(store.queryRowCalls) != 0 || len(store.queryCalls) != 0 {
+		t.Fatalf("query calls = row:%d list:%d, want none", len(store.queryRowCalls), len(store.queryCalls))
+	}
+}
+
 func TestProductRepository_GetByIDAndTenant_NotFound(t *testing.T) {
 	store := &mockProductStore{
 		rowResult: &mockRow{scanFn: func(_ ...any) error {
@@ -210,6 +243,38 @@ func TestProductRepository_GetByIDAndTenant_NotFound(t *testing.T) {
 	}
 }
 
+func TestProductRepository_GetByIDAndTenantRejectsMissingTenant(t *testing.T) {
+	store := &mockProductStore{
+		rowResult: &mockRow{scanFn: func(_ ...any) error {
+			t.Fatal("GetByIDAndTenant should fail before querying when tenant is missing")
+			return nil
+		}},
+	}
+	repo := &ProductRepository{pool: store}
+
+	_, err := repo.GetByIDAndTenant(context.Background(), uuid.New(), "")
+	if err == nil {
+		t.Fatal("GetByIDAndTenant accepted a missing tenant")
+	}
+	if len(store.queryRowCalls) != 0 {
+		t.Fatalf("query row calls = %d, want 0", len(store.queryRowCalls))
+	}
+}
+
+func TestOrderRepository_CreateWithTenantRejectsMissingTenant(t *testing.T) {
+	store := &mockProductStore{}
+	repo := &OrderRepository{pool: store}
+	order := testTenantOrder(t)
+
+	err := repo.CreateWithTenant(context.Background(), order, "")
+	if err == nil {
+		t.Fatal("CreateWithTenant accepted a missing tenant")
+	}
+	if len(store.execCalls) != 0 {
+		t.Fatalf("exec calls = %d, want 0 when tenant is missing", len(store.execCalls))
+	}
+}
+
 func TestTenantProductRepository_Interface(t *testing.T) {
 	store := &mockProductStore{}
 	repo := &ProductRepository{pool: store}
@@ -220,4 +285,44 @@ func TestTenantOrderRepository_Interface(t *testing.T) {
 	store := &mockProductStore{}
 	repo := &OrderRepository{pool: store}
 	var _ port.TenantOrderRepository = repo
+}
+
+func testTenantProduct(t *testing.T) catalog.Product {
+	t.Helper()
+	price, _ := catalog.NewMoney(1999, "AUD")
+	product, err := catalog.NewProduct(catalog.ProductInput{
+		SKU:    "TEST-SKU",
+		Title:  "Test Product",
+		Slug:   "test-product",
+		Price:  price,
+		Stock:  10,
+		Status: catalog.StatusDraft,
+	})
+	if err != nil {
+		t.Fatalf("new product: %v", err)
+	}
+	return product
+}
+
+func testTenantOrder(t *testing.T) orderdomain.Order {
+	t.Helper()
+	price, _ := catalog.NewMoney(1000, "AUD")
+	order, err := orderdomain.NewOrder(orderdomain.OrderInput{
+		CustomerEmail: "shopper@example.com",
+		Items: []orderdomain.OrderItemInput{
+			{ProductID: uuid.New(), SKU: "SKU-1", Title: "Product", Quantity: 1, UnitPrice: price},
+		},
+		ShippingAddress: orderdomain.ShippingAddress{
+			Name:       "Jane Shopper",
+			Line1:      "1 Market Street",
+			City:       "Sydney",
+			Region:     "NSW",
+			PostalCode: "2000",
+			Country:    "AU",
+		},
+	})
+	if err != nil {
+		t.Fatalf("new order: %v", err)
+	}
+	return order
 }
