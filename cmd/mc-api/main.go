@@ -111,6 +111,7 @@ type server struct {
 	eventBus          eventHistory
 	syncEngine        *enginesync.Engine
 	contentAgent      contentGenerator
+	workflowClient    temporalWorkflowClient
 	agentRegistry     *orchestrator.Registry
 	agentScheduler    *orchestrator.Scheduler
 	webhookSecret     string
@@ -300,6 +301,11 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	if otelEnabled {
 		configureTelemetry()
 	}
+	temporalAddr := getenv("ECOMMERCE_TEMPORAL_ADDR", "")
+	workflowClient, workflowCleanup := newTemporalWorkflowClient(logger, temporalAddr)
+	if workflowCleanup != nil {
+		cleanup = append(cleanup, workflowCleanup)
+	}
 	registry := defaultAgentRegistry()
 	srv := &server{
 		cfg: serverConfig{
@@ -326,6 +332,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		eventBus:       eventbus.NewInMemoryBus(),
 		syncEngine:     enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
 		contentAgent:   generator,
+		workflowClient: workflowClient,
 		agentRegistry:  registry,
 		agentScheduler: orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), orchestrator.NewEventRecorder(), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
 		webhookSecret:  webhookSecret,
@@ -405,6 +412,9 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/agent-runs/", agentRunsAPI)
 	eventsAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.recentEventsHandler)))
 	mux.HandleFunc("/api/v1/events/recent", eventsAPI)
+	workflowsAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.withAudit(workflowAuditAction, s.workflowsHandler))))
+	mux.HandleFunc("/api/v1/workflows/product-publish", workflowsAPI)
+	mux.HandleFunc("/api/v1/workflows/", workflowsAPI)
 
 	return s.withSecurityHeaders(s.withTelemetry(s.withRequestLogging(mux)))
 }

@@ -1015,6 +1015,132 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/workflows/product-publish:
+    post:
+      summary: Start the ProductPublishWorkflow
+      operationId: startProductPublishWorkflow
+      description: Starts the canonical Temporal workflow that checks compliance, validates media, waits for human review, and publishes to WooCommerce.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartProductPublishWorkflowRequest'
+      responses:
+        '202':
+          description: Temporal workflow execution accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowStartResponse'
+        '400':
+          description: Invalid JSON body or product ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporal client is not configured for the API process.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Temporal rejected the workflow start request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/workflows/{id}:
+    get:
+      summary: Get Temporal workflow status
+      operationId: getWorkflowStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Temporal workflow execution status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowStatusResponse'
+        '404':
+          description: Workflow execution was not found in Temporal visibility.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporal client is not configured for the API process.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Temporal describe request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/workflows/{id}/signals/review:
+    post:
+      summary: Signal ProductPublishWorkflow human review
+      operationId: signalProductPublishReview
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductPublishReviewSignal'
+      responses:
+        '202':
+          description: Review signal accepted by Temporal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          description: Invalid JSON body or workflow ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporal client is not configured for the API process.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Temporal signal request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -1681,6 +1807,57 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrderItemInput'
+    StartProductPublishWorkflowRequest:
+      type: object
+      required: [product_id]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        requested_by:
+          type: string
+          description: Operator identity recorded in workflow audit events.
+    WorkflowStartResponse:
+      type: object
+      required: [workflow_id, run_id, status, task_queue]
+      properties:
+        workflow_id:
+          type: string
+        run_id:
+          type: string
+        status:
+          type: string
+          enum: [started]
+        task_queue:
+          type: string
+          enum: [ec-workflows]
+    WorkflowStatusResponse:
+      type: object
+      required: [workflow_id, status]
+      properties:
+        workflow_id:
+          type: string
+        run_id:
+          type: string
+        status:
+          type: string
+          enum: [unspecified, running, completed, failed, canceled, terminated, continued_as_new, timed_out]
+        start_time:
+          type: string
+          format: date-time
+        close_time:
+          type: string
+          format: date-time
+    ProductPublishReviewSignal:
+      type: object
+      required: [approved]
+      properties:
+        approved:
+          type: boolean
+        reviewer:
+          type: string
+        note:
+          type: string
     StatusResponse:
       type: object
       required: [status]
