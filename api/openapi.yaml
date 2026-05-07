@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agentic Ecommerce Mission Control API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     Public contract for the Agentic Ecommerce Go backend consumed by
     agentic-ecommerce-web. This spec intentionally excludes private
@@ -314,6 +314,97 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/products/{id}/compliance-check:
+    post:
+      summary: Run product content compliance checks
+      operationId: checkProductCompliance
+      description: Runs deterministic compliance rules before product publish. This endpoint does not call live AI services.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceCheckRequest'
+      responses:
+        '200':
+          description: Compliance check result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceCheckResponse'
+        '400':
+          description: Invalid JSON body or product ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/products/{id}/seo-suggestions:
+    post:
+      summary: Generate deterministic SEO suggestions
+      operationId: suggestProductSEO
+      description: Generates SEO title, meta description, slug, keyword density, and score without live AI calls.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SEOSuggestionRequest'
+      responses:
+        '200':
+          description: SEO suggestion result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SEOSuggestionResponse'
+        '400':
+          description: Invalid JSON body or product ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/compliance/rules:
+    get:
+      summary: List built-in compliance rules
+      operationId: listComplianceRules
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Built-in compliance rules
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceRulesResponse'
   /api/v1/orders:
     post:
       summary: Create an order
@@ -1024,6 +1115,129 @@ components:
           minimum: 0
         evaluation:
           $ref: '#/components/schemas/ContentEvaluation'
+    ComplianceCheckRequest:
+      type: object
+      properties:
+        keywords:
+          type: array
+          items:
+            type: string
+        seo_title:
+          type: string
+          maxLength: 60
+        meta_description:
+          type: string
+          maxLength: 155
+        seo_score_min:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 70
+        legal_disclaimer:
+          type: string
+    ComplianceCheckResponse:
+      type: object
+      required: [product_id, pass, score, reasons, rule_ids, severity, results]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        pass:
+          type: boolean
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        reasons:
+          type: array
+          items:
+            type: string
+        rule_ids:
+          type: array
+          items:
+            type: string
+        severity:
+          $ref: '#/components/schemas/ComplianceSeverity'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceRuleResult'
+    ComplianceRuleResult:
+      type: object
+      required: [id, pass, score, severity, reasons]
+      properties:
+        id:
+          type: string
+        pass:
+          type: boolean
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        severity:
+          $ref: '#/components/schemas/ComplianceSeverity'
+        reasons:
+          type: array
+          items:
+            type: string
+    ComplianceRuleDescriptor:
+      type: object
+      required: [id, description, severity]
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        severity:
+          $ref: '#/components/schemas/ComplianceSeverity'
+    ComplianceRulesResponse:
+      type: object
+      required: [rules]
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceRuleDescriptor'
+    ComplianceSeverity:
+      type: string
+      enum: [info, warning, error, critical]
+    SEOSuggestionRequest:
+      type: object
+      properties:
+        keywords:
+          type: array
+          items:
+            type: string
+    SEOSuggestionResponse:
+      type: object
+      required: [product_id, title, meta_description, slug, score, keyword_density, pass, reasons]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 60
+        meta_description:
+          type: string
+          maxLength: 155
+        slug:
+          type: string
+          pattern: '^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$'
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        keyword_density:
+          type: object
+          additionalProperties:
+            type: number
+        pass:
+          type: boolean
+        reasons:
+          type: array
+          items:
+            type: string
     ContentEvaluation:
       type: object
       required: [score, pass, readability_score, keyword_density, tone, length, factual_issues]
