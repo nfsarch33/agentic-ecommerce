@@ -19,8 +19,9 @@ var (
 )
 
 type Principal struct {
-	Subject string
-	Role    Role
+	Subject  string
+	Role     Role
+	TenantID string
 }
 
 type TokenConfig struct {
@@ -34,6 +35,7 @@ type TokenConfig struct {
 type AccessClaims struct {
 	Subject   string
 	Role      Role
+	TenantID  string
 	Issuer    string
 	Audience  string
 	IssuedAt  time.Time
@@ -58,6 +60,7 @@ type jwtHeader struct {
 type jwtClaims struct {
 	Subject   string `json:"sub"`
 	Role      string `json:"role"`
+	TenantID  string `json:"tenant_id,omitempty"`
 	Issuer    string `json:"iss"`
 	Audience  string `json:"aud"`
 	IssuedAt  int64  `json:"iat"`
@@ -117,6 +120,7 @@ func (m *TokenManager) MintAccessToken(principal Principal) (string, error) {
 	claims := jwtClaims{
 		Subject:   subject,
 		Role:      string(role),
+		TenantID:  strings.TrimSpace(principal.TenantID),
 		Issuer:    m.issuer,
 		Audience:  m.audience,
 		IssuedAt:  now.Unix(),
@@ -174,6 +178,7 @@ func (m *TokenManager) VerifyAccessToken(token string) (AccessClaims, error) {
 	return AccessClaims{
 		Subject:   raw.Subject,
 		Role:      role,
+		TenantID:  strings.TrimSpace(raw.TenantID),
 		Issuer:    raw.Issuer,
 		Audience:  raw.Audience,
 		IssuedAt:  time.Unix(raw.IssuedAt, 0).UTC(),

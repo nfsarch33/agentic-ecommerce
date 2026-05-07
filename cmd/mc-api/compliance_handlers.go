@@ -6,11 +6,13 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nfsarch33/agentic-ecommerce/internal/compliance"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/seo"
+	tenantpkg "github.com/nfsarch33/agentic-ecommerce/internal/tenant"
 )
 
 type complianceCheckRequest struct {
@@ -69,8 +71,30 @@ func (s *server) complianceCheck(w http.ResponseWriter, r *http.Request, path st
 	if !ok {
 		return
 	}
-	engine := compliance.NewEngine(compliance.DefaultRules())
-	result := engine.Evaluate(r.Context(), compliance.ProductContent{
+	s.ensureTenantServices()
+	tenantID, err := s.tenantIDForRequest(r, false)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+		return
+	}
+	ctx := tenantpkg.WithID(r.Context(), tenantID)
+	settings, _ := s.tenantService.GetSettings(ctx, tenantID)
+	if req.SEOScoreMin == 0 && settings.Compliance.SEOScoreMin > 0 {
+		req.SEOScoreMin = settings.Compliance.SEOScoreMin
+	}
+	rules := compliance.ApplyOverrides(compliance.DefaultRules(), settings.Compliance.DisabledRuleIDs, settings.Compliance.SeverityOverride)
+	if s.customRuleStore != nil {
+		customRules, err := s.customRuleStore.ListCustomRules(ctx, string(tenantID))
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+			return
+		}
+		for _, rule := range customRules {
+			rules = append(rules, rule)
+		}
+	}
+	engine := compliance.NewEngine(rules)
+	result := engine.Evaluate(ctx, compliance.ProductContent{
 		Product:         product,
 		Keywords:        req.Keywords,
 		SEOTitle:        req.SEOTitle,
@@ -78,6 +102,14 @@ func (s *server) complianceCheck(w http.ResponseWriter, r *http.Request, path st
 		SEOScoreMin:     req.SEOScoreMin,
 		LegalDisclaimer: req.LegalDisclaimer,
 	})
+	if s.complianceHistory != nil {
+		_ = s.complianceHistory.RecordEvaluation(ctx, compliance.EvaluationRecord{
+			TenantID:  string(tenantID),
+			ProductID: product.ID().String(),
+			CheckedAt: time.Now().UTC(),
+			Result:    result,
+		})
+	}
 	writeJSON(w, http.StatusOK, complianceCheckResponse{
 		ProductID: product.ID().String(),
 		Pass:      result.Pass,
