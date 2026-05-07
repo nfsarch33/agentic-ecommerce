@@ -77,7 +77,7 @@ jobs:
         run: docker build --build-arg TARGET=content-worker --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }}-content-worker .
 
       - name: Scan mc-api image with Trivy
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: agentic-ecommerce:${{ github.sha }}
           format: table
@@ -87,7 +87,7 @@ jobs:
           exit-code: "1"
 
       - name: Scan wc-sync image with Trivy
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: agentic-ecommerce:${{ github.sha }}-wc-sync
           format: table
@@ -97,7 +97,7 @@ jobs:
           exit-code: "1"
 
       - name: Scan content-worker image with Trivy
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: agentic-ecommerce:${{ github.sha }}-content-worker
           format: table
