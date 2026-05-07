@@ -46,6 +46,12 @@ func TestEventBusAdapter_Emit(t *testing.T) {
 	if evt.Payload["state"] != "succeeded" {
 		t.Errorf("payload.state = %v, want succeeded", evt.Payload["state"])
 	}
+	if evt.Payload["agent_event_type"] != "agent_run_succeeded" {
+		t.Errorf("payload.agent_event_type = %v, want agent_run_succeeded", evt.Payload["agent_event_type"])
+	}
+	if evt.Payload["event_created_at"] == "" {
+		t.Errorf("payload.event_created_at should be populated")
+	}
 }
 
 func TestEventBusAdapter_ImplementsEventSink(t *testing.T) {

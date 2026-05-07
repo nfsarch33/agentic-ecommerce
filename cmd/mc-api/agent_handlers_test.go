@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
+	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 )
 
 func TestReadyz(t *testing.T) {
@@ -123,6 +124,90 @@ func TestAgentRunEndpointSchedulesAndExposesHistory(t *testing.T) {
 	}
 }
 
+func TestAgentRunEndpointPublishesAgentEventToWebhookBridge(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := testServer(t)
+	body := `{
+		"payload": {
+			"sku": "RB-SET",
+			"strategy": "competition_based",
+			"cost_cents": 1800,
+			"shipping_cents": 250,
+			"current_price_cents": 4995,
+			"competitor_prices_cents": [4595, 4895, 5195],
+			"target_margin_pct": 0.45,
+			"minimum_margin_pct": 0.32
+		}
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/pricing/run", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", rec.Code, rec.Body.String())
+	}
+	var submitted agentRunResponse
+	if err := json.NewDecoder(rec.Body).Decode(&submitted); err != nil {
+		t.Fatalf("decode submitted: %v", err)
+	}
+	if _, err := srv.agentScheduler.Wait(req.Context(), submitted.ID); err != nil {
+		t.Fatalf("wait run: %v", err)
+	}
+
+	events := srv.eventBus.Delivered()
+	if !hasAgentRunEvent(events, submitted.ID, "pricing", "agent_run_succeeded") {
+		t.Fatalf("delivered events = %#v, want succeeded agent event for run %s", events, submitted.ID)
+	}
+}
+
+func TestAgentScheduleEndpointsListEnableAndDisable(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := testServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent-schedules", nil)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var list agentSchedulesResponse
+	if err := json.NewDecoder(rec.Body).Decode(&list); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(list.Schedules) < 2 {
+		t.Fatalf("schedules = %#v, want default sourcing and pricing schedules", list.Schedules)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/agent-schedules/pricing-competition-hourly/enable", nil)
+	rec = httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("enable status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var enabled agentScheduleResponse
+	if err := json.NewDecoder(rec.Body).Decode(&enabled); err != nil {
+		t.Fatalf("decode enabled: %v", err)
+	}
+	if !enabled.Schedule.Enabled {
+		t.Fatalf("enabled schedule = %#v", enabled.Schedule)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/agent-schedules/pricing-competition-hourly/disable", nil)
+	rec = httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("disable status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var disabled agentScheduleResponse
+	if err := json.NewDecoder(rec.Body).Decode(&disabled); err != nil {
+		t.Fatalf("decode disabled: %v", err)
+	}
+	if disabled.Schedule.Enabled {
+		t.Fatalf("disabled schedule = %#v", disabled.Schedule)
+	}
+}
+
 func TestAgentRunEndpointRejectsMissingAgent(t *testing.T) {
 	t.Parallel()
 
@@ -134,4 +219,16 @@ func TestAgentRunEndpointRejectsMissingAgent(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
 	}
+}
+
+func hasAgentRunEvent(events []eventbus.Event, runID, agentID, agentEventType string) bool {
+	for _, event := range events {
+		if event.Type != eventbus.AgentRunCompleted {
+			continue
+		}
+		if event.Payload["run_id"] == runID && event.Payload["agent_id"] == agentID && event.Payload["agent_event_type"] == agentEventType {
+			return true
+		}
+	}
+	return false
 }

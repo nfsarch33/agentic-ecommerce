@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 )
@@ -52,6 +53,16 @@ type startMediaProcessingWorkflowRequest struct {
 	Resize           intelligence.ResizeOptions `json:"resize,omitempty"`
 	Format           string                     `json:"format,omitempty"`
 	RemoveBackground bool                       `json:"remove_background,omitempty"`
+}
+
+type startSourcingWorkflowRequest struct {
+	SKU                     string                    `json:"sku"`
+	Query                   string                    `json:"query,omitempty"`
+	EstimatedSellPriceCents int                       `json:"estimated_sell_price_cents"`
+	MinimumMarginPct        float64                   `json:"minimum_margin_pct"`
+	RequestedBy             string                    `json:"requested_by,omitempty"`
+	CandidateLimit          int                       `json:"candidate_limit,omitempty"`
+	Candidates              []sourcingagent.Candidate `json:"candidates,omitempty"`
 }
 
 type workflowStartResponse struct {
@@ -103,6 +114,8 @@ func (s *server) workflowsHandler(w http.ResponseWriter, r *http.Request) {
 		s.startContentGenerationWorkflow(w, r)
 	case path == "media-processing" && r.Method == http.MethodPost:
 		s.startMediaProcessingWorkflow(w, r)
+	case path == "sourcing" && r.Method == http.MethodPost:
+		s.startSourcingWorkflow(w, r)
 	case strings.HasSuffix(path, "/signals/review") && r.Method == http.MethodPost:
 		s.signalProductPublishReview(w, r, path)
 	case path != "" && r.Method == http.MethodGet:
@@ -110,6 +123,56 @@ func (s *server) workflowsHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 	}
+}
+
+func (s *server) startSourcingWorkflow(w http.ResponseWriter, r *http.Request) {
+	if s.workflowClient == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporal_not_configured"})
+		return
+	}
+	var req startSourcingWorkflowRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		return
+	}
+	sku := strings.TrimSpace(req.SKU)
+	if sku == "" {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "sku_required"})
+		return
+	}
+	if len(req.Candidates) == 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "candidates_required"})
+		return
+	}
+	input := ecworkflow.SourcingWorkflowInput{
+		Search: ecworkflow.SourcingSearchInput{
+			SKU:                     sku,
+			Query:                   strings.TrimSpace(req.Query),
+			EstimatedSellPriceCents: req.EstimatedSellPriceCents,
+			CandidateLimit:          req.CandidateLimit,
+			Candidates:              req.Candidates,
+		},
+		MinimumMarginPct: req.MinimumMarginPct,
+		RequestedBy:      req.RequestedBy,
+	}
+	workflowID := fmt.Sprintf("sourcing-%s-%s", sanitizeWorkflowIDPart(input.Search.SKU), uuid.NewString())
+	run, err := s.workflowClient.ExecuteWorkflow(
+		r.Context(),
+		client.StartWorkflowOptions{ID: workflowID, TaskQueue: ecworkflow.TaskQueue},
+		ecworkflow.SourcingWorkflow,
+		input,
+	)
+	if err != nil {
+		s.log.Error("start sourcing workflow", "sku", input.Search.SKU, "error", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "workflow_start_failed"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, workflowStartResponse{
+		WorkflowID: run.GetID(),
+		RunID:      run.GetRunID(),
+		Status:     "started",
+		TaskQueue:  ecworkflow.TaskQueue,
+	})
 }
 
 func (s *server) startMediaProcessingWorkflow(w http.ResponseWriter, r *http.Request) {
