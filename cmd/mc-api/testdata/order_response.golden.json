@@ -1,0 +1,46 @@
+{
+  "created_at": "2026-05-07T00:00:00Z",
+  "customer_email": "shopper@example.com",
+  "id": "00000000-0000-0000-0000-000000000000",
+  "items": [
+    {
+      "line_total": {
+        "amount": 2495,
+        "currency": "AUD"
+      },
+      "product_id": "c1000000-0000-0000-0000-000000000001",
+      "quantity": 1,
+      "sku": "BAND-001",
+      "title": "Resistance Band",
+      "unit_price": {
+        "amount": 2495,
+        "currency": "AUD"
+      }
+    }
+  ],
+  "shipping_address": {
+    "city": "Sydney",
+    "country": "AU",
+    "line1": "1 Market Street",
+    "name": "Jane Shopper",
+    "postal_code": "2000",
+    "region": "NSW"
+  },
+  "status": "pending",
+  "totals": {
+    "shipping": {
+      "amount": 0,
+      "currency": "AUD"
+    },
+    "subtotal": {
+      "amount": 2495,
+      "currency": "AUD"
+    },
+    "total": {
+      "amount": 2495,
+      "currency": "AUD"
+    }
+  },
+  "updated_at": "2026-05-07T00:00:00Z"
+}
+
