@@ -1770,7 +1770,7 @@ components:
           type: string
         status:
           type: string
-          enum: [supported, unsupported]
+          enum: [supported, unsupported, contradicted, ambiguous]
         confidence:
           type: number
           minimum: 0
