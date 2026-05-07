@@ -33,6 +33,23 @@ func TestSignerAddsDeterministicHMACHeaders(t *testing.T) {
 	}
 }
 
+func TestSignerCanonicalizesTimestampAndRawBodyBytes(t *testing.T) {
+	t.Parallel()
+
+	signer := NewSigner("whsec_test")
+	ts := time.Date(2026, 5, 8, 3, 4, 5, 987654321, time.FixedZone("AEST", 10*60*60))
+
+	headersA := signer.Sign("webhook-1", ts, []byte(`{"a":1,"b":2}`))
+	headersB := signer.Sign("webhook-1", ts.UTC(), []byte(`{"b":2,"a":1}`))
+
+	if got := headersA.Get("X-EC-Webhook-Timestamp"); got != "1778173445" {
+		t.Fatalf("timestamp header = %q, want UTC unix seconds", got)
+	}
+	if headersA.Get("X-EC-Webhook-Signature") == headersB.Get("X-EC-Webhook-Signature") {
+		t.Fatal("signatures matched for different raw JSON byte order")
+	}
+}
+
 func TestSignerDoesNotExposeSecretInHeaderValues(t *testing.T) {
 	t.Parallel()
 

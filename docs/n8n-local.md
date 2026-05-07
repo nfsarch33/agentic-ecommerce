@@ -63,13 +63,30 @@ Then import either JSON file from the n8n UI:
 - `deploy/n8n/workflows/product-approved-slack-notification.json`
 - `deploy/n8n/workflows/order-placed-email-confirmation.json`
 
-Both templates are inactive by default and contain no `credentials` entries. The
-Slack example posts to `{{$env.SLACK_WEBHOOK_URL}}`. The order confirmation
-example posts to `{{$env.ORDER_EMAIL_ENDPOINT_URL}}`, which can point to a local
-SMTP bridge or transactional email proxy when you are ready to test delivery.
+Both templates are inactive by default, contain no `credentials` entries, and
+acknowledge the backend webhook request through a Respond to Webhook node. The
+checked-in validator also verifies that each Webhook trigger is connected, each
+HTTP Request node uses an environment placeholder URL, and no live provider URLs
+or tokens are present.
+
+After import, inspect the generated local webhook URL in n8n before registering
+it with the backend. The template paths are:
+
+- `product-approved`
+- `order-placed`
+
+The Slack example posts to `{{$env.SLACK_WEBHOOK_URL}}`, populated in compose by
+`N8N_SLACK_WEBHOOK_URL`. The order confirmation example posts to
+`{{$env.ORDER_EMAIL_ENDPOINT_URL}}`, populated by
+`N8N_ORDER_EMAIL_ENDPOINT_URL`. During QA, point those variables only at local
+mock receivers such as `httptest`, `nc`-style local listeners, or a local SMTP
+bridge. Do not use Slack, SMTP, n8n Cloud, or other credentialed destinations.
 
 After the backend webhook bridge lands, register the active n8n webhook URLs
 there instead of hard-coding backend or provider endpoints into workflow JSON.
+Use a per-registration secret and keep it in your local environment or secret
+manager; the backend API returns only `secret_hash` and never echoes the raw
+secret.
 
 ## Security Boundaries
 
