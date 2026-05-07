@@ -62,7 +62,7 @@ curl http://127.0.0.1:8080/readyz
 make redis-ping
 ```
 
-The stack runs PostgreSQL, Redis 7, and `mc-api` with published ports bound to `127.0.0.1` by default. `/healthz` is a liveness check only. `/readyz` gates configured dependencies by pinging `ECOMMERCE_DB_URL` and `ECOMMERCE_REDIS_ADDR`; unset dependencies are reported as skipped so local in-memory tests stay lightweight. Redis is exposed to `mc-api` as `ECOMMERCE_REDIS_ADDR=redis:6379`; host tools can use `ECOMMERCE_REDIS_ADDR=127.0.0.1:6379`.
+The stack runs PostgreSQL, Redis 7, and `mc-api` with published ports bound to `127.0.0.1` by default. `/healthz` is a liveness check only. `/readyz` gates configured dependencies by pinging `ECOMMERCE_DB_URL` and `ECOMMERCE_REDIS_ADDR`; unset dependencies are reported as skipped so local in-memory tests stay lightweight. PostgreSQL readiness uses explicit pgxpool settings (`ECOMMERCE_DB_POOL_MAX_CONNS`, `ECOMMERCE_DB_POOL_MIN_CONNS`, `ECOMMERCE_DB_POOL_MAX_CONN_LIFETIME`, `ECOMMERCE_DB_POOL_MAX_CONN_IDLE_TIME`, `ECOMMERCE_DB_CONNECT_TIMEOUT`) so cloud tasks can stay within managed database connection budgets. Redis is exposed to `mc-api` as `ECOMMERCE_REDIS_ADDR=redis:6379`; host tools can use `ECOMMERCE_REDIS_ADDR=127.0.0.1:6379`.
 
 PostgreSQL uses the `pgvector/pgvector:pg16` image in both compose files. For
 v1.3.0 RAG infra work, apply deterministic fixtures and validate vector search
@@ -104,7 +104,7 @@ curl http://127.0.0.1:8080/readyz
 curl http://127.0.0.1:8080/metrics
 ```
 
-The stack includes `mc-api`, the public `agentic-ecommerce-web` image, PostgreSQL + pgvector, Redis, Prometheus, and Grafana. `mc-api` emits JSON access logs with `request_id`, mirrors `X-Request-ID` on responses, and can enable lightweight OpenTelemetry HTTP spans with `ECOMMERCE_OTEL_ENABLED=true`. Scaffolded `wc-sync`, `content-worker`, and the optional `minimax-openai-bridge` placeholder are behind compose profiles so they do not make live WooCommerce or MiniMax calls by default. See `docs/full-stack-compose.md` for profiles, dashboard URLs, and security boundaries.
+The stack includes `mc-api`, the public `agentic-ecommerce-web` image, PostgreSQL + pgvector, Redis, Prometheus, and Grafana. `mc-api` emits JSON access logs with `request_id`, `trace_id`, `tenant_id`, `actor_id`, `route`, HTTP status, and duration fields, mirrors `X-Request-ID` on responses, and can enable lightweight OpenTelemetry HTTP spans with `ECOMMERCE_OTEL_ENABLED=true`. Scaffolded `wc-sync`, `content-worker`, and the optional `minimax-openai-bridge` placeholder are behind compose profiles so they do not make live WooCommerce or MiniMax calls by default. See `docs/full-stack-compose.md` for profiles, dashboard URLs, and security boundaries.
 
 The optional WooCommerce dev profile adds WordPress, MariaDB, a WP-CLI helper, and the `wc-sync` worker:
 

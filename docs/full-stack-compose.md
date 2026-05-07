@@ -154,15 +154,15 @@ untracked environment files.
 `mc-api` exposes three unauthenticated platform endpoints:
 
 - `/healthz`: liveness only; it does not call Postgres, Redis, WooCommerce, or AI bridges.
-- `/readyz`: readiness; configured `ECOMMERCE_DB_URL` and `ECOMMERCE_REDIS_ADDR` dependencies must pass lightweight checks or the endpoint returns `503`.
+- `/readyz`: readiness; configured `ECOMMERCE_DB_URL` and `ECOMMERCE_REDIS_ADDR` dependencies must pass lightweight checks or the endpoint returns `503` with generic `dependency_failed` or `dependency_timeout` detail.
 - `/metrics`: Prometheus text exposition with build metadata, HTTP request counters/duration buckets, and stack-level placeholders for sync, agent, compliance, and media dashboards.
 - RAG observability stubs expose `agentic_ecommerce_rag_search_duration_seconds`
   and `agentic_ecommerce_embedding_failures_total` so dashboards and alerts can
   be wired before live bridge calls are enabled.
 
-`ECOMMERCE_READINESS_TIMEOUT` defaults to `2s`. Keep it below the load balancer health-check timeout so an unhealthy dependency fails fast. `ECOMMERCE_SHUTDOWN_TIMEOUT` defaults to `10s` and bounds graceful HTTP shutdown after SIGTERM.
+`ECOMMERCE_READINESS_TIMEOUT` defaults to `2s`. Keep it below the load balancer health-check timeout so an unhealthy dependency fails fast. PostgreSQL pool sizing is controlled by `ECOMMERCE_DB_POOL_MAX_CONNS`, `ECOMMERCE_DB_POOL_MIN_CONNS`, `ECOMMERCE_DB_POOL_MAX_CONN_LIFETIME`, `ECOMMERCE_DB_POOL_MAX_CONN_IDLE_TIME`, and `ECOMMERCE_DB_CONNECT_TIMEOUT`; Redis operations use `ECOMMERCE_REDIS_TIMEOUT` when the request has no deadline. `ECOMMERCE_SHUTDOWN_TIMEOUT` defaults to `10s` and bounds graceful HTTP shutdown after SIGTERM.
 
-`mc-api` writes structured JSON access logs with `request_id`, mirrors `X-Request-ID` to every response, and supports optional OpenTelemetry HTTP spans with `ECOMMERCE_OTEL_ENABLED=true`. Probe endpoints are excluded from spans to reduce noise.
+`mc-api` writes structured JSON access logs with `request_id`, `trace_id`, `tenant_id`, `actor_id`, route, status, duration, client IP, and user-agent fields, mirrors `X-Request-ID` to every response, and supports optional OpenTelemetry HTTP spans with `ECOMMERCE_OTEL_ENABLED=true`. Probe endpoints are excluded from spans to reduce noise.
 
 ## Media and Compliance Placeholders
 

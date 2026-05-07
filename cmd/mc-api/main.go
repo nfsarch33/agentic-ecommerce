@@ -104,6 +104,7 @@ type serverConfig struct {
 	rateLimitCapacity int
 	rateLimitRefill   time.Duration
 	readinessTimeout  time.Duration
+	redisTimeout      time.Duration
 	shutdownTimeout   time.Duration
 	otelEnabled       bool
 }
@@ -326,6 +327,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	}
 	webhookSecret := getenv("ECOMMERCE_WC_WEBHOOK_SECRET", "")
 	readinessTimeout := parseDurationEnv("ECOMMERCE_READINESS_TIMEOUT", 2*time.Second)
+	redisTimeout := parseDurationEnv("ECOMMERCE_REDIS_TIMEOUT", 500*time.Millisecond)
 	shutdownTimeout := parseDurationEnv("ECOMMERCE_SHUTDOWN_TIMEOUT", 10*time.Second)
 	jwtSecret, jwtIssuer, jwtAudience, jwtAccessTTL, refreshTTL, adminUsername, adminPassword, adminRole, rateLimitCapacity, rateLimitRefill := securityConfigFromEnv()
 	readinessChecks, cleanup := newReadinessChecksFromEnv(readinessTimeout)
@@ -372,6 +374,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 			rateLimitCapacity: rateLimitCapacity,
 			rateLimitRefill:   rateLimitRefill,
 			readinessTimeout:  readinessTimeout,
+			redisTimeout:      redisTimeout,
 			shutdownTimeout:   shutdownTimeout,
 			otelEnabled:       otelEnabled,
 		},
@@ -758,7 +761,7 @@ func (s *server) withCORS(next http.HandlerFunc) http.HandlerFunc {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID, X-Tenant-ID, Traceparent")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -775,8 +778,14 @@ func (s *server) withRequestLogging(next http.Handler) http.Handler {
 		if requestID == "" {
 			requestID = uuid.NewString()
 		}
+		corr := &requestCorrelation{
+			RequestID: requestID,
+			TenantID:  strings.TrimSpace(r.Header.Get("X-Tenant-ID")),
+		}
 		w.Header().Set("X-Request-ID", requestID)
-		r = r.WithContext(context.WithValue(r.Context(), requestIDContextKey{}, requestID))
+		ctx := context.WithValue(r.Context(), requestIDContextKey{}, requestID)
+		ctx = context.WithValue(ctx, requestCorrelationContextKey{}, corr)
+		r = r.WithContext(ctx)
 
 		rec := &responseStatusRecorder{ResponseWriter: w}
 		next.ServeHTTP(rec, r)
@@ -792,13 +801,29 @@ func (s *server) withRequestLogging(next http.Handler) http.Handler {
 			logger = slog.Default()
 		}
 		attrs := []any{
+			"service", "agentic-ecommerce-mc-api",
 			"request_id", requestID,
+			"route", routePattern(r),
 			"method", r.Method,
+			"http_method", r.Method,
 			"path", r.URL.Path,
+			"http_path", r.URL.Path,
 			"status", status,
+			"http_status", status,
 			"duration_ms", duration.Milliseconds(),
+			"duration_seconds", duration.Seconds(),
+			"client_ip", clientIPFromRequest(r),
 		}
-		if traceID := traceIDFromContext(r.Context()); traceID != "" {
+		if corr.TenantID != "" {
+			attrs = append(attrs, "tenant_id", corr.TenantID)
+		}
+		if corr.ActorID != "" {
+			attrs = append(attrs, "actor_id", corr.ActorID)
+		}
+		if userAgent := strings.TrimSpace(r.UserAgent()); userAgent != "" {
+			attrs = append(attrs, "user_agent", userAgent)
+		}
+		if traceID := traceIDFromRequest(r); traceID != "" {
 			attrs = append(attrs, "trace_id", traceID)
 		}
 		logger.Info("http.request", attrs...)

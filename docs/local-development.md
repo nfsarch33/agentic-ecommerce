@@ -92,11 +92,11 @@ Redis 7 is available at `redis:6379` inside compose and `127.0.0.1:${REDIS_HOST_
 
 `/healthz` remains a liveness check that does not depend on downstream services. `/readyz` is the cloud readiness check:
 
-- PostgreSQL is checked with a lightweight pgxpool ping when `ECOMMERCE_DB_URL` is set.
+- PostgreSQL is checked with a lightweight pgxpool ping when `ECOMMERCE_DB_URL` is set. The pool is tuned by `ECOMMERCE_DB_POOL_MAX_CONNS` (default `10`), `ECOMMERCE_DB_POOL_MIN_CONNS` (default `1`), `ECOMMERCE_DB_POOL_MAX_CONN_LIFETIME` (default `30m`), `ECOMMERCE_DB_POOL_MAX_CONN_IDLE_TIME` (default `5m`), and `ECOMMERCE_DB_CONNECT_TIMEOUT` (default `5s`).
 - Redis is checked with `PING` when `ECOMMERCE_REDIS_ADDR` is set, selecting `ECOMMERCE_REDIS_DB` first when non-zero.
 - Unset dependencies are returned as `skipped` and do not gate readiness.
 
-The readiness timeout is controlled by `ECOMMERCE_READINESS_TIMEOUT` and defaults to `2s`. Graceful HTTP shutdown is bounded by `ECOMMERCE_SHUTDOWN_TIMEOUT`, defaulting to `10s`.
+The readiness timeout is controlled by `ECOMMERCE_READINESS_TIMEOUT` and defaults to `2s`. Redis rate-limit operations use `ECOMMERCE_REDIS_TIMEOUT` and default to `500ms` when the request context has no deadline. Graceful HTTP shutdown is bounded by `ECOMMERCE_SHUTDOWN_TIMEOUT`, defaulting to `10s`.
 
 ## Local Auth and Rate Limits
 
@@ -114,7 +114,7 @@ Rate limiting defaults to `ECOMMERCE_RATE_LIMIT_CAPACITY=60` requests per `ECOMM
 
 ## Request IDs and Traces
 
-Every request gets an `X-Request-ID` response header. If the caller supplies `X-Request-ID`, the backend reuses it; otherwise it generates one and includes the value in structured JSON access logs.
+Every request gets an `X-Request-ID` response header. If the caller supplies `X-Request-ID`, the backend reuses it; otherwise it generates one and includes the value in structured JSON access logs. Access logs also include cloud-friendly correlation fields: `trace_id` from W3C `traceparent` or OpenTelemetry context, `tenant_id` from `X-Tenant-ID`, authenticated `actor_id`, route, HTTP method/status, duration, client IP, and user agent.
 
 Set `ECOMMERCE_OTEL_ENABLED=true` to wrap application routes with OpenTelemetry HTTP instrumentation and W3C trace-context propagation. Health, readiness, and metrics endpoints are excluded from spans to keep probes quiet.
 
