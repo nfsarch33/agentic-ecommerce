@@ -2,40 +2,58 @@
 
 Standalone Go service stack for WooCommerce-first agentic ecommerce.
 
-Current release: **v1.0.0**. See `VERSION`, `CHANGELOG.md`, and `docs/release-checklist.md` for release gates.
+Current release: **v2.0.0**. See `VERSION`, `CHANGELOG.md`, and `docs/release-checklist.md` for release gates.
 
 ## Scope
 
-- Mission Control API spine (`cmd/mc-api`)
+- Mission Control API spine (`cmd/mc-api`) for storefront, admin, tenant, workflow, media, RAG, webhook, and compliance routes
 - WooCommerce sync worker (`cmd/wc-sync`)
-- Content and compliance worker (`cmd/content-worker`)
+- Content, agent, and Temporal workers (`cmd/content-worker`, `cmd/agent-worker`, `cmd/temporal-worker`)
 - Clean Architecture packages under `internal/domain`, `internal/port`, `internal/app`, and `internal/adapter`
 
-This repo starts with WooCommerce cashflow first, then grows into multi-channel catalog, content compliance, Temporal workflows, n8n event automation, and media intelligence.
+The v2.0.0 stack keeps WooCommerce cashflow first while adding durable Temporal workflows, n8n-compatible event automation, Media Intelligence, tenant-aware admin/compliance reporting, and RAG-grounded content generation.
 
 ## Architecture
 
 ```mermaid
 flowchart TB
   Web["agentic-ecommerce-web\nNext.js storefront + admin"]
-  BFF["Frontend BFF routes\n/api/auth/* and /api/ai-describe"]
+  BFF["Frontend BFF\nsession cookies + AI describe"]
   API["mc-api\nGo Mission Control API"]
-  Workers["Workers\nwc-sync, content-worker, agent-worker"]
+  Workers["Workers\nwc-sync, content-worker, agent-worker, temporal-worker"]
+  Temporal["Temporal Server + UI\nworkflow history + signals"]
+  N8N["n8n\nHTTP-triggered automations"]
+  EventBus["Redis Streams\nevent bus + dead-letter"]
+  CCE["CCE in Go\ncompliance, SEO, RAG, fact-check"]
+  MIS["Media Intelligence\nsource, process, QA, store"]
   Postgres["PostgreSQL + pgvector"]
-  Redis["Redis\ncart/session + event bus"]
+  ObjectStore["S3/GCS or filesystem\nmedia assets"]
+  Redis["Redis\ncart/session/cache"]
   Woo["WooCommerce REST API\noperator-approved sync"]
   Bridge["Approved AI bridge\nOpenAI-compatible proxy"]
   Monitoring["Prometheus + Grafana"]
-  Cloud["AWS ECS / GCP Cloud Run\nTerraform dry-run contracts"]
+  Cloud["AWS ECS / GCP Cloud Run\nTemporal, n8n, media placeholders"]
 
+  Web --> API
   Web --> BFF
   BFF --> API
   BFF --> Bridge
   API --> Postgres
   API --> Redis
   API --> Workers
+  API --> CCE
+  API --> MIS
+  API --> EventBus
   Workers --> Woo
+  Workers --> Temporal
+  Workers --> EventBus
+  EventBus --> N8N
+  Temporal --> CCE
+  Temporal --> MIS
   Workers --> Bridge
+  CCE --> Bridge
+  CCE --> Postgres
+  MIS --> ObjectStore
   API --> Monitoring
   Workers --> Monitoring
   API -. image + env contract .-> Cloud
@@ -95,6 +113,9 @@ For the storefront checkout flow, run `agentic-ecommerce-web` separately with `b
 ## API Documentation
 
 - Backend OpenAPI contract: `api/openapi.yaml`.
+- API capability guide: `docs/api-reference.md`.
+- Temporal workflow specs: `docs/temporal-workflow-specs.md`.
+- Webhook contracts: `docs/webhook-contracts.md`.
 - Local API root: `http://127.0.0.1:8080` after `make dev`.
 - Frontend BFF route documentation: `agentic-ecommerce-web/docs/bff-routes.md`.
 
@@ -102,7 +123,7 @@ Regenerate frontend API types from this contract in the frontend repo with `bun 
 
 ## Full Stack Compose
 
-v0.5.0 adds a production-like compose stack for local single-host validation:
+v2.0.0 uses a production-like compose stack for local single-host validation:
 
 ```bash
 cp .env.compose.example .env.compose
@@ -113,7 +134,7 @@ curl http://127.0.0.1:8080/readyz
 curl http://127.0.0.1:8080/metrics
 ```
 
-The stack includes `mc-api`, the public `agentic-ecommerce-web` image, PostgreSQL + pgvector, Redis, Prometheus, and Grafana. `mc-api` emits JSON access logs with `request_id`, `trace_id`, `tenant_id`, `actor_id`, `route`, HTTP status, and duration fields, mirrors `X-Request-ID` on responses, and can enable lightweight OpenTelemetry HTTP spans with `ECOMMERCE_OTEL_ENABLED=true`. Scaffolded `wc-sync`, `content-worker`, and the optional `minimax-openai-bridge` placeholder are behind compose profiles so they do not make live WooCommerce or MiniMax calls by default. See `docs/full-stack-compose.md` for profiles, dashboard URLs, and security boundaries.
+The stack includes `mc-api`, the public `agentic-ecommerce-web` image, PostgreSQL + pgvector, Redis, Prometheus, Grafana, Temporal, n8n, and media object-store placeholders. `mc-api` emits JSON access logs with `request_id`, `trace_id`, `tenant_id`, `actor_id`, `route`, HTTP status, and duration fields, mirrors `X-Request-ID` on responses, and can enable lightweight OpenTelemetry HTTP spans with `ECOMMERCE_OTEL_ENABLED=true`. `wc-sync`, `content-worker`, `agent-worker`, `temporal-worker`, n8n, and the optional `minimax-openai-bridge` placeholder are behind compose profiles so they do not make live WooCommerce, n8n-provider, Temporal-production, or MiniMax calls by default. See `docs/full-stack-compose.md`, `docs/temporal-local.md`, `docs/n8n-local.md`, and `docs/media-storage.md` for profiles, dashboard URLs, and security boundaries.
 
 The optional WooCommerce dev profile adds WordPress, MariaDB, a WP-CLI helper, and the `wc-sync` worker:
 
@@ -127,7 +148,7 @@ WooCommerce plugin installation and REST API key creation are explicit local ste
 
 ## Cloud Deployment
 
-The v1.7.0 cloud-hardening path keeps Docker Compose as the deploy-contract source of truth and provides credential-free Terraform scaffolding for AWS ECS Fargate and GCP Cloud Run under `deploy/terraform/`. See `docs/cloud-deploy.md` for SHA-tagged image promotion, secret-manager mapping, Docker Compose references, database migration workflow, security boundaries, and cloud observability notes, and `docs/cloud-hardening.md` for Temporal, media storage, CDN, and autoscaling contracts.
+The v2.0.0 release keeps Docker Compose as the deploy-contract source of truth and provides credential-free Terraform scaffolding for AWS ECS Fargate and GCP Cloud Run under `deploy/terraform/`. The cloud contracts include Temporal server/worker placeholders, S3/GCS media storage, CDN stubs, secret-manager mappings, n8n boundary notes, database migration workflow, security boundaries, and cloud observability notes. See `docs/cloud-deploy.md` and `docs/cloud-hardening.md`.
 
 ## Gates
 

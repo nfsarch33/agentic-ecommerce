@@ -5,6 +5,9 @@ development. The backend outbound webhook bridge and registration API are owned
 by a separate backend slice; this runbook only covers compose wiring, local n8n
 state, and importable example workflows.
 
+For the v2.0.0 outbound registration API, event envelope, HMAC headers, and
+inbound WooCommerce webhook boundary, see `docs/webhook-contracts.md`.
+
 ## Start n8n
 
 Copy the relevant example environment file, keep `BIND_HOST=127.0.0.1`, then
