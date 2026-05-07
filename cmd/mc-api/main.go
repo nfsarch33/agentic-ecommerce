@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	"github.com/nfsarch33/agentic-ecommerce/internal/security"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 )
@@ -111,6 +113,10 @@ type server struct {
 	eventBus          eventHistory
 	syncEngine        *enginesync.Engine
 	contentAgent      contentGenerator
+	rag               *rag.Service
+	factChecker       *contentagent.FactChecker
+	factChecksMu      sync.RWMutex
+	factChecks        map[string]contentagent.FactCheckResult
 	workflowClient    temporalWorkflowClient
 	agentRegistry     *orchestrator.Registry
 	agentScheduler    *orchestrator.Scheduler
@@ -284,6 +290,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		bridge, err := minimax.NewClient(minimax.Config{
 			BridgeURL:          bridgeURL,
 			Model:              getenv("ECOMMERCE_AI_MODEL", ""),
+			EmbeddingModel:     getenv("ECOMMERCE_AI_EMBEDDING_MODEL", ""),
 			AllowTestLocalhost: getenv("ECOMMERCE_AI_BRIDGE_TEST_MODE", "") == "true",
 		}, nil)
 		if err != nil {
@@ -291,6 +298,11 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		} else {
 			generator = contentagent.NewAgent(bridge)
 		}
+	}
+	var ragService *rag.Service
+	if parseBoolEnv("ECOMMERCE_RAG_ENABLED", false) {
+		dimensions := queryDefaultEmbeddingDimensions()
+		ragService = rag.NewService(rag.NewHashEmbedder(dimensions), rag.NewInMemoryVectorStore(dimensions), rag.ChunkOptions{MaxWords: 180, OverlapWords: 24})
 	}
 	webhookSecret := getenv("ECOMMERCE_WC_WEBHOOK_SECRET", "")
 	readinessTimeout := parseDurationEnv("ECOMMERCE_READINESS_TIMEOUT", 2*time.Second)
@@ -332,6 +344,8 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		eventBus:       eventbus.NewInMemoryBus(),
 		syncEngine:     enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
 		contentAgent:   generator,
+		rag:            ragService,
+		factChecks:     map[string]contentagent.FactCheckResult{},
 		workflowClient: workflowClient,
 		agentRegistry:  registry,
 		agentScheduler: orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), orchestrator.NewEventRecorder(), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
@@ -414,7 +428,14 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/events/recent", eventsAPI)
 	workflowsAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.withAudit(workflowAuditAction, s.workflowsHandler))))
 	mux.HandleFunc("/api/v1/workflows/product-publish", workflowsAPI)
+	mux.HandleFunc("/api/v1/workflows/content-generation", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/", workflowsAPI)
+	ragAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.ragHandler)))
+	mux.HandleFunc("/api/v1/rag/documents", ragAPI)
+	mux.HandleFunc("/api/v1/rag/search", ragAPI)
+	contentAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.contentFactCheckHandler)))
+	mux.HandleFunc("/api/v1/content/generate", contentAPI)
+	mux.HandleFunc("/api/v1/content/fact-checks/", contentAPI)
 
 	return s.withSecurityHeaders(s.withTelemetry(s.withRequestLogging(mux)))
 }
@@ -847,4 +868,16 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func queryDefaultEmbeddingDimensions() int {
+	value := strings.TrimSpace(os.Getenv("ECOMMERCE_RAG_EMBEDDING_DIMENSIONS"))
+	if value == "" {
+		return rag.DefaultEmbeddingDimensions
+	}
+	dimensions, err := strconv.Atoi(value)
+	if err != nil || dimensions <= 0 {
+		return rag.DefaultEmbeddingDimensions
+	}
+	return dimensions
 }
