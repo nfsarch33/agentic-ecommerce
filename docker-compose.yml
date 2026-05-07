@@ -53,7 +53,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${VERSION:-v0.5.0}
+        VERSION: ${VERSION:-v0.6.0}
         COMMIT: ${COMMIT:-local}
         TARGET: mc-api
     read_only: true
@@ -122,7 +122,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${VERSION:-v0.5.0}
+        VERSION: ${VERSION:-v0.6.0}
         COMMIT: ${COMMIT:-local}
         TARGET: wc-sync
     profiles: ["workers", "sync"]
@@ -158,7 +158,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${VERSION:-v0.5.0}
+        VERSION: ${VERSION:-v0.6.0}
         COMMIT: ${COMMIT:-local}
         TARGET: content-worker
     profiles: ["workers"]
@@ -175,6 +175,49 @@ services:
       ECOMMERCE_AI_BRIDGE_URL: ${ECOMMERCE_AI_BRIDGE_URL:-}
       ECOMMERCE_AI_MODEL: ${ECOMMERCE_AI_MODEL:-}
       ECOMMERCE_REDIS_ADDR: redis:6379
+
+  agent-worker:
+    <<: *app-common
+    image: ghcr.io/nfsarch33/agentic-ecommerce:${ECOMMERCE_IMAGE_TAG:-dev}-agent-worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-v0.6.0}
+        COMMIT: ${COMMIT:-local}
+        TARGET: agent-worker
+    profiles: ["workers"]
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ECOMMERCE_AGENT_WORKER_ENABLED: ${ECOMMERCE_AGENT_WORKER_ENABLED:-true}
+      ECOMMERCE_AGENT_WORKER_RUN_ONCE: ${ECOMMERCE_AGENT_WORKER_RUN_ONCE:-false}
+      ECOMMERCE_AGENT_WORKER_CONCURRENCY: ${ECOMMERCE_AGENT_WORKER_CONCURRENCY:-1}
+      ECOMMERCE_AGENT_WORKER_INTERVAL: ${ECOMMERCE_AGENT_WORKER_INTERVAL:-5m}
+      ECOMMERCE_AGENT_WORKER_METRICS_ADDR: 0.0.0.0:8081
+      ECOMMERCE_DB_URL: postgres://${POSTGRES_USER:-ecommerce}:${POSTGRES_PASSWORD:-change-me-postgres}@postgres:5432/${POSTGRES_DB:-ecommerce}?sslmode=disable
+      ECOMMERCE_REDIS_ADDR: redis:6379
+      ECOMMERCE_REDIS_DB: ${ECOMMERCE_REDIS_DB:-0}
+      ECOMMERCE_REDIS_KEY_PREFIX: ${ECOMMERCE_REDIS_KEY_PREFIX:-ec:prod:}
+      ECOMMERCE_EVENTBUS_DRIVER: ${ECOMMERCE_EVENTBUS_DRIVER:-redis}
+      ECOMMERCE_EVENTBUS_REDIS_ADDR: redis:6379
+      ECOMMERCE_EVENTBUS_REDIS_DB: ${ECOMMERCE_EVENTBUS_REDIS_DB:-0}
+      ECOMMERCE_EVENTBUS_CHANNEL_SYNC: ${ECOMMERCE_EVENTBUS_CHANNEL_SYNC:-ec.sync.events}
+      ECOMMERCE_EVENTBUS_CHANNEL_DLQ: ${ECOMMERCE_EVENTBUS_CHANNEL_DLQ:-ec.sync.deadletter}
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${AGENT_WORKER_METRICS_HOST_PORT:-8082}:8081"
+    healthcheck:
+      test: ["CMD", "/app", "healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   minimax-openai-bridge:
     image: ghcr.io/nfsarch33/minimax-openai-bridge:${MINIMAX_BRIDGE_IMAGE_TAG:-main}

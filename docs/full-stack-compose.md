@@ -12,6 +12,7 @@ This stack is production-like for local and single-host validation. It keeps pub
 - `grafana`: provisions the Prometheus datasource and the Agentic Ecommerce overview dashboard.
 - `wc-sync`: one-shot WooCommerce sync worker under the `workers` or `sync` profile. It defaults to dry-run mode.
 - `content-worker`: scaffold content worker under the `workers` profile.
+- `agent-worker`: v0.6.0 scheduler runtime placeholder under the `workers` profile. It exposes `/healthz` and `/metrics` on container port `8081` and is ready for the backend orchestrator package to replace its TODO scheduler hook.
 - `minimax-openai-bridge`: optional placeholder under the `ai-bridge` profile. Real keys must come from local secret management, never from committed files.
 
 ## Bring-Up
@@ -29,7 +30,9 @@ Grafana is available at `http://127.0.0.1:${GRAFANA_HOST_PORT:-3001}`. Prometheu
 Run scaffolded workers explicitly:
 
 ```bash
-docker compose --env-file .env.compose -f docker-compose.yml --profile workers up --build wc-sync content-worker
+docker compose --env-file .env.compose -f docker-compose.yml --profile workers up --build wc-sync content-worker agent-worker
+curl http://127.0.0.1:${AGENT_WORKER_METRICS_HOST_PORT:-8082}/healthz
+curl http://127.0.0.1:${AGENT_WORKER_METRICS_HOST_PORT:-8082}/metrics
 ```
 
 Stop the stack while preserving named volumes:

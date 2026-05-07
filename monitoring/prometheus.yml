@@ -15,6 +15,15 @@ scrape_configs:
           service: mc-api
           stack: agentic-ecommerce
 
+  - job_name: agent-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - agent-worker:8081
+        labels:
+          service: agent-worker
+          stack: agentic-ecommerce
+
   - job_name: prometheus
     static_configs:
       - targets:
