@@ -28,6 +28,20 @@ The dev compose stack publishes PostgreSQL, Redis, and `mc-api` on loopback by d
 
 For the optional WooCommerce test instance and `wc-sync` worker, see `docs/dev-compose.md`. The WooCommerce profile keeps WordPress and MariaDB separate from the default backend boot path so API development does not require a local store.
 
+## Local Media Directory
+
+v0.7.0 reserves `.local/media-uploads/` for filesystem-backed media storage in
+development. The directory is ignored by git and mounted into `mc-api` by
+`docker-compose.dev.yml`.
+
+```bash
+make media-seed
+make media-clean
+```
+
+The seed target copies only synthetic fixtures from `seed/media/`. Do not place
+supplier, customer, or production media in git.
+
 ## Redis Session Infrastructure
 
 Redis 7 is available at `redis:6379` inside compose and `127.0.0.1:${REDIS_HOST_PORT:-6379}` from the host. It is reserved for v0.2.0 cart/session storage and later Redis-backed event bus work.

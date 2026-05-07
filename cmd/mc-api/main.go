@@ -196,6 +196,15 @@ agentic_ecommerce_sync_lag_seconds 0
 # HELP agentic_ecommerce_agent_success_total Agent success count placeholder.
 # TYPE agentic_ecommerce_agent_success_total counter
 agentic_ecommerce_agent_success_total{agent="content"} 0
+# HELP agentic_ecommerce_compliance_checks_total Compliance checks evaluated by the backend.
+# TYPE agentic_ecommerce_compliance_checks_total counter
+agentic_ecommerce_compliance_checks_total{source="stub"} 0
+# HELP agentic_ecommerce_compliance_failures_total Compliance checks that failed the publish gate.
+# TYPE agentic_ecommerce_compliance_failures_total counter
+agentic_ecommerce_compliance_failures_total{source="stub"} 0
+# HELP agentic_ecommerce_media_validation_failures_total Media uploads rejected by validation.
+# TYPE agentic_ecommerce_media_validation_failures_total counter
+agentic_ecommerce_media_validation_failures_total{reason="stub"} 0
 `, version, commit)
 }
 

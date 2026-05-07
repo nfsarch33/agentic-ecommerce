@@ -54,3 +54,19 @@ Keep `.env.compose` untracked. The committed `.env.compose.example` contains pla
 The backend and frontend should call MiniMax only through a fleet bridge URL. The optional bridge service is a local placeholder for wiring and health validation; leave `ECOMMERCE_AI_BRIDGE_URL`, `FLEET_AI_BRIDGE_URL`, and `MINIMAX_API_KEY_*` blank unless you are intentionally testing against a controlled local bridge.
 
 `wc-sync` defaults to `ECOMMERCE_SYNC_DRY_RUN=true`. Do not run live WooCommerce sync from this stack until credentials, webhook secrets, and target store ownership have been reviewed.
+
+## Media and Compliance Placeholders
+
+Production-like compose exposes media and compliance configuration without
+mounting a writable local upload volume:
+
+```bash
+ECOMMERCE_MEDIA_STORE=object
+ECOMMERCE_MEDIA_BUCKET=
+ECOMMERCE_MEDIA_PUBLIC_BASE_URL=
+ECOMMERCE_COMPLIANCE_MIN_SEO_SCORE=70
+ECOMMERCE_COMPLIANCE_MAX_IMAGE_SIZE_BYTES=5242880
+ECOMMERCE_COMPLIANCE_ALLOWED_MIME_TYPES=image/jpeg,image/png,image/webp
+```
+
+Use `docker-compose.dev.yml` for filesystem-backed uploads during development.

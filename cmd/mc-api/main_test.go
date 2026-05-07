@@ -94,6 +94,9 @@ func TestMetricsEndpointExposesPrometheusText(t *testing.T) {
 		"agentic_ecommerce_build_info",
 		"agentic_ecommerce_sync_lag_seconds",
 		"agentic_ecommerce_agent_success_total",
+		"agentic_ecommerce_compliance_checks_total",
+		"agentic_ecommerce_compliance_failures_total",
+		"agentic_ecommerce_media_validation_failures_total",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("metrics body missing %q:\n%s", want, body)
