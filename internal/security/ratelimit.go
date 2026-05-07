@@ -18,6 +18,7 @@ type RateLimiter interface {
 type TokenBucketConfig struct {
 	Capacity       int
 	RefillInterval time.Duration
+	RedisTimeout   time.Duration
 	Now            func() time.Time
 }
 
