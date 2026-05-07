@@ -25,8 +25,10 @@ type openAPIContract struct {
 }
 
 type openAPIPath struct {
-	Get  openAPIOperation `yaml:"get"`
-	Post openAPIOperation `yaml:"post"`
+	Get   openAPIOperation `yaml:"get"`
+	Post  openAPIOperation `yaml:"post"`
+	Put   openAPIOperation `yaml:"put"`
+	Patch openAPIOperation `yaml:"patch"`
 }
 
 type openAPIOperation struct {
@@ -118,6 +120,64 @@ func TestProductResponseGoldenShape(t *testing.T) {
 	assertGoldenJSON(t, filepath.Join("testdata", "product_response.golden.json"), rec.Body.Bytes())
 }
 
+func TestOrderHandlersMatchOpenAPIContract(t *testing.T) {
+	t.Parallel()
+	spec := loadOpenAPIContract(t)
+	srv, _ := testServer(t)
+
+	body := `{"customer_email":"shopper@example.com","items":[{"product_id":"c1000000-0000-0000-0000-000000000001","sku":"BAND-001","title":"Resistance Band","quantity":1,"unit_price":{"amount":2495,"currency":"AUD"}}],"shipping_address":{"name":"Jane Shopper","line1":"1 Market Street","city":"Sydney","region":"NSW","postal_code":"2000","country":"AU"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/orders", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+	var created map[string]any
+	decodeJSONPayload(t, rec.Body.Bytes(), &created)
+	assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/orders", http.MethodPost, "201"), created)
+
+	id, _ := created["id"].(string)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/orders/"+id, nil)
+	rec = httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var got map[string]any
+	decodeJSONPayload(t, rec.Body.Bytes(), &got)
+	assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/orders/{id}", http.MethodGet, "200"), got)
+
+	req = httptest.NewRequest(http.MethodPatch, "/api/v1/orders/"+id+"/status", bytes.NewBufferString(`{"status":"paid"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var patched map[string]any
+	decodeJSONPayload(t, rec.Body.Bytes(), &patched)
+	assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/orders/{id}/status", http.MethodPatch, "200"), patched)
+}
+
+func TestCartHandlersMatchOpenAPIContract(t *testing.T) {
+	t.Parallel()
+	spec := loadOpenAPIContract(t)
+	srv, _ := testServer(t)
+
+	body := `{"items":[{"product_id":"c1000000-0000-0000-0000-000000000001","sku":"BAND-001","title":"Resistance Band","quantity":2,"unit_price":{"amount":2495,"currency":"AUD"}}]}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/cart/session-123", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("put status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	decodeJSONPayload(t, rec.Body.Bytes(), &payload)
+	assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/cart/{session_id}", http.MethodPut, "200"), payload)
+}
+
 func fixedProduct(t *testing.T) catalog.Product {
 	t.Helper()
 	price, err := catalog.NewMoney(4995, "AUD")
@@ -164,6 +224,10 @@ func responseSchema(t *testing.T, spec openAPIContract, path, method, status str
 		operation = item.Get
 	case http.MethodPost:
 		operation = item.Post
+	case http.MethodPut:
+		operation = item.Put
+	case http.MethodPatch:
+		operation = item.Patch
 	default:
 		t.Fatalf("unsupported method %s", method)
 	}
