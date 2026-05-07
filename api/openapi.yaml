@@ -905,8 +905,8 @@ components:
       properties:
         resolution:
           type: string
-          minLength: 1
-          description: Manual operator decision, for example accept_local, accept_remote, or ignore.
+          enum: [local, remote, manual]
+          description: "Operator decision: keep local data, accept remote WooCommerce data, or mark as manually reconciled."
         note:
           type: string
     WooCommerceOrderWebhook:

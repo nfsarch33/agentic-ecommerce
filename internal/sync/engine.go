@@ -52,6 +52,9 @@ type Engine struct {
 	mu        stdsync.RWMutex
 	events    []Event
 	conflicts []Conflict
+
+	conflictKeys           map[string]struct{}
+	publishedProductStates map[string]string
 }
 
 type ImportOptions struct {
@@ -110,7 +113,14 @@ func NewEngine(cfg Config) *Engine {
 	if currency == "" {
 		currency = "AUD"
 	}
-	return &Engine{repo: cfg.ProductRepository, wc: cfg.WooCommerce, defaultCurrency: currency, now: now}
+	return &Engine{
+		repo:                   cfg.ProductRepository,
+		wc:                     cfg.WooCommerce,
+		defaultCurrency:        currency,
+		now:                    now,
+		conflictKeys:           make(map[string]struct{}),
+		publishedProductStates: make(map[string]string),
+	}
 }
 
 func (e *Engine) ImportFromWooCommerce(ctx context.Context, opts ImportOptions) (ImportResult, error) {
@@ -135,8 +145,9 @@ func (e *Engine) ImportFromWooCommerce(ctx context.Context, opts ImportOptions) 
 		if exists {
 			fields := e.DetectConflicts(local, remote)
 			if len(fields) > 0 {
-				e.addConflict(local, remote, fields)
-				result.Conflicts++
+				if e.addConflict(local, remote, fields) {
+					result.Conflicts++
+				}
 			}
 			continue
 		}
@@ -162,10 +173,20 @@ func (e *Engine) PublishToWooCommerce(ctx context.Context, id uuid.UUID) error {
 		e.record(Event{Type: EventSyncFailed, ProductID: id.String(), Message: err.Error()})
 		return err
 	}
+	fingerprint := productFingerprint(product)
+	e.mu.RLock()
+	alreadyPublished := e.publishedProductStates[id.String()] == fingerprint
+	e.mu.RUnlock()
+	if alreadyPublished {
+		return nil
+	}
 	if err := e.wc.UpsertProduct(ctx, product); err != nil {
 		e.record(Event{Type: EventSyncFailed, ProductID: id.String(), Message: err.Error()})
 		return err
 	}
+	e.mu.Lock()
+	e.publishedProductStates[id.String()] = fingerprint
+	e.mu.Unlock()
 	e.record(Event{Type: EventProductPublished, ProductID: id.String(), Message: "published product to WooCommerce"})
 	return nil
 }
@@ -174,6 +195,9 @@ func (e *Engine) ReconcileInventory(ctx context.Context) (ImportResult, error) {
 	result, err := e.ImportFromWooCommerce(ctx, ImportOptions{})
 	if err != nil {
 		return result, err
+	}
+	if result.Imported == 0 && result.Conflicts == 0 {
+		return result, nil
 	}
 	e.record(Event{Type: EventInventoryReconciled, Message: "inventory reconciliation completed", Metadata: map[string]string{
 		"imported":  strconv.Itoa(result.Imported),
@@ -203,6 +227,9 @@ func (e *Engine) ResolveConflict(id, resolution, note string) (Conflict, error) 
 	resolution = strings.TrimSpace(resolution)
 	if resolution == "" {
 		return Conflict{}, errors.New("resolution is required")
+	}
+	if !validResolution(resolution) {
+		return Conflict{}, errors.New("resolution must be local, remote, or manual")
 	}
 
 	e.mu.Lock()
@@ -263,9 +290,10 @@ func (e *Engine) RecordEvent(event Event) {
 	e.record(event)
 }
 
-func (e *Engine) addConflict(local catalog.Product, remote woocommerce.Product, fields []ConflictField) {
+func (e *Engine) addConflict(local catalog.Product, remote woocommerce.Product, fields []ConflictField) bool {
+	key := conflictKey(local, remote, fields)
 	conflict := Conflict{
-		ID:        uuid.NewString(),
+		ID:        deterministicConflictID(key),
 		ProductID: local.ID().String(),
 		SKU:       local.SKU(),
 		RemoteID:  remote.ID,
@@ -274,9 +302,18 @@ func (e *Engine) addConflict(local catalog.Product, remote woocommerce.Product, 
 		CreatedAt: e.now(),
 	}
 	e.mu.Lock()
+	if e.conflictKeys == nil {
+		e.conflictKeys = make(map[string]struct{})
+	}
+	if _, exists := e.conflictKeys[key]; exists {
+		e.mu.Unlock()
+		return false
+	}
+	e.conflictKeys[key] = struct{}{}
 	e.conflicts = append(e.conflicts, conflict)
 	e.mu.Unlock()
 	e.record(Event{Type: EventConflictDetected, ProductID: local.ID().String(), RemoteID: remote.ID, Message: "manual sync conflict detected"})
+	return true
 }
 
 func (e *Engine) record(event Event) {
@@ -357,6 +394,44 @@ func productStatus(status string) catalog.ProductStatus {
 	default:
 		return catalog.StatusDraft
 	}
+}
+
+func validResolution(resolution string) bool {
+	switch resolution {
+	case "local", "remote", "manual":
+		return true
+	default:
+		return false
+	}
+}
+
+func productFingerprint(product catalog.Product) string {
+	return strings.Join([]string{
+		product.SKU(),
+		product.Title(),
+		product.Slug(),
+		product.Description(),
+		strconv.Itoa(product.Price().Amount()),
+		product.Price().Currency(),
+		strconv.Itoa(product.Stock()),
+		string(product.Status()),
+	}, "\x00")
+}
+
+func conflictKey(local catalog.Product, remote woocommerce.Product, fields []ConflictField) string {
+	parts := []string{
+		local.ID().String(),
+		normalizeSKU(local.SKU()),
+		strconv.Itoa(remote.ID),
+	}
+	for _, field := range fields {
+		parts = append(parts, field.Field, field.LocalValue, field.RemoteValue)
+	}
+	return strings.Join(parts, "\x00")
+}
+
+func deterministicConflictID(key string) string {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("agentic-ecommerce-sync-conflict\x00"+key)).String()
 }
 
 func (e EventType) String() string {
