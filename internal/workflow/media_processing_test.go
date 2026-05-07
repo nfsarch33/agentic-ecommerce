@@ -46,6 +46,7 @@ func TestMediaProcessingWorkflowSourcesProcessesQALinksAndStores(t *testing.T) {
 	}).Return(link, nil).Once()
 
 	env.ExecuteWorkflow(MediaProcessingWorkflow, input)
+	env.AssertExpectations(t)
 
 	if err := env.GetWorkflowError(); err != nil {
 		t.Fatalf("workflow error: %v", err)
@@ -76,6 +77,7 @@ func TestMediaProcessingWorkflowStopsWhenQualityFails(t *testing.T) {
 	env.OnActivity(MediaQualityActivity, mock.Anything, MediaQualityActivityInput{MediaID: processed.ID}).Return(quality, nil).Once()
 
 	env.ExecuteWorkflow(MediaProcessingWorkflow, input)
+	env.AssertExpectations(t)
 
 	if err := env.GetWorkflowError(); err != nil {
 		t.Fatalf("workflow error: %v", err)
