@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once tf-fmt tf-fmt-check tf-validate
+.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once release-perf-smoke tf-fmt tf-fmt-check tf-validate
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -125,6 +125,9 @@ agent-worker:
 
 agent-run-once:
 	ECOMMERCE_AGENT_WORKER_ENABLED=true ECOMMERCE_AGENT_WORKER_RUN_ONCE=true go run ./cmd/agent-worker
+
+release-perf-smoke:
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test -run TestReleasePerformanceSmoke -count=1 -v ./cmd/mc-api
 
 migrate-up:
 	@echo "==> Running migrations UP against $(DB_URL)"
