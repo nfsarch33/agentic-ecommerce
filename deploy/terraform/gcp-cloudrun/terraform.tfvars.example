@@ -1,0 +1,18 @@
+# Placeholder-only values for local QA dry-runs.
+# Replace every value outside version control before a real deployment.
+project_name                    = "agentic-ecommerce"
+environment                     = "qa"
+gcp_project_id                  = "example-project"
+gcp_region                      = "us-central1"
+vpc_connector_cidr              = "203.0.113.0/28"
+backend_image                   = "ghcr.io/nfsarch33/agentic-ecommerce"
+frontend_image                  = "ghcr.io/nfsarch33/agentic-ecommerce-web"
+image_tag                       = "9e3ddb93c559ebb7a34f0d725da7bb9c56a1aba5"
+allowed_origin                  = "https://frontend.example.com"
+api_token_secret_name           = "agentic-ecommerce-api-token"
+postgres_password_secret_name   = "agentic-ecommerce-postgres"
+redis_auth_secret_name          = "agentic-ecommerce-redis"
+wc_consumer_key_secret_name     = "agentic-ecommerce-wc-consumer-key"
+wc_consumer_secret_secret_name  = "agentic-ecommerce-wc-consumer-secret"
+fleet_ai_bridge_url_secret_name = "agentic-ecommerce-fleet-ai-bridge-url"
+sync_dry_run                    = true

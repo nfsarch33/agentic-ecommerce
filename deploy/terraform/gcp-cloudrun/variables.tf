@@ -25,7 +25,7 @@ variable "gcp_region" {
 variable "vpc_connector_cidr" {
   description = "Example Serverless VPC Access connector CIDR."
   type        = string
-  default     = "10.90.0.0/28"
+  default     = "203.0.113.0/28"
 }
 
 variable "backend_image" {
@@ -43,7 +43,7 @@ variable "frontend_image" {
 variable "image_tag" {
   description = "Immutable image tag, preferably the git SHA used by CI."
   type        = string
-  default     = "000000000000"
+  default     = "sha-placeholder"
 }
 
 variable "allowed_origin" {
