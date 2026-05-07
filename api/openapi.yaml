@@ -28,9 +28,23 @@ paths:
       security:
         - bearerAuth: []
         - {}
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
       responses:
         '200':
-          description: Product list
+          description: Paginated product list
           headers:
             Access-Control-Allow-Origin:
               schema:
@@ -39,9 +53,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Product'
+                $ref: '#/components/schemas/ProductListResponse'
         '401':
           description: Missing or invalid bearer token when ECOMMERCE_API_TOKEN is configured.
           content:
@@ -54,8 +66,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '405':
-          description: Method not allowed.
+    post:
+      summary: Create a product
+      operationId: createProduct
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Invalid JSON body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Duplicate product (SKU or slug collision).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation failed (missing SKU, invalid price, etc).
           content:
             application/json:
               schema:
@@ -68,6 +110,103 @@ paths:
           description: Preflight accepted.
         '403':
           description: Origin rejected by CORS policy.
+  /api/v1/products/{id}:
+    get:
+      summary: Get a product by ID or slug
+      operationId: getProduct
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Product UUID or slug.
+      responses:
+        '200':
+          description: Product found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Update a product
+      operationId: updateProduct
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '200':
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Invalid JSON body or invalid ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Delete a product
+      operationId: deleteProduct
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Product deleted.
+        '400':
+          description: Invalid product ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -98,11 +237,14 @@ components:
           enum: [AUD, USD, GBP, EUR]
     Product:
       type: object
-      required: [id, title, slug, price, stock]
+      required: [id, sku, title, slug, price, stock, status, created_at, updated_at]
       properties:
         id:
           type: string
-          pattern: '^p_[a-z0-9-]+$'
+          format: uuid
+        sku:
+          type: string
+          minLength: 1
         title:
           type: string
           minLength: 1
@@ -114,8 +256,59 @@ components:
         stock:
           type: integer
           minimum: 0
+        status:
+          type: string
+          enum: [draft, active, archived]
         description:
           type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateProductRequest:
+      type: object
+      required: [sku, title, price]
+      properties:
+        sku:
+          type: string
+          minLength: 1
+        title:
+          type: string
+          minLength: 1
+        slug:
+          type: string
+          description: Auto-generated from title if omitted.
+        description:
+          type: string
+        price:
+          $ref: '#/components/schemas/Money'
+        stock:
+          type: integer
+          minimum: 0
+          default: 0
+        status:
+          type: string
+          enum: [draft, active, archived]
+          default: draft
+    ProductListResponse:
+      type: object
+      required: [products, total, page, per_page]
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        per_page:
+          type: integer
+          minimum: 1
     ErrorResponse:
       type: object
       required: [error]

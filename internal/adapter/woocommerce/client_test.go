@@ -13,7 +13,7 @@ import (
 func TestClient_UpsertProductSendsWooCommercePayload(t *testing.T) {
 	t.Parallel()
 
-	var got map[string]string
+	var got map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method = %s, want POST", r.Method)
@@ -28,10 +28,13 @@ func TestClient_UpsertProductSendsWooCommercePayload(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
+	price, _ := catalog.NewMoney(4995, "AUD")
 	product, err := catalog.NewProduct(catalog.ProductInput{
 		SKU:         "band-001",
 		Title:       "Resistance Band",
 		Description: "Loop band for mobility work",
+		Price:       price,
+		Stock:       12,
 	})
 	if err != nil {
 		t.Fatalf("product: %v", err)
@@ -45,6 +48,9 @@ func TestClient_UpsertProductSendsWooCommercePayload(t *testing.T) {
 	if got["sku"] != "BAND-001" || got["name"] != "Resistance Band" {
 		t.Fatalf("payload = %#v", got)
 	}
+	if got["regular_price"] != "49.95" {
+		t.Fatalf("regular_price = %v, want 49.95", got["regular_price"])
+	}
 }
 
 func TestClient_UpsertProductRejectsHTTPFailure(t *testing.T) {
@@ -55,7 +61,12 @@ func TestClient_UpsertProductRejectsHTTPFailure(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	product, err := catalog.NewProduct(catalog.ProductInput{SKU: "BAND-001", Title: "Resistance Band"})
+	price, _ := catalog.NewMoney(2500, "AUD")
+	product, err := catalog.NewProduct(catalog.ProductInput{
+		SKU:   "BAND-001",
+		Title: "Resistance Band",
+		Price: price,
+	})
 	if err != nil {
 		t.Fatalf("product: %v", err)
 	}
@@ -63,5 +74,23 @@ func TestClient_UpsertProductRejectsHTTPFailure(t *testing.T) {
 	client := NewClient(Config{BaseURL: server.URL}, server.Client())
 	if err := client.UpsertProduct(context.Background(), product); err == nil {
 		t.Fatal("expected HTTP failure")
+	}
+}
+
+func TestWcStatus_MapsCorrectly(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		status catalog.ProductStatus
+		want   string
+	}{
+		{catalog.StatusActive, "publish"},
+		{catalog.StatusDraft, "draft"},
+		{catalog.StatusArchived, "private"},
+	}
+	for _, tc := range tests {
+		if got := wcStatus(tc.status); got != tc.want {
+			t.Errorf("wcStatus(%q) = %q, want %q", tc.status, got, tc.want)
+		}
 	}
 }
