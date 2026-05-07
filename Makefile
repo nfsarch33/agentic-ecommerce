@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke tf-fmt tf-fmt-check tf-validate
+.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke tf-fmt tf-fmt-check tf-validate
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -12,6 +12,8 @@ WORKERS_PROFILE := --profile workers
 TEMPORAL_PROFILE := --profile temporal
 TEMPORAL_WORKER_PROFILE := --profile temporal-worker
 MEDIA_PROFILE := --profile media-objectstore
+N8N_PROFILE := --profile n8n
+N8N_WORKFLOWS_DIR := deploy/n8n/workflows
 IMAGE        ?= ghcr.io/nfsarch33/agentic-ecommerce
 TAG          ?= dev
 TF_DIR       := deploy/terraform
@@ -214,6 +216,21 @@ temporal-status:
 compose-temporal-config:
 	$(PROD_COMPOSE) $(TEMPORAL_PROFILE) $(TEMPORAL_WORKER_PROFILE) config --quiet
 	$(COMPOSE) $(TEMPORAL_PROFILE) $(TEMPORAL_WORKER_PROFILE) config --quiet
+
+n8n-up:
+	$(COMPOSE) $(N8N_PROFILE) up -d n8n
+
+n8n-down:
+	$(COMPOSE) $(N8N_PROFILE) stop n8n
+	$(COMPOSE) $(N8N_PROFILE) rm -f n8n
+
+n8n-config:
+	$(PROD_COMPOSE) $(N8N_PROFILE) config --quiet
+	$(COMPOSE) $(N8N_PROFILE) config --quiet
+	$(MAKE) n8n-workflows-validate
+
+n8n-workflows-validate:
+	python3 scripts/validate_n8n_workflows.py "$(N8N_WORKFLOWS_DIR)"
 
 monitoring-validate:
 	@if command -v promtool >/dev/null 2>&1; then \
