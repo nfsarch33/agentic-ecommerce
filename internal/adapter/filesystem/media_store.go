@@ -133,7 +133,7 @@ func cleanObjectKey(raw string) (string, error) {
 		return "", ErrInvalidMediaKey
 	}
 	for _, segment := range strings.Split(key, "/") {
-		if segment == ".." {
+		if segment == ".." || strings.Contains(segment, ":") {
 			return "", ErrInvalidMediaKey
 		}
 	}

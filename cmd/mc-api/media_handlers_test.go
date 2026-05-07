@@ -17,6 +17,7 @@ import (
 func TestMediaSourceProcessValidateAndGetEndpoints(t *testing.T) {
 	t.Parallel()
 
+	spec := loadOpenAPIContract(t)
 	srv, _ := testServer(t)
 	srv.mediaService = intelligence.NewService(intelligence.ServiceConfig{HTTPClient: mediaRoundTripClient(func(*http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -32,10 +33,12 @@ func TestMediaSourceProcessValidateAndGetEndpoints(t *testing.T) {
 	if sourceRec.Code != http.StatusCreated {
 		t.Fatalf("source status = %d, body=%s", sourceRec.Code, sourceRec.Body.String())
 	}
+	sourceBody := append([]byte(nil), sourceRec.Body.Bytes()...)
 	var sourced intelligence.Asset
-	if err := json.NewDecoder(sourceRec.Body).Decode(&sourced); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(sourceBody)).Decode(&sourced); err != nil {
 		t.Fatalf("decode source: %v", err)
 	}
+	assertMediaPayloadMatchesContract(t, spec, sourceBody, "/api/v1/media/source", http.MethodPost, "201")
 	if sourced.ID == "" || sourced.Metadata.ChecksumSHA256 == "" || sourced.Metadata.Width != 1 {
 		t.Fatalf("sourced = %+v", sourced)
 	}
@@ -46,10 +49,12 @@ func TestMediaSourceProcessValidateAndGetEndpoints(t *testing.T) {
 	if processRec.Code != http.StatusOK {
 		t.Fatalf("process status = %d, body=%s", processRec.Code, processRec.Body.String())
 	}
+	processBody := append([]byte(nil), processRec.Body.Bytes()...)
 	var processed intelligence.Asset
-	if err := json.NewDecoder(processRec.Body).Decode(&processed); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(processBody)).Decode(&processed); err != nil {
 		t.Fatalf("decode process: %v", err)
 	}
+	assertMediaPayloadMatchesContract(t, spec, processBody, "/api/v1/media/process", http.MethodPost, "200")
 	if processed.Metadata.MimeType != "image/webp" {
 		t.Fatalf("processed = %+v", processed)
 	}
@@ -59,10 +64,12 @@ func TestMediaSourceProcessValidateAndGetEndpoints(t *testing.T) {
 	if validateRec.Code != http.StatusOK {
 		t.Fatalf("validate status = %d, body=%s", validateRec.Code, validateRec.Body.String())
 	}
+	validateBody := append([]byte(nil), validateRec.Body.Bytes()...)
 	var qa intelligence.QualityReport
-	if err := json.NewDecoder(validateRec.Body).Decode(&qa); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(validateBody)).Decode(&qa); err != nil {
 		t.Fatalf("decode qa: %v", err)
 	}
+	assertMediaPayloadMatchesContract(t, spec, validateBody, "/api/v1/media/{id}/validate", http.MethodPost, "200")
 	if qa.Score == 0 || len(qa.Issues) == 0 {
 		t.Fatalf("qa = %+v, want explicit quality issues for 1x1 fixture", qa)
 	}
@@ -72,6 +79,7 @@ func TestMediaSourceProcessValidateAndGetEndpoints(t *testing.T) {
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("get status = %d, body=%s", getRec.Code, getRec.Body.String())
 	}
+	assertMediaPayloadMatchesContract(t, spec, getRec.Body.Bytes(), "/api/v1/media/{id}", http.MethodGet, "200")
 }
 
 func TestMediaEndpointsValidateRequestBodies(t *testing.T) {
@@ -167,4 +175,12 @@ func (c mediaRoundTripClient) Do(req *http.Request) (*http.Response, error) {
 func mediaOnePixelPNGString() string {
 	raw, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=")
 	return string(raw)
+}
+
+func assertMediaPayloadMatchesContract(t *testing.T, spec openAPIContract, body []byte, path, method, status string) {
+	t.Helper()
+	var payload map[string]any
+	decodeJSONPayload(t, body, &payload)
+	schema := responseSchema(t, spec, path, method, status)
+	assertSchemaRequiredFields(t, spec, schema, payload)
 }

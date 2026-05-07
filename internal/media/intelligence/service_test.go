@@ -8,11 +8,12 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 )
 
-//go:embed testdata/source_metadata.golden.json
+//go:embed testdata/source_metadata.golden.json testdata/quality_report.golden.json
 var goldenMetadata embed.FS
 
 func TestServiceSourcesImageMetadataFromDeterministicHTTPClient(t *testing.T) {
@@ -109,6 +110,7 @@ func TestQualityAssessmentCoversResolutionAspectFormatAltAndBrandSafety(t *testi
 			t.Fatalf("issues = %#v, missing %q", got.Issues, want)
 		}
 	}
+	assertGoldenQualityReport(t, got)
 }
 
 func TestServiceStoresProcessedAssetInObjectStore(t *testing.T) {
@@ -201,6 +203,57 @@ func TestServiceResizesLargeImageMetadataAndNormalizesFormats(t *testing.T) {
 	}
 }
 
+func TestServiceSourcesGoldenMetadataAndAltTextValidation(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(ServiceConfig{HTTPClient: fixedImageClient(t)})
+	got, err := service.Source(context.Background(), SourceRequest{
+		URL:       "https://supplier.example/images/lamp.png",
+		ProductID: "product-123",
+		AltText:   "product image",
+	})
+	if err != nil {
+		t.Fatalf("Source: %v", err)
+	}
+	assertGoldenMetadata(t, got.Metadata)
+
+	qa, err := service.Validate(context.Background(), got.ID)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if !containsIssue(qa.Issues, "alt_text_generic") {
+		t.Fatalf("qa issues = %#v, want alt text validation issue", qa.Issues)
+	}
+}
+
+func BenchmarkMediaQAValidate(b *testing.B) {
+	service := NewService(ServiceConfig{})
+	service.save(Asset{
+		ID:        "media_benchmark",
+		ProductID: "product-123",
+		AltText:   "Studio product photo with matte black desk lamp",
+		Metadata: Metadata{
+			MimeType:       "image/webp",
+			ContentLength:  512_000,
+			ChecksumSHA256: strings.Repeat("b", 64),
+			Width:          1200,
+			Height:         900,
+		},
+		payload: []byte("webp-benchmark"),
+	})
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		qa, err := service.Validate(context.Background(), "media_benchmark")
+		if err != nil {
+			b.Fatalf("Validate: %v", err)
+		}
+		if !qa.Pass {
+			b.Fatalf("qa failed: %#v", qa)
+		}
+	}
+}
+
 func assertGoldenMetadata(t *testing.T, got Metadata) {
 	t.Helper()
 	var want Metadata
@@ -213,6 +266,21 @@ func assertGoldenMetadata(t *testing.T, got Metadata) {
 	}
 	if got != want {
 		t.Fatalf("metadata = %+v, want %+v", got, want)
+	}
+}
+
+func assertGoldenQualityReport(t *testing.T, got QualityReport) {
+	t.Helper()
+	var want QualityReport
+	raw, err := goldenMetadata.ReadFile("testdata/quality_report.golden.json")
+	if err != nil {
+		t.Fatalf("read golden quality: %v", err)
+	}
+	if err := json.Unmarshal(raw, &want); err != nil {
+		t.Fatalf("decode golden quality: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("quality report = %+v, want %+v", got, want)
 	}
 }
 
