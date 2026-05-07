@@ -18,7 +18,7 @@ env:
 jobs:
   publish:
     name: Build and push SHA images
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
