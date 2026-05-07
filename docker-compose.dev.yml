@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ec-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ecommerce}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - ec-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ecommerce}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+  mc-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+    container_name: ec-mc-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ECOMMERCE_HTTP_ADDR: "0.0.0.0:8080"
+      ECOMMERCE_DB_URL: "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ecommerce}?sslmode=disable"
+      ECOMMERCE_API_TOKEN: ${ECOMMERCE_API_TOKEN:-}
+      ECOMMERCE_ALLOWED_ORIGIN: ${ECOMMERCE_ALLOWED_ORIGIN:-}
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${MC_API_HOST_PORT:-8080}:8080"
+    volumes:
+      - .:/src:ro
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  ec-pgdata:
