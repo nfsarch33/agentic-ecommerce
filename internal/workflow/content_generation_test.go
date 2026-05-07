@@ -106,6 +106,56 @@ func TestContentGenerationWorkflowRejectsLowFactCheckConfidence(t *testing.T) {
 	}
 }
 
+func TestContentGenerationWorkflowRejectsWhenEvaluationFailsAfterFactCheckPasses(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	registerContentGenerationTestActivities(env)
+
+	input := ContentGenerationInput{
+		Product: contentagent.ProductInfo{ID: "product-3", Title: "Resistance Band Set"},
+		Request: contentagent.GenerateRequest{
+			Product:  contentagent.ProductInfo{ID: "product-3", Title: "Resistance Band Set"},
+			MaxWords: 12,
+		},
+		RequestedBy: "qa@example.com",
+	}
+	generated := contentagent.GenerateResult{
+		GeneratedContent: contentagent.GeneratedContent{Description: "Resistance Band Set includes five resistance levels for progressive workouts and ships with a detailed setup guide for home strength training."},
+		Evaluation:       contentagent.Evaluation{Score: 90, Pass: true},
+		TokensUsed:       22,
+	}
+	factCheck := contentagent.FactCheckResult{Pass: true, Confidence: 0.91}
+	evaluation := contentagent.Evaluation{Score: 55, Pass: false, FactualIssues: []string{"too long"}}
+
+	env.OnActivity(ContentGenerateActivity, mock.Anything, input).Return(generated, nil).Once()
+	env.OnActivity(ContentFactCheckActivity, mock.Anything, ContentFactCheckActivityInput{
+		ProductID: input.Product.ID,
+		Content:   generated.GeneratedContent,
+	}).Return(factCheck, nil).Once()
+	env.OnActivity(ContentEvaluateActivity, mock.Anything, ContentEvaluateActivityInput{
+		Request: input.Request,
+		Result:  generated,
+	}).Return(evaluation, nil).Once()
+	env.OnActivity(RecordContentFactCheckActivity, mock.Anything, mock.MatchedBy(func(result ContentGenerationResult) bool {
+		return result.ProductID == input.Product.ID && result.Status == ContentGenerationStatusRejected && !result.Approved && result.FactCheck.Pass
+	})).Return(nil).Once()
+
+	env.ExecuteWorkflow(ContentGenerationWorkflow, input)
+
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("workflow error: %v", err)
+	}
+	var result ContentGenerationResult
+	if err := env.GetWorkflowResult(&result); err != nil {
+		t.Fatalf("workflow result: %v", err)
+	}
+	if result.Status != ContentGenerationStatusRejected || result.Approved || result.FactCheck.Confidence != 0.91 {
+		t.Fatalf("result = %+v, want rejected with retained fact check", result)
+	}
+}
+
 func TestContentGenerationActivitiesRunInjectedDependencies(t *testing.T) {
 	t.Parallel()
 
