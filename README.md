@@ -33,6 +33,20 @@ The stack runs PostgreSQL, Redis 7, and `mc-api` with published ports bound to `
 
 For the storefront checkout flow, run `agentic-ecommerce-web` separately with `bun run dev` and point it at `http://127.0.0.1:8080`. See `docs/local-development.md` for the backend compose, frontend dev, and Redis readiness plan.
 
+## Full Stack Compose
+
+v0.5.0 adds a production-like compose stack for local single-host validation:
+
+```bash
+cp .env.compose.example .env.compose
+docker compose --env-file .env.compose -f docker-compose.yml config
+docker compose --env-file .env.compose -f docker-compose.yml up -d --build
+curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:8080/metrics
+```
+
+The stack includes `mc-api`, the public `agentic-ecommerce-web` image, PostgreSQL + pgvector, Redis, Prometheus, and Grafana. Scaffolded `wc-sync`, `content-worker`, and the optional `minimax-openai-bridge` placeholder are behind compose profiles so they do not make live WooCommerce or MiniMax calls by default. See `docs/full-stack-compose.md` for profiles, dashboard URLs, and security boundaries.
+
 The optional WooCommerce dev profile adds WordPress, MariaDB, a WP-CLI helper, and the `wc-sync` worker:
 
 ```bash
