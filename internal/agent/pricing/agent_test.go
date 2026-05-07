@@ -38,6 +38,39 @@ func TestRecommendComputesPriceAndMarginFromCostsAndCompetition(t *testing.T) {
 	}
 }
 
+func TestPricingDescriptorAdvertisesMarginCapability(t *testing.T) {
+	t.Parallel()
+
+	descriptor := NewAgent().Descriptor()
+	if descriptor.ID != "pricing" || descriptor.Name == "" {
+		t.Fatalf("descriptor = %+v", descriptor)
+	}
+	if !hasPricingCapability(descriptor.Capabilities, "margin_analysis") {
+		t.Fatalf("capabilities = %v, want margin_analysis", descriptor.Capabilities)
+	}
+}
+
+func TestPricingRunReturnsStructuredPayloadForScheduler(t *testing.T) {
+	t.Parallel()
+
+	agent := NewAgent()
+	result, err := agent.Run(context.Background(), orchestrator.Task{Payload: map[string]any{
+		"sku":                     "RB-SET",
+		"cost_cents":              1800,
+		"shipping_cents":          250,
+		"current_price_cents":     4995,
+		"competitor_prices_cents": []int{4595, 4895, 5195},
+		"target_margin_pct":       0.45,
+		"minimum_margin_pct":      0.32,
+	}})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Payload["sku"] != "RB-SET" || result.Payload["recommended_price_cents"] == nil {
+		t.Fatalf("payload = %#v, want scheduler-safe pricing result", result.Payload)
+	}
+}
+
 func TestPricingRunRejectsInvalidCost(t *testing.T) {
 	t.Parallel()
 
@@ -46,4 +79,13 @@ func TestPricingRunRejectsInvalidCost(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid cost error")
 	}
+}
+
+func hasPricingCapability(capabilities []string, want string) bool {
+	for _, capability := range capabilities {
+		if capability == want {
+			return true
+		}
+	}
+	return false
 }
