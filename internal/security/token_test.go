@@ -53,10 +53,17 @@ func TestTokenManagerRejectsTamperedAccessToken(t *testing.T) {
 		t.Fatalf("MintAccessToken: %v", err)
 	}
 
-	tampered := token[:len(token)-1] + "x"
+	tampered := token[:len(token)-1] + differentTokenByte(token[len(token)-1])
 	if _, err := manager.VerifyAccessToken(tampered); err == nil {
 		t.Fatal("VerifyAccessToken accepted a tampered token")
 	}
+}
+
+func differentTokenByte(current byte) string {
+	if current == 'x' {
+		return "y"
+	}
+	return "x"
 }
 
 func TestTokenManagerRejectsExpiredAccessToken(t *testing.T) {
