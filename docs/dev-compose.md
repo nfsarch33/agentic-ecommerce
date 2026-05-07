@@ -90,6 +90,25 @@ ECOMMERCE_AGENT_WORKER_CONCURRENCY=1
 ECOMMERCE_AGENT_WORKER_INTERVAL=5m
 ```
 
+## Temporal Dev Server
+
+v1.2.0 adds an opt-in Temporal profile for local workflow development:
+
+```bash
+make temporal-up
+make temporal-status
+```
+
+The Temporal gRPC endpoint is published on
+`127.0.0.1:${TEMPORAL_GRPC_HOST_PORT:-7233}` and the Web UI is published on
+`http://127.0.0.1:${TEMPORAL_UI_HOST_PORT:-8233}`. Both ports stay loopback-only
+through `BIND_HOST=127.0.0.1`.
+
+`temporal-worker` is defined under the separate `temporal-worker` profile as an
+image-only placeholder until `cmd/temporal-worker` lands. Its task queue contract
+is `ECOMMERCE_TEMPORAL_TASK_QUEUE=ec-workflows`. See
+`docs/temporal-local.md` for the full runbook and worker handoff.
+
 ## Media Storage and Compliance Placeholders
 
 The dev stack mounts a host media directory into `mc-api` for upload and
@@ -150,4 +169,5 @@ Use the compose config target before opening a PR:
 make compose-config
 make compose-wc-config
 make compose-workers-config
+make compose-temporal-config
 ```

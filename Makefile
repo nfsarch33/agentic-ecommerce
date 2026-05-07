@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once release-perf-smoke tf-fmt tf-fmt-check tf-validate
+.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once release-perf-smoke tf-fmt tf-fmt-check tf-validate
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -9,6 +9,8 @@ PROD_COMPOSE := docker compose -f $(COMPOSE_PROD_FILE)
 WC_PROFILES  := --profile woocommerce --profile tools
 SYNC_PROFILE := --profile sync
 WORKERS_PROFILE := --profile workers
+TEMPORAL_PROFILE := --profile temporal
+TEMPORAL_WORKER_PROFILE := --profile temporal-worker
 IMAGE        ?= ghcr.io/nfsarch33/agentic-ecommerce
 TAG          ?= dev
 TF_DIR       := deploy/terraform
@@ -174,6 +176,23 @@ compose-wc-config:
 compose-workers-config:
 	$(PROD_COMPOSE) $(WORKERS_PROFILE) config --quiet
 	$(COMPOSE) $(WORKERS_PROFILE) config --quiet
+
+temporal-up:
+	$(COMPOSE) $(TEMPORAL_PROFILE) up -d temporal
+
+temporal-down:
+	$(COMPOSE) $(TEMPORAL_PROFILE) stop temporal
+	$(COMPOSE) $(TEMPORAL_PROFILE) rm -f temporal
+
+temporal-status:
+	$(COMPOSE) $(TEMPORAL_PROFILE) ps temporal
+	@echo "Temporal gRPC: 127.0.0.1:$${TEMPORAL_GRPC_HOST_PORT:-7233}"
+	@echo "Temporal UI:   http://127.0.0.1:$${TEMPORAL_UI_HOST_PORT:-8233}"
+	@echo "Task queue:    $${ECOMMERCE_TEMPORAL_TASK_QUEUE:-ec-workflows}"
+
+compose-temporal-config:
+	$(PROD_COMPOSE) $(TEMPORAL_PROFILE) $(TEMPORAL_WORKER_PROFILE) config --quiet
+	$(COMPOSE) $(TEMPORAL_PROFILE) $(TEMPORAL_WORKER_PROFILE) config --quiet
 
 monitoring-validate:
 	@if command -v promtool >/dev/null 2>&1; then \
