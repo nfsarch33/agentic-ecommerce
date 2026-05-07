@@ -331,6 +331,18 @@ func agentAuditAction(r *http.Request) auditAction {
 	return auditAction{}
 }
 
+func workflowAuditAction(r *http.Request) auditAction {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/workflows"), "/")
+	switch {
+	case path == "product-publish" && r.Method == http.MethodPost:
+		return auditAction{Action: "workflow.product_publish.start", Resource: "product-publish", Mutates: true}
+	case strings.HasSuffix(path, "/signals/review") && r.Method == http.MethodPost:
+		return auditAction{Action: "workflow.product_publish.review_signal", Resource: strings.TrimSuffix(path, "/signals/review"), Mutates: true}
+	default:
+		return auditAction{}
+	}
+}
+
 func webhookAuditAction(action string) auditResolver {
 	return func(r *http.Request) auditAction {
 		if r.Method != http.MethodPost {
