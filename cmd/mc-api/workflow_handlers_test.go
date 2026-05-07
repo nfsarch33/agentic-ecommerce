@@ -113,6 +113,45 @@ func TestStartMediaProcessingWorkflowStartsTemporalExecution(t *testing.T) {
 	}
 }
 
+func TestStartSourcingWorkflowStartsTemporalExecution(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := testServer(t)
+	fake := &fakeTemporalWorkflowClient{run: fakeWorkflowRun{id: "sourcing-RB-SET", runID: "run-sourcing-123"}}
+	srv.workflowClient = fake
+
+	body := bytes.NewBufferString(`{
+		"sku":"RB-SET",
+		"estimated_sell_price_cents":4995,
+		"minimum_margin_pct":0.32,
+		"requested_by":"operator@example.com",
+		"candidates":[
+			{"supplier_id":"balanced","sku":"RB-SET","unit_cost_cents":1500,"shipping_cents":250,"estimated_sell_price_cents":4995,"lead_time_days":7,"reliability_score":0.92,"demand_score":0.82,"competition_score":0.35}
+		]
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/sourcing", body)
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.startedOptions.TaskQueue != ecworkflow.TaskQueue {
+		t.Fatalf("task queue = %q, want %q", fake.startedOptions.TaskQueue, ecworkflow.TaskQueue)
+	}
+	input, ok := fake.startedArgs[0].(ecworkflow.SourcingWorkflowInput)
+	if !ok {
+		t.Fatalf("workflow arg = %#v, want SourcingWorkflowInput", fake.startedArgs)
+	}
+	if input.Search.SKU != "RB-SET" || input.MinimumMarginPct != 0.32 || len(input.Search.Candidates) != 1 {
+		t.Fatalf("input = %+v", input)
+	}
+	if input.Search.Candidates[0].SupplierID != "balanced" {
+		t.Fatalf("candidate = %+v", input.Search.Candidates[0])
+	}
+}
+
 func TestStartProductPublishWorkflowRequiresConfiguredTemporalClient(t *testing.T) {
 	t.Parallel()
 

@@ -1,0 +1,12 @@
+{
+  "competitor_average_cents": 4895,
+  "gross_margin_pct": 0.4598,
+  "reasons": [
+    "strategy_margin_based",
+    "target_margin_floor_applied"
+  ],
+  "recommended_price_cents": 3795,
+  "sku": "RB-SET",
+  "strategy": "margin_based"
+}
+

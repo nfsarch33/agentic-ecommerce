@@ -1,7 +1,11 @@
 package pricing
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
@@ -35,6 +39,76 @@ func TestRecommendComputesPriceAndMarginFromCostsAndCompetition(t *testing.T) {
 	}
 	if len(result.Reasons) == 0 {
 		t.Fatal("expected structured pricing reasons")
+	}
+}
+
+func TestRecommendStrategyGoldenFiles(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		request Request
+		golden  string
+	}{
+		{
+			name: "margin based",
+			request: Request{
+				SKU:                   "RB-SET",
+				Strategy:              StrategyMarginBased,
+				CostCents:             1800,
+				ShippingCents:         250,
+				CurrentPriceCents:     4995,
+				CompetitorPricesCents: []int{4595, 4895, 5195},
+				TargetMarginPct:       0.45,
+				MinimumMarginPct:      0.32,
+				DemandScore:           0.82,
+			},
+			golden: "margin_based.golden.json",
+		},
+		{
+			name: "competition based",
+			request: Request{
+				SKU:                   "RB-SET",
+				Strategy:              StrategyCompetitionBased,
+				CostCents:             1800,
+				ShippingCents:         250,
+				CurrentPriceCents:     4995,
+				CompetitorPricesCents: []int{4595, 4895, 5195},
+				TargetMarginPct:       0.45,
+				MinimumMarginPct:      0.32,
+				DemandScore:           0.82,
+			},
+			golden: "competition_based.golden.json",
+		},
+		{
+			name: "demand based stub",
+			request: Request{
+				SKU:                   "RB-SET",
+				Strategy:              StrategyDemandBased,
+				CostCents:             1800,
+				ShippingCents:         250,
+				CurrentPriceCents:     4995,
+				CompetitorPricesCents: []int{4595, 4895, 5195},
+				TargetMarginPct:       0.45,
+				MinimumMarginPct:      0.32,
+				DemandScore:           0.82,
+			},
+			golden: "demand_based.golden.json",
+		},
+	}
+
+	agent := NewAgent()
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := agent.Recommend(context.Background(), tc.request)
+			if err != nil {
+				t.Fatalf("recommend: %v", err)
+			}
+			assertGoldenJSON(t, tc.golden, result)
+		})
 	}
 }
 
@@ -88,4 +162,21 @@ func hasPricingCapability(capabilities []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func assertGoldenJSON(t *testing.T, filename string, value any) {
+	t.Helper()
+
+	got, err := json.MarshalIndent(mustMap(value), "", "  ")
+	if err != nil {
+		t.Fatalf("marshal result: %v", err)
+	}
+	got = append(got, '\n')
+	want, err := os.ReadFile(filepath.Join("testdata", filename))
+	if err != nil {
+		t.Fatalf("read golden %s: %v", filename, err)
+	}
+	if !bytes.Equal(bytes.TrimSpace(got), bytes.TrimSpace(want)) {
+		t.Fatalf("golden mismatch for %s\nwant:\n%s\ngot:\n%s", filename, want, got)
+	}
 }
