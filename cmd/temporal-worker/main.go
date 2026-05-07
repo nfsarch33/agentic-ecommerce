@@ -246,9 +246,13 @@ func newProductRepositoryFromEnv(ctx context.Context, logger *slog.Logger) (port
 		return inmemory.NewProductRepository(), func() {}, nil
 	}
 
-	connectCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	poolCfg, err := temporalDatabasePoolConfigFromEnv(dsn)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parse product database pool config: %w", err)
+	}
+	connectCtx, cancel := context.WithTimeout(ctx, poolCfg.ConnConfig.ConnectTimeout)
 	defer cancel()
-	pool, err := pgxpool.New(connectCtx, dsn)
+	pool, err := pgxpool.NewWithConfig(connectCtx, poolCfg)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create product database pool: %w", err)
 	}
@@ -257,6 +261,38 @@ func newProductRepositoryFromEnv(ctx context.Context, logger *slog.Logger) (port
 		return nil, nil, fmt.Errorf("connect product database: %w", err)
 	}
 	return postgres.NewProductRepository(pool), pool.Close, nil
+}
+
+func temporalDatabasePoolConfigFromEnv(dsn string) (*pgxpool.Config, error) {
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, err
+	}
+	cfg.MaxConns = int32(parseEnvPositiveInt("ECOMMERCE_DB_POOL_MAX_CONNS", 10))
+	cfg.MinConns = int32(parseEnvPositiveInt("ECOMMERCE_DB_POOL_MIN_CONNS", 1))
+	if cfg.MinConns > cfg.MaxConns {
+		cfg.MinConns = cfg.MaxConns
+	}
+	cfg.MaxConnLifetime = parseEnvDuration("ECOMMERCE_DB_POOL_MAX_CONN_LIFETIME", 30*time.Minute)
+	cfg.MaxConnIdleTime = parseEnvDuration("ECOMMERCE_DB_POOL_MAX_CONN_IDLE_TIME", 5*time.Minute)
+	cfg.ConnConfig.ConnectTimeout = parseEnvDuration("ECOMMERCE_DB_CONNECT_TIMEOUT", 5*time.Second)
+	return cfg, nil
+}
+
+func parseEnvPositiveInt(key string, fallback int) int {
+	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key)))
+	if err != nil || value < 1 {
+		return fallback
+	}
+	return value
+}
+
+func parseEnvDuration(key string, fallback time.Duration) time.Duration {
+	value, err := time.ParseDuration(strings.TrimSpace(os.Getenv(key)))
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
 }
 
 func firstNonEmpty(values ...string) string {
