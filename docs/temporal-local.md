@@ -5,6 +5,9 @@ runbook covers the compose-managed Temporal dev server, Temporal Web UI, and the
 backend worker runtime. v1.6.0 adds schedule-control wiring without registering
 concrete schedules in this infra slice.
 
+For the v2.0.0 workflow inventory, start routes, status semantics, human-review
+signal contract, and determinism rules, see `docs/temporal-workflow-specs.md`.
+
 ## Services
 
 - `temporal`: Temporal CLI dev server with SQLite persistence in the
