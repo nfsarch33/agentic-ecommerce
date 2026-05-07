@@ -53,7 +53,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${VERSION:-v0.8.0}
+        VERSION: ${VERSION:-v1.0.0}
         COMMIT: ${COMMIT:-local}
         TARGET: mc-api
     read_only: true
@@ -141,7 +141,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${VERSION:-v0.8.0}
+        VERSION: ${VERSION:-v1.0.0}
         COMMIT: ${COMMIT:-local}
         TARGET: wc-sync
     profiles: ["workers", "sync"]
@@ -177,7 +177,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${VERSION:-v0.8.0}
+        VERSION: ${VERSION:-v1.0.0}
         COMMIT: ${COMMIT:-local}
         TARGET: content-worker
     profiles: ["workers"]
@@ -202,7 +202,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${VERSION:-v0.8.0}
+        VERSION: ${VERSION:-v1.0.0}
         COMMIT: ${COMMIT:-local}
         TARGET: agent-worker
     profiles: ["workers"]
