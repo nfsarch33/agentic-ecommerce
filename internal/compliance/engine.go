@@ -32,6 +32,10 @@ type Rule interface {
 	Evaluate(context.Context, ProductContent) RuleResult
 }
 
+type optionalRule interface {
+	IsEnabled() bool
+}
+
 type RuleDescriptor struct {
 	ID          string   `json:"id"`
 	Description string   `json:"description"`
@@ -101,6 +105,9 @@ func (e Engine) Evaluate(ctx context.Context, content ProductContent) Result {
 	}
 	results := make([]RuleResult, 0, len(e.rules))
 	for _, rule := range e.rules {
+		if optional, ok := rule.(optionalRule); ok && !optional.IsEnabled() {
+			continue
+		}
 		results = append(results, rule.Evaluate(ctx, content))
 	}
 	return aggregate(results)
