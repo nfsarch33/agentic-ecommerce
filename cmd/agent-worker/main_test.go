@@ -108,6 +108,9 @@ func TestMetricsHandlerExposesAgentWorkerMetrics(t *testing.T) {
 		"agentic_ecommerce_agent_worker_concurrency",
 		"agentic_ecommerce_agent_worker_scheduler_interval_seconds",
 		"agentic_ecommerce_agent_worker_runs_total",
+		"agentic_ecommerce_agent_worker_compliance_checks_total",
+		"agentic_ecommerce_agent_worker_compliance_failures_total",
+		"agentic_ecommerce_agent_worker_media_validation_failures_total",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("metrics body missing %q:\n%s", want, body)
