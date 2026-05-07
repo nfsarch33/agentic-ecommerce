@@ -18,6 +18,11 @@ output "url_placeholder" {
   value       = local.url_placeholder
 }
 
+output "endpoint_placeholder" {
+  description = "Placeholder endpoint for HTTP, gRPC, or worker-style services."
+  value       = local.endpoint_placeholder
+}
+
 output "log_destination" {
   description = "CloudWatch Logs group or Cloud Logging service label placeholder."
   value       = local.log_destination

@@ -19,10 +19,12 @@ output "deployment_summary" {
     }
     media_store = module.media_store.deployment_contract
     services = {
-      mc_api       = module.mc_api_service.deployment_contract
-      wc_sync      = module.wc_sync_service.deployment_contract
-      agent_worker = module.agent_worker_service.deployment_contract
-      frontend     = module.frontend_service.deployment_contract
+      mc_api          = module.mc_api_service.deployment_contract
+      wc_sync         = module.wc_sync_service.deployment_contract
+      agent_worker    = module.agent_worker_service.deployment_contract
+      temporal_server = module.temporal_server_service.deployment_contract
+      temporal_worker = module.temporal_worker_service.deployment_contract
+      frontend        = module.frontend_service.deployment_contract
     }
   }
 }

@@ -13,6 +13,7 @@ non-secret storage configuration:
 ```bash
 ECOMMERCE_MEDIA_STORAGE_DRIVER=filesystem
 ECOMMERCE_MEDIA_STORE=filesystem
+ECOMMERCE_MEDIA_STORE_PROVIDER=filesystem
 ECOMMERCE_MEDIA_BASE_PATH=/var/lib/agentic-ecommerce/media
 ECOMMERCE_MEDIA_ROOT=/var/lib/agentic-ecommerce/media
 ECOMMERCE_MEDIA_PUBLIC_BASE_URL=/media
@@ -20,9 +21,11 @@ ECOMMERCE_MEDIA_MAX_SIZE_BYTES=5242880
 ECOMMERCE_MEDIA_ALLOWED_MIME_TYPES=image/jpeg,image/png,image/webp
 ```
 
-`ECOMMERCE_MEDIA_STORE` and `ECOMMERCE_MEDIA_ROOT` remain as compatibility
-aliases for the existing filesystem adapter. New v1.4.0 integrations should
-prefer `ECOMMERCE_MEDIA_STORAGE_DRIVER` and `ECOMMERCE_MEDIA_BASE_PATH`.
+`ECOMMERCE_MEDIA_STORE`, `ECOMMERCE_MEDIA_STORE_PROVIDER`, and
+`ECOMMERCE_MEDIA_ROOT` remain as compatibility aliases for the existing
+filesystem adapter. New integrations should prefer
+`ECOMMERCE_MEDIA_STORAGE_DRIVER`, `ECOMMERCE_MEDIA_BASE_PATH`, and
+`ECOMMERCE_MEDIA_PREFIX`.
 
 Cloud or MinIO-style object stores add these placeholders:
 
@@ -30,6 +33,7 @@ Cloud or MinIO-style object stores add these placeholders:
 ECOMMERCE_MEDIA_BUCKET=
 ECOMMERCE_MEDIA_REGION=
 ECOMMERCE_MEDIA_ENDPOINT=
+ECOMMERCE_MEDIA_PREFIX=media/
 ECOMMERCE_MEDIA_FORCE_PATH_STYLE=false
 ECOMMERCE_MEDIA_ACCESS_KEY_ID=
 ECOMMERCE_MEDIA_SECRET_ACCESS_KEY=

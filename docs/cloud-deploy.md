@@ -13,7 +13,7 @@ The production-like Compose stack remains the source of truth for service wiring
 - Redis backs cart/session storage and the sync event bus.
 - Prometheus and Grafana provide local observability validation before cloud rollout.
 
-The Terraform contracts under `deploy/terraform/` mirror that shape without provisioning live resources yet. They validate the interfaces for network, PostgreSQL, Redis, and services so provider resources can be added later in small, reviewed steps.
+The Terraform contracts under `deploy/terraform/` mirror that shape without provisioning live resources yet. They validate the interfaces for network, PostgreSQL, Redis, Temporal, media storage, CDN, secrets, and services so provider resources can be added later in small, reviewed steps. The v1.7.0 hardening details live in `docs/cloud-hardening.md`.
 
 ## Image Tags
 
@@ -39,10 +39,10 @@ Use the backend SHA and frontend SHA from the v1.0.0 release note or PR descript
 Start with `deploy/terraform/aws-ecs`. The example maps the stack to these AWS services:
 
 - Networking: VPC with public subnets for an ALB and private subnets for ECS tasks, RDS, and ElastiCache.
-- Compute: ECS Fargate services for `mc-api`, `frontend`, and `agent-worker`; `wc-sync` can be a scheduled or one-off Fargate task.
+- Compute: ECS Fargate services for `mc-api`, `frontend`, `agent-worker`, private `temporal-server`, and private `temporal-worker`; `wc-sync` can be a scheduled or one-off Fargate task.
 - Database: RDS PostgreSQL 16 or Aurora PostgreSQL with pgvector support where available.
 - Cache: ElastiCache Redis with TLS and auth token support.
-- Media storage: S3 bucket placeholder from the shared `objectstore` module; add IAM, encryption, lifecycle, and CloudFront in the cloud-hardening slice.
+- Media storage: S3 bucket placeholder from the shared `objectstore` module with a CloudFront CDN stub and public bucket access blocked by policy.
 - Logs and metrics: CloudWatch Logs for container logs, plus Prometheus/Grafana or managed Prometheus later.
 - Secrets: AWS Secrets Manager injected into ECS task definitions by ARN or name.
 
@@ -61,10 +61,10 @@ Before converting placeholders into live resources, decide the Terraform state b
 Start with `deploy/terraform/gcp-cloudrun`. The example maps the stack to these GCP services:
 
 - Networking: Serverless VPC Access connector for Cloud Run egress to private services.
-- Compute: Cloud Run services for `mc-api`, `frontend`, and `agent-worker`; `wc-sync` can be a Cloud Run job.
+- Compute: Cloud Run services for `mc-api`, `frontend`, `agent-worker`, private `temporal-server`, and private `temporal-worker`; `wc-sync` can be a Cloud Run job.
 - Database: Cloud SQL PostgreSQL 16 with private IP and pgvector support where available.
 - Cache: Memorystore for Redis on the same private network.
-- Media storage: GCS bucket placeholder from the shared `objectstore` module; add IAM, encryption, lifecycle, and Cloud CDN in the cloud-hardening slice.
+- Media storage: GCS bucket placeholder from the shared `objectstore` module with a Cloud CDN stub and public bucket access blocked by policy.
 - Logs and metrics: Cloud Logging and Cloud Monitoring, with Prometheus-compatible export added later if needed.
 - Secrets: Secret Manager references mounted or injected into Cloud Run revisions.
 
@@ -85,12 +85,11 @@ Store complete connection strings or credentials in the cloud secret manager. Te
 Backend secrets:
 
 - `ECOMMERCE_DB_URL`: full PostgreSQL DSN for `mc-api`, `wc-sync`, and `agent-worker`.
-- `ECOMMERCE_DB_POOL_MAX_CONNS`, `ECOMMERCE_DB_POOL_MIN_CONNS`, `ECOMMERCE_DB_POOL_MAX_CONN_LIFETIME`, `ECOMMERCE_DB_POOL_MAX_CONN_IDLE_TIME`, `ECOMMERCE_DB_CONNECT_TIMEOUT`: non-secret pgxpool tuning values for cloud database connection budgets.
 - `ECOMMERCE_REDIS_ADDR`: Redis host:port, or a runtime-composed value if the provider resource exposes it directly.
-- `ECOMMERCE_REDIS_TIMEOUT`: non-secret Redis operation timeout for request paths that do not already carry a deadline.
 - `ECOMMERCE_API_TOKEN`: optional legacy backend bearer token for migration windows only.
 - `ECOMMERCE_WC_CONSUMER_KEY`: WooCommerce REST consumer key.
 - `ECOMMERCE_WC_CONSUMER_SECRET`: WooCommerce REST consumer secret.
+- `ECOMMERCE_WC_STORE_URL`: WooCommerce store URL.
 - `ECOMMERCE_WC_WEBHOOK_SECRET`: WooCommerce webhook HMAC secret when webhook ingestion is enabled.
 - `ECOMMERCE_AI_BRIDGE_URL`: fleet-hosted MiniMax bridge URL; do not point app services directly at MiniMax.
 - `ECOMMERCE_EMBEDDING_BRIDGE_URL`: fleet-hosted embedding bridge URL for RAG; this may be the same approved bridge as chat completions when it exposes embeddings.
@@ -99,7 +98,7 @@ Frontend secrets:
 
 - `FLEET_AI_BRIDGE_URL`: only if the frontend BFF route needs to call the approved fleet bridge.
 
-Non-secret environment variables can stay in Terraform state, including `ECOMMERCE_ALLOWED_ORIGIN`, `ECOMMERCE_JWT_ISSUER`, `ECOMMERCE_JWT_AUDIENCE`, `ECOMMERCE_JWT_ACCESS_TTL`, `ECOMMERCE_REFRESH_TTL`, `ECOMMERCE_RATE_LIMIT_CAPACITY`, `ECOMMERCE_RATE_LIMIT_REFILL`, `ECOMMERCE_READINESS_TIMEOUT`, `ECOMMERCE_REDIS_TIMEOUT`, the `ECOMMERCE_DB_POOL_*` values, `ECOMMERCE_DB_CONNECT_TIMEOUT`, `ECOMMERCE_CSP_CONNECT_SRC`, `ECOMMERCE_CSP_REPORT_URI`, `ECOMMERCE_EVENTBUS_DRIVER`, `ECOMMERCE_EVENTBUS_CHANNEL_SYNC`, `ECOMMERCE_EVENTBUS_CHANNEL_DLQ`, `ECOMMERCE_EMBEDDING_MODEL`, `ECOMMERCE_EMBEDDING_DIMENSIONS`, `ECOMMERCE_RAG_CHUNK_SIZE`, `ECOMMERCE_MEDIA_STORAGE_DRIVER`, `ECOMMERCE_MEDIA_BUCKET`, `ECOMMERCE_MEDIA_BASE_PATH`, `ECOMMERCE_MEDIA_PUBLIC_BASE_URL`, `ECOMMERCE_MEDIA_REGION`, `ECOMMERCE_MEDIA_MAX_SIZE_BYTES`, `ECOMMERCE_MEDIA_ALLOWED_MIME_TYPES`, and worker scheduling flags.
+Non-secret environment variables can stay in Terraform state, including `ECOMMERCE_ALLOWED_ORIGIN`, `ECOMMERCE_JWT_ISSUER`, `ECOMMERCE_JWT_AUDIENCE`, `ECOMMERCE_JWT_ACCESS_TTL`, `ECOMMERCE_REFRESH_TTL`, `ECOMMERCE_RATE_LIMIT_CAPACITY`, `ECOMMERCE_RATE_LIMIT_REFILL`, `ECOMMERCE_READINESS_TIMEOUT`, `ECOMMERCE_REDIS_TIMEOUT`, the `ECOMMERCE_DB_POOL_*` values, `ECOMMERCE_DB_CONNECT_TIMEOUT`, `ECOMMERCE_CSP_CONNECT_SRC`, `ECOMMERCE_CSP_REPORT_URI`, `ECOMMERCE_EVENTBUS_DRIVER`, `ECOMMERCE_EVENTBUS_CHANNEL_SYNC`, `ECOMMERCE_EVENTBUS_CHANNEL_DLQ`, `ECOMMERCE_TEMPORAL_ADDR`, `ECOMMERCE_TEMPORAL_NAMESPACE`, `ECOMMERCE_TEMPORAL_TASK_QUEUE`, `ECOMMERCE_EMBEDDING_MODEL`, `ECOMMERCE_EMBEDDING_DIMENSIONS`, `ECOMMERCE_RAG_CHUNK_SIZE`, `ECOMMERCE_MEDIA_STORAGE_DRIVER`, `ECOMMERCE_MEDIA_STORE_PROVIDER`, `ECOMMERCE_MEDIA_BUCKET`, `ECOMMERCE_MEDIA_BASE_PATH`, `ECOMMERCE_MEDIA_PREFIX`, `ECOMMERCE_MEDIA_PUBLIC_BASE_URL`, `ECOMMERCE_MEDIA_REGION`, `ECOMMERCE_MEDIA_MAX_SIZE_BYTES`, `ECOMMERCE_MEDIA_ALLOWED_MIME_TYPES`, and worker scheduling flags.
 
 For cloud media storage, prefer IAM over static credentials:
 
@@ -150,7 +149,7 @@ Carry these alert thresholds into cloud monitoring:
 - `mc-api` scrape or health failure for 1 minute.
 - Media validation failure spikes above 5 failures in 15 minutes.
 
-CloudWatch or Cloud Logging should receive structured JSON logs. Use `request_id`, `trace_id`, `tenant_id`, `actor_id`, `route`, `http_status`, and `duration_seconds` so API, worker, sync, and frontend events can be correlated without relying on provider-specific parsers.
+CloudWatch or Cloud Logging should receive structured JSON logs. Use request IDs and service labels so API, worker, sync, and frontend events can be correlated.
 
 ## Safety Rules
 
