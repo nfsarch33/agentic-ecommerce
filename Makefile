@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once
+.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -134,3 +134,12 @@ compose-wc-config:
 compose-workers-config:
 	$(PROD_COMPOSE) $(WORKERS_PROFILE) config --quiet
 	$(COMPOSE) $(WORKERS_PROFILE) config --quiet
+
+monitoring-validate:
+	@if command -v promtool >/dev/null 2>&1; then \
+		promtool check config monitoring/prometheus.yml; \
+		promtool check rules monitoring/alerts.yml; \
+	else \
+		echo "promtool not installed; using Go YAML/JSON validation"; \
+	fi
+	go test ./monitoring

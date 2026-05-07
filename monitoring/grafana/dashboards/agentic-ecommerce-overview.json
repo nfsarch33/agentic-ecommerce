@@ -196,7 +196,7 @@
           "refId": "A"
         }
       ],
-      "title": "API Latency Stub",
+      "title": "API p95 Latency",
       "type": "timeseries"
     },
     {
@@ -240,7 +240,7 @@
           "refId": "A"
         }
       ],
-      "title": "API Error Rate Stub",
+      "title": "API 5xx Error Rate",
       "type": "timeseries"
     },
     {
@@ -284,7 +284,7 @@
           "refId": "A"
         }
       ],
-      "title": "WooCommerce Sync Lag Stub",
+      "title": "WooCommerce Sync Lag",
       "type": "timeseries"
     },
     {
@@ -323,12 +323,118 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "increase(agentic_ecommerce_agent_success_total[5m])",
-          "legendFormat": "{{agent}} success",
+          "expr": "sum(rate(agentic_ecommerce_agent_worker_runs_total{status=\"succeeded\"}[5m]))",
+          "legendFormat": "succeeded",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "sum(rate(agentic_ecommerce_agent_worker_runs_total{status=\"failed\"}[5m]))",
+          "legendFormat": "failed",
+          "refId": "B"
+        }
+      ],
+      "title": "Agent Runs Success vs Failure",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "increase(agentic_ecommerce_sync_conflicts_total[5m])",
+          "legendFormat": "{{resolution}} conflicts",
           "refId": "A"
         }
       ],
-      "title": "Agent Success Rate Stub",
+      "title": "WooCommerce Sync Conflicts",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "(sum(rate(agentic_ecommerce_compliance_checks_total[5m])) - sum(rate(agentic_ecommerce_compliance_failures_total[5m]))) / clamp_min(sum(rate(agentic_ecommerce_compliance_checks_total[5m])), 0.001)",
+          "legendFormat": "pass rate",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "sum(rate(agentic_ecommerce_compliance_failures_total[5m])) / clamp_min(sum(rate(agentic_ecommerce_compliance_checks_total[5m])), 0.001)",
+          "legendFormat": "fail rate",
+          "refId": "B"
+        }
+      ],
+      "title": "Compliance Pass vs Fail Rate",
       "type": "timeseries"
     }
   ],
@@ -337,7 +443,7 @@
   "schemaVersion": 40,
   "tags": [
     "agentic-ecommerce",
-    "v0.6.0"
+    "v0.8.0"
   ],
   "templating": {
     "list": []

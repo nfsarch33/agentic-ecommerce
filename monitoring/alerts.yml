@@ -21,7 +21,7 @@ groups:
           severity: warning
         annotations:
           summary: "mc-api p95 latency above 500ms"
-          description: "The API latency dashboard stub is above the v0.5.0 warning threshold."
+          description: "The API p95 latency SLI is above the v0.8.0 warning threshold."
 
       - alert: AgenticEcommerceHighErrorRate
         expr: |
@@ -35,7 +35,7 @@ groups:
           severity: warning
         annotations:
           summary: "mc-api error rate above 1%"
-          description: "The API error rate dashboard stub exceeded the v0.5.0 warning threshold."
+          description: "The mc-api 5xx error rate exceeded the v0.8.0 warning threshold."
 
       - alert: AgenticEcommerceSyncLagHigh
         expr: agentic_ecommerce_sync_lag_seconds > 300
@@ -44,7 +44,35 @@ groups:
           severity: warning
         annotations:
           summary: "WooCommerce sync lag above 5 minutes"
-          description: "The sync lag metric is above the v0.5.0 warning threshold."
+          description: "The sync lag metric is above the v0.8.0 warning threshold."
+
+      - alert: AgenticEcommerceAgentFailureRateHigh
+        expr: |
+          (
+            sum(rate(agentic_ecommerce_agent_worker_runs_total{status="failed"}[10m]))
+            /
+            clamp_min(sum(rate(agentic_ecommerce_agent_worker_runs_total[10m])), 0.001)
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent worker failure rate above 5%"
+          description: "More than 5% of agent-worker orchestrator runs failed over the last 10 minutes."
+
+      - alert: AgenticEcommerceComplianceFailureSpike
+        expr: |
+          (
+            (sum(increase(agentic_ecommerce_compliance_failures_total[15m])) or vector(0))
+            +
+            (sum(increase(agentic_ecommerce_agent_worker_compliance_failures_total[15m])) or vector(0))
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Compliance failure spike detected"
+          description: "Backend and worker compliance failures exceeded the v0.8.0 spike threshold in 15 minutes."
 
       - alert: AgenticEcommerceAgentSuccessMissing
         expr: increase(agentic_ecommerce_agent_success_total[30m]) == 0
