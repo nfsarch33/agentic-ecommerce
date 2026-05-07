@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +23,11 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
+)
+
+var (
+	version = "dev"
+	commit  = "unknown"
 )
 
 type moneyResponse struct {
@@ -79,6 +88,13 @@ type contentGenerator interface {
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	if isHealthcheckArgs(os.Args) {
+		if err := runHealthcheck(getenv("ECOMMERCE_HTTP_ADDR", "127.0.0.1:8080")); err != nil {
+			logger.Error("mc-api.healthcheck_failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	repo := inmemory.NewProductRepository()
 	seedDefaultProducts(repo)
@@ -89,10 +105,92 @@ func main() {
 	logger.Info("mc-api.start", "addr", addr)
 
 	srv := newServer(logger, repo, orderRepo, cartRepo)
-	if err := http.ListenAndServe(addr, srv.mux()); err != nil {
-		logger.Error("mc-api.stop", "error", err)
-		os.Exit(1)
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           srv.mux(),
+		ReadHeaderTimeout: 5 * time.Second,
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- httpServer.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("mc-api.stop", "error", err)
+			os.Exit(1)
+		}
+	case <-ctx.Done():
+		logger.Info("mc-api.shutdown")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			logger.Error("mc-api.shutdown_failed", "error", err)
+			os.Exit(1)
+		}
+	}
+}
+
+func isHealthcheckArgs(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+	return args[1] == "healthcheck" || args[1] == "--healthcheck"
+}
+
+func runHealthcheck(addr string) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		host = "127.0.0.1"
+		port = "8080"
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://" + net.JoinHostPort(host, port) + "/healthz")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("healthz status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	_, _ = fmt.Fprintf(w, `# HELP agentic_ecommerce_build_info Build metadata for the running mc-api binary.
+# TYPE agentic_ecommerce_build_info gauge
+agentic_ecommerce_build_info{version=%q,commit=%q} 1
+# HELP agentic_ecommerce_http_requests_total HTTP request count placeholder for RED dashboards.
+# TYPE agentic_ecommerce_http_requests_total counter
+agentic_ecommerce_http_requests_total{handler="stub",method="GET",code="200"} 0
+# HELP agentic_ecommerce_http_request_duration_seconds HTTP request duration placeholder for RED dashboards.
+# TYPE agentic_ecommerce_http_request_duration_seconds histogram
+agentic_ecommerce_http_request_duration_seconds_bucket{le="0.1"} 0
+agentic_ecommerce_http_request_duration_seconds_bucket{le="0.25"} 0
+agentic_ecommerce_http_request_duration_seconds_bucket{le="0.5"} 0
+agentic_ecommerce_http_request_duration_seconds_bucket{le="1"} 0
+agentic_ecommerce_http_request_duration_seconds_bucket{le="+Inf"} 0
+agentic_ecommerce_http_request_duration_seconds_sum 0
+agentic_ecommerce_http_request_duration_seconds_count 0
+# HELP agentic_ecommerce_sync_lag_seconds WooCommerce sync lag placeholder.
+# TYPE agentic_ecommerce_sync_lag_seconds gauge
+agentic_ecommerce_sync_lag_seconds 0
+# HELP agentic_ecommerce_agent_success_total Agent success count placeholder.
+# TYPE agentic_ecommerce_agent_success_total counter
+agentic_ecommerce_agent_success_total{agent="content"} 0
+`, version, commit)
 }
 
 func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.OrderRepository, cartRepo port.CartRepository) *server {
@@ -134,6 +232,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 func (s *server) mux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthzHandler)
+	mux.HandleFunc("/metrics", metricsHandler)
 
 	api := s.withCORS(s.withBearerAuth(s.productsHandler))
 	mux.HandleFunc("/api/v1/products", api)
