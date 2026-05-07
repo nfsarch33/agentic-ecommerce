@@ -1,8 +1,9 @@
-.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed compose-config compose-wc-config compose-workers-config redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once
+.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
 DB_URL       ?= postgres://postgres:postgres@127.0.0.1:5432/ecommerce?sslmode=disable
+MEDIA_DIR    ?= .local/media-uploads
 COMPOSE      := docker compose -f $(COMPOSE_FILE)
 PROD_COMPOSE := docker compose -f $(COMPOSE_PROD_FILE)
 WC_PROFILES  := --profile woocommerce --profile tools
@@ -98,9 +99,13 @@ migrate-up:
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0001_create_products.up.sql
 	$(COMPOSE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0002_create_orders.up.sql
+	$(COMPOSE) exec -T postgres \
+		psql "$(DB_URL)" -f /dev/stdin < migrations/0003_create_product_media_assets.up.sql
 
 migrate-down:
 	@echo "==> Running migrations DOWN against $(DB_URL)"
+	$(COMPOSE) exec -T postgres \
+		psql "$(DB_URL)" -f /dev/stdin < migrations/0003_create_product_media_assets.down.sql
 	$(COMPOSE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0002_create_orders.down.sql
 	$(COMPOSE) exec -T postgres \
@@ -110,6 +115,15 @@ seed:
 	@echo "==> Seeding test data"
 	$(COMPOSE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < seed/products.sql
+
+media-seed:
+	@echo "==> Seeding local media directory at $(MEDIA_DIR)"
+	mkdir -p "$(MEDIA_DIR)"
+	cp -R seed/media/. "$(MEDIA_DIR)/"
+
+media-clean:
+	@echo "==> Removing local media directory at $(MEDIA_DIR)"
+	rm -rf "$(MEDIA_DIR)"
 
 compose-config:
 	$(COMPOSE) config --quiet

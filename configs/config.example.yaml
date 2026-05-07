@@ -5,3 +5,14 @@ woocommerce:
   consumer_secret_ref: op://vault/woocommerce/consumer_secret
 llm_router:
   base_url: http://127.0.0.1:8081
+media:
+  store: filesystem
+  root: .local/media-uploads
+  public_base_url: /media
+compliance:
+  min_seo_score: 70
+  max_image_size_bytes: 5242880
+  allowed_mime_types:
+    - image/jpeg
+    - image/png
+    - image/webp

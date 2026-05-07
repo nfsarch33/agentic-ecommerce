@@ -90,6 +90,35 @@ ECOMMERCE_AGENT_WORKER_CONCURRENCY=1
 ECOMMERCE_AGENT_WORKER_INTERVAL=5m
 ```
 
+## Media Storage and Compliance Placeholders
+
+The dev stack mounts a host media directory into `mc-api` for upload and
+processor work:
+
+```bash
+ECOMMERCE_MEDIA_HOST_DIR=./.local/media-uploads
+ECOMMERCE_MEDIA_STORE=filesystem
+ECOMMERCE_MEDIA_ROOT=/var/lib/agentic-ecommerce/media
+ECOMMERCE_MEDIA_PUBLIC_BASE_URL=/media
+```
+
+Use the Makefile helpers to reset local upload state:
+
+```bash
+make media-seed
+make media-clean
+```
+
+The compliance thresholds are config placeholders for the v0.7.0 engine and
+should be consumed by the backend compliance rules when that implementation
+lands:
+
+```bash
+ECOMMERCE_COMPLIANCE_MIN_SEO_SCORE=70
+ECOMMERCE_COMPLIANCE_MAX_IMAGE_SIZE_BYTES=5242880
+ECOMMERCE_COMPLIANCE_ALLOWED_MIME_TYPES=image/jpeg,image/png,image/webp
+```
+
 ## Redis Event Bus Contract
 
 v0.3.0 reserves Redis for the sync event bus without adding a full eventing implementation in this infra slice. The backend and worker receive the same environment variables:

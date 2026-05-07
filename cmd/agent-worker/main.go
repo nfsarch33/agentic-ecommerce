@@ -309,7 +309,16 @@ agentic_ecommerce_agent_worker_scheduler_interval_seconds %.0f
 # HELP agentic_ecommerce_agent_worker_runs_total Orchestrator-backed agent runs completed by this worker.
 # TYPE agentic_ecommerce_agent_worker_runs_total counter
 agentic_ecommerce_agent_worker_runs_total{eventbus_driver=%q,sync_channel=%q} %d
-`, version, commit, enabled, cfg.Concurrency, cfg.Interval.Seconds(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsTotal.Load())
+# HELP agentic_ecommerce_agent_worker_compliance_checks_total Compliance checks evaluated by this worker.
+# TYPE agentic_ecommerce_agent_worker_compliance_checks_total counter
+agentic_ecommerce_agent_worker_compliance_checks_total{eventbus_driver=%q,sync_channel=%q} 0
+# HELP agentic_ecommerce_agent_worker_compliance_failures_total Compliance checks that failed in this worker.
+# TYPE agentic_ecommerce_agent_worker_compliance_failures_total counter
+agentic_ecommerce_agent_worker_compliance_failures_total{eventbus_driver=%q,sync_channel=%q} 0
+# HELP agentic_ecommerce_agent_worker_media_validation_failures_total Media validations rejected by this worker.
+# TYPE agentic_ecommerce_agent_worker_media_validation_failures_total counter
+agentic_ecommerce_agent_worker_media_validation_failures_total{eventbus_driver=%q,sync_channel=%q} 0
+`, version, commit, enabled, cfg.Concurrency, cfg.Interval.Seconds(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel)
 	}
 }
 
