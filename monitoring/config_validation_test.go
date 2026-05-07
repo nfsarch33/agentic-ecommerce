@@ -27,7 +27,17 @@ type alertRule struct {
 }
 
 type prometheusConfig struct {
-	RuleFiles []string `yaml:"rule_files"`
+	RuleFiles     []string           `yaml:"rule_files"`
+	ScrapeConfigs []prometheusScrape `yaml:"scrape_configs"`
+}
+
+type prometheusScrape struct {
+	JobName       string                   `yaml:"job_name"`
+	StaticConfigs []prometheusStaticConfig `yaml:"static_configs"`
+}
+
+type prometheusStaticConfig struct {
+	Labels map[string]string `yaml:"labels"`
 }
 
 type grafanaDashboard struct {
@@ -262,6 +272,40 @@ func TestGrafanaDashboardCoversV080ObservabilityViews(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMonitoringDoesNotUseRawTenantIDAsMetricDimension(t *testing.T) {
+	t.Parallel()
+
+	var cfg prometheusConfig
+	readYAML(t, "prometheus.yml", &cfg)
+	for _, scrape := range cfg.ScrapeConfigs {
+		for _, staticConfig := range scrape.StaticConfigs {
+			if _, ok := staticConfig.Labels["tenant_id"]; ok {
+				t.Fatalf("scrape job %q uses raw tenant_id label; use bounded dimensions only", scrape.JobName)
+			}
+		}
+	}
+
+	var rules prometheusRules
+	readYAML(t, "alerts.yml", &rules)
+	for _, group := range rules.Groups {
+		for _, rule := range group.Rules {
+			if strings.Contains(rule.Expr, "tenant_id") {
+				t.Fatalf("alert %q groups or filters by raw tenant_id:\n%s", rule.Alert, rule.Expr)
+			}
+		}
+	}
+
+	var dashboard grafanaDashboard
+	readJSON(t, "grafana/dashboards/agentic-ecommerce-overview.json", &dashboard)
+	for _, panel := range dashboard.Panels {
+		for _, expr := range panelExpressions(panel) {
+			if strings.Contains(expr, "tenant_id") {
+				t.Fatalf("dashboard panel %q queries raw tenant_id:\n%s", panel.Title, expr)
+			}
+		}
 	}
 }
 
