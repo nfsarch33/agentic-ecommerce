@@ -65,6 +65,7 @@ go vet ./...
 make build
 go test -race -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
+make monitoring-validate
 ```
 
 Private-repo operations must go through `runx` once the `ecommerce` alias is registered.
