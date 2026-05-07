@@ -57,11 +57,13 @@ func main() {
 	})
 	contentActivities := newContentGenerationActivitiesFromEnv(logger)
 	mediaActivities := newMediaProcessingActivitiesFromEnv(logger, repo)
+	sourcingActivities := ecworkflow.NewSourcingActivities(ecworkflow.SourcingActivityDeps{})
 
 	w := worker.New(c, ecworkflow.TaskQueue, worker.Options{})
 	w.RegisterWorkflow(ecworkflow.ProductPublishWorkflow)
 	w.RegisterWorkflow(ecworkflow.ContentGenerationWorkflow)
 	w.RegisterWorkflow(ecworkflow.MediaProcessingWorkflow)
+	w.RegisterWorkflow(ecworkflow.SourcingWorkflow)
 	w.RegisterActivityWithOptions(activities.CheckCompliance, activity.RegisterOptions{Name: ecworkflow.CheckComplianceActivity})
 	w.RegisterActivityWithOptions(activities.ValidateMedia, activity.RegisterOptions{Name: ecworkflow.ValidateMediaActivity})
 	w.RegisterActivityWithOptions(activities.PublishToWooCommerce, activity.RegisterOptions{Name: ecworkflow.PublishToWooCommerceActivity})
@@ -75,6 +77,11 @@ func main() {
 	w.RegisterActivityWithOptions(mediaActivities.AssessMediaQuality, activity.RegisterOptions{Name: ecworkflow.MediaQualityActivity})
 	w.RegisterActivityWithOptions(mediaActivities.StoreMedia, activity.RegisterOptions{Name: ecworkflow.MediaStoreActivity})
 	w.RegisterActivityWithOptions(mediaActivities.LinkMediaToProduct, activity.RegisterOptions{Name: ecworkflow.MediaLinkProductActivity})
+	w.RegisterActivityWithOptions(sourcingActivities.SearchSuppliers, activity.RegisterOptions{Name: ecworkflow.SearchSuppliersActivity})
+	w.RegisterActivityWithOptions(sourcingActivities.ScoreCandidates, activity.RegisterOptions{Name: ecworkflow.ScoreSourcingCandidatesActivity})
+	w.RegisterActivityWithOptions(sourcingActivities.ComparePrices, activity.RegisterOptions{Name: ecworkflow.CompareSourcingPricesActivity})
+	w.RegisterActivityWithOptions(sourcingActivities.CheckMargin, activity.RegisterOptions{Name: ecworkflow.CheckSourcingMarginActivity})
+	w.RegisterActivityWithOptions(sourcingActivities.RecommendCandidate, activity.RegisterOptions{Name: ecworkflow.RecommendSourcingCandidateActivity})
 
 	logger.Info("temporal_worker.start", "task_queue", ecworkflow.TaskQueue, "addr", temporalAddr)
 	if err := w.Run(worker.InterruptCh()); err != nil {
