@@ -66,6 +66,47 @@ func (r *OrderRepository) Create(ctx context.Context, order orderdomain.Order) e
 	return nil
 }
 
+func (r *OrderRepository) CreateWithTenant(ctx context.Context, order orderdomain.Order, tenantID string) error {
+	address := order.ShippingAddress()
+	totals := order.Totals()
+	const orderSQL = `
+		INSERT INTO orders (
+			id, customer_email, status, subtotal_amount, currency, shipping_amount, total_amount,
+			shipping_name, shipping_line1, shipping_line2, shipping_city, shipping_region,
+			shipping_postal_code, shipping_country, tenant_id, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`
+	_, err := r.pool.Exec(ctx, orderSQL,
+		order.ID(),
+		order.CustomerEmail(),
+		order.Status().String(),
+		totals.Subtotal.Amount(),
+		totals.Total.Currency(),
+		totals.Shipping.Amount(),
+		totals.Total.Amount(),
+		address.Name,
+		address.Line1,
+		address.Line2,
+		address.City,
+		address.Region,
+		address.PostalCode,
+		address.Country,
+		tenantID,
+		order.CreatedAt(),
+		order.UpdatedAt(),
+	)
+	if err != nil {
+		return fmt.Errorf("insert order %s (tenant %s): %w", order.ID(), tenantID, err)
+	}
+
+	for _, item := range order.Items() {
+		if err := r.insertOrderItem(ctx, order.ID(), item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *OrderRepository) GetByID(ctx context.Context, id uuid.UUID) (orderdomain.Order, error) {
 	order, err := r.getOrder(ctx, id)
 	if err != nil {

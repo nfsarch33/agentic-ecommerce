@@ -137,9 +137,13 @@ migrate-up:
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0002_create_orders.up.sql
 	$(COMPOSE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0003_create_product_media_assets.up.sql
+	$(COMPOSE) exec -T postgres \
+		psql "$(DB_URL)" -f /dev/stdin < migrations/0004_add_tenant_id.up.sql
 
 migrate-down:
 	@echo "==> Running migrations DOWN against $(DB_URL)"
+	$(COMPOSE) exec -T postgres \
+		psql "$(DB_URL)" -f /dev/stdin < migrations/0004_add_tenant_id.down.sql
 	$(COMPOSE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0003_create_product_media_assets.down.sql
 	$(COMPOSE) exec -T postgres \
