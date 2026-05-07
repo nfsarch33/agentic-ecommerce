@@ -8,16 +8,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
-	appcatalog "github.com/nfsarch33/agentic-ecommerce/internal/app/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 )
 
 type noopChannel struct{}
 
 func (noopChannel) UpsertProduct(context.Context, catalog.Product) error {
 	return nil
+}
+
+func (noopChannel) ListProducts(context.Context, woocommerce.ListOptions) ([]woocommerce.Product, error) {
+	return nil, nil
 }
 
 func main() {
@@ -29,10 +33,9 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, logger *slog.Logger, channel port.ProductChannel) error {
-	service := appcatalog.NewSyncService(channel)
-
-	product, err := service.SyncProduct(ctx, catalog.ProductInput{
+func run(ctx context.Context, logger *slog.Logger, channel enginesync.WooCommerceClient) error {
+	repo := inmemory.NewProductRepository()
+	product, err := catalog.NewProduct(catalog.ProductInput{
 		SKU:         "DEMO-001",
 		Title:       "Demo Product",
 		Description: "Demo WooCommerce sync payload; configure adapters before live use.",
@@ -42,12 +45,20 @@ func run(ctx context.Context, logger *slog.Logger, channel port.ProductChannel) 
 	if err != nil {
 		return err
 	}
+	if err := repo.Create(ctx, product); err != nil {
+		return err
+	}
+
+	engine := enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: channel, DefaultCurrency: "AUD"})
+	if err := engine.PublishToWooCommerce(ctx, product.ID()); err != nil {
+		return err
+	}
 
 	logger.Info("wc-sync.product_synced", "sku", product.SKU())
 	return nil
 }
 
-func channelFromEnv(logger *slog.Logger, getenv func(string) string) port.ProductChannel {
+func channelFromEnv(logger *slog.Logger, getenv func(string) string) enginesync.WooCommerceClient {
 	baseURL := strings.TrimSpace(getenv("ECOMMERCE_WC_BASE_URL"))
 	consumerKey := strings.TrimSpace(getenv("ECOMMERCE_WC_CONSUMER_KEY"))
 	consumerSecret := strings.TrimSpace(getenv("ECOMMERCE_WC_CONSUMER_SECRET"))

@@ -12,8 +12,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 )
 
 type moneyResponse struct {
@@ -54,14 +56,17 @@ type listResponse struct {
 type serverConfig struct {
 	allowedOrigin string
 	apiToken      string
+	webhookSecret string
 }
 
 type server struct {
-	cfg       serverConfig
-	repo      port.ProductRepository
-	orderRepo port.OrderRepository
-	cartRepo  port.CartRepository
-	log       *slog.Logger
+	cfg           serverConfig
+	repo          port.ProductRepository
+	orderRepo     port.OrderRepository
+	cartRepo      port.CartRepository
+	syncEngine    *enginesync.Engine
+	webhookSecret string
+	log           *slog.Logger
 }
 
 func main() {
@@ -83,15 +88,24 @@ func main() {
 }
 
 func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.OrderRepository, cartRepo port.CartRepository) *server {
+	wcClient := woocommerce.NewClient(woocommerce.Config{
+		BaseURL:        getenv("ECOMMERCE_WC_STORE_URL", ""),
+		ConsumerKey:    getenv("ECOMMERCE_WC_CONSUMER_KEY", ""),
+		ConsumerSecret: getenv("ECOMMERCE_WC_CONSUMER_SECRET", ""),
+	}, nil)
+	webhookSecret := getenv("ECOMMERCE_WC_WEBHOOK_SECRET", "")
 	return &server{
 		cfg: serverConfig{
 			allowedOrigin: getenv("ECOMMERCE_ALLOWED_ORIGIN", ""),
 			apiToken:      getenv("ECOMMERCE_API_TOKEN", ""),
+			webhookSecret: webhookSecret,
 		},
-		repo:      repo,
-		orderRepo: orderRepo,
-		cartRepo:  cartRepo,
-		log:       logger,
+		repo:          repo,
+		orderRepo:     orderRepo,
+		cartRepo:      cartRepo,
+		syncEngine:    enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
+		webhookSecret: webhookSecret,
+		log:           logger,
 	}
 }
 
@@ -107,6 +121,13 @@ func (s *server) mux() *http.ServeMux {
 	mux.HandleFunc("/api/v1/orders/", ordersAPI)
 	cartAPI := s.withCORS(s.withBearerAuth(s.cartHandler))
 	mux.HandleFunc("/api/v1/cart/", cartAPI)
+	syncAPI := s.withCORS(s.withBearerAuth(s.syncHandler))
+	mux.HandleFunc("/api/v1/sync/status", syncAPI)
+	mux.HandleFunc("/api/v1/sync/conflicts", syncAPI)
+	mux.HandleFunc("/api/v1/sync/conflicts/", syncAPI)
+	mux.HandleFunc("/api/v1/sync/products/", syncAPI)
+	mux.HandleFunc("/api/v1/webhooks/woocommerce/orders", s.woocommerceOrderWebhookHandler)
+	mux.HandleFunc("/api/v1/webhooks/woocommerce/products", s.woocommerceProductWebhookHandler)
 
 	return mux
 }
