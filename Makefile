@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage lint dev dev-down migrate-up migrate-down seed
+.PHONY: test build vet coverage lint dev dev-down dev-logs migrate-up migrate-down seed compose-config redis-ping redis-cli
 
 COMPOSE_FILE := docker-compose.dev.yml
 DB_URL       ?= postgres://postgres:postgres@127.0.0.1:5432/ecommerce?sslmode=disable
@@ -30,6 +30,12 @@ dev-down:
 
 dev-logs:
 	docker compose -f $(COMPOSE_FILE) logs -f
+
+redis-ping:
+	docker compose -f $(COMPOSE_FILE) exec -T redis redis-cli ping
+
+redis-cli:
+	docker compose -f $(COMPOSE_FILE) exec redis redis-cli
 
 migrate-up:
 	@echo "==> Running migrations UP against $(DB_URL)"
