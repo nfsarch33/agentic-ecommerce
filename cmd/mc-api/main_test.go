@@ -774,6 +774,17 @@ func TestGetenvValue(t *testing.T) {
 	}
 }
 
+func TestQueryDefaultEmbeddingDimensions(t *testing.T) {
+	t.Setenv("ECOMMERCE_RAG_EMBEDDING_DIMENSIONS", "16")
+	if got := queryDefaultEmbeddingDimensions(); got != 16 {
+		t.Fatalf("dimensions = %d, want 16", got)
+	}
+	t.Setenv("ECOMMERCE_RAG_EMBEDDING_DIMENSIONS", "bad")
+	if got := queryDefaultEmbeddingDimensions(); got != 1536 {
+		t.Fatalf("fallback dimensions = %d, want 1536", got)
+	}
+}
+
 func createTestOrder(t *testing.T, srv *server) string {
 	t.Helper()
 	body := `{"customer_email":"shopper@example.com","items":[{"product_id":"c1000000-0000-0000-0000-000000000001","sku":"BAND-001","title":"Resistance Band","quantity":1,"unit_price":{"amount":2495,"currency":"AUD"}}],"shipping_address":{"name":"Jane Shopper","line1":"1 Market Street","city":"Sydney","region":"NSW","postal_code":"2000","country":"AU"}}`

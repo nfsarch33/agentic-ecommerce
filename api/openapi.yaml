@@ -445,6 +445,153 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/rag/documents:
+    post:
+      summary: Ingest a RAG source document
+      operationId: ingestRAGDocument
+      description: Chunks and embeds source material for fact-check evidence search. Embeddings are produced through the configured embedding port; the backend never calls MiniMax directly.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RAGDocumentRequest'
+      responses:
+        '201':
+          description: Document accepted and chunked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RAGIngestResponse'
+        '400':
+          description: Invalid JSON body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Empty or invalid source document.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: RAG service is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/rag/search:
+    get:
+      summary: Search fact-check evidence
+      operationId: searchRAGEvidence
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: top_k
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+      responses:
+        '200':
+          description: Ranked evidence chunks.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RAGSearchResponse'
+        '400':
+          description: Missing query.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: RAG service is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/content/generate:
+    post:
+      summary: Generate product content with fact-checking
+      operationId: generateFactCheckedContent
+      description: Generates product copy, extracts factual claims, searches RAG evidence, and returns a combined quality/factual approval decision.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateFactCheckedContentRequest'
+      responses:
+        '200':
+          description: Generated content with fact-check result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentFactCheckResponse'
+        '400':
+          description: Invalid JSON body or product ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Content generation or fact-checking failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Content generator or fact checker is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/content/fact-checks/{id}:
+    get:
+      summary: Retrieve a stored fact-check result
+      operationId: getFactCheckResult
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Fact-check result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactCheckResult'
+        '404':
+          description: Fact-check result not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/products/{id}/compliance-check:
     post:
       summary: Run product content compliance checks
@@ -1059,6 +1206,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/workflows/content-generation:
+    post:
+      summary: Start the ContentGenerationWorkflow
+      operationId: startContentGenerationWorkflow
+      description: Starts the Temporal workflow that generates content, fact-checks claims against RAG evidence, evaluates quality, and auto-approves or rejects the result.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartContentGenerationWorkflowRequest'
+      responses:
+        '202':
+          description: Temporal workflow execution accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowStartResponse'
+        '400':
+          description: Invalid JSON body or product ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporal client is not configured for the API process.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Temporal rejected the workflow start request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/workflows/{id}:
     get:
       summary: Get Temporal workflow status
@@ -1489,6 +1680,168 @@ components:
           minimum: 0
         evaluation:
           $ref: '#/components/schemas/ContentEvaluation'
+    GenerateFactCheckedContentRequest:
+      type: object
+      required: [product_id]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        style:
+          type: string
+          enum: [professional, casual, luxury, technical]
+          default: professional
+        language:
+          type: string
+          default: en-AU
+        max_words:
+          type: integer
+          minimum: 20
+          maximum: 500
+          default: 120
+        keywords:
+          type: array
+          items:
+            type: string
+    ContentFactCheckResponse:
+      type: object
+      required: [fact_check_id, product_id, description, seo_title, meta_description, score, pass, tokens_used, evaluation, fact_check]
+      properties:
+        fact_check_id:
+          type: string
+        product_id:
+          type: string
+          format: uuid
+        description:
+          type: string
+        seo_title:
+          type: string
+        meta_description:
+          type: string
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        pass:
+          type: boolean
+        tokens_used:
+          type: integer
+          minimum: 0
+        evaluation:
+          $ref: '#/components/schemas/ContentEvaluation'
+        fact_check:
+          $ref: '#/components/schemas/FactCheckResult'
+    FactCheckResult:
+      type: object
+      required: [pass, confidence, claims, issues]
+      properties:
+        id:
+          type: string
+        product_id:
+          type: string
+        pass:
+          type: boolean
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        checked_at:
+          type: string
+          format: date-time
+        claims:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimCheck'
+        issues:
+          type: array
+          items:
+            type: string
+    ClaimCheck:
+      type: object
+      required: [claim, text, status, confidence, evidence]
+      properties:
+        claim:
+          type: object
+          required: [text]
+          properties:
+            text:
+              type: string
+        text:
+          type: string
+        status:
+          type: string
+          enum: [supported, unsupported]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/RAGSearchResult'
+    RAGDocumentRequest:
+      type: object
+      required: [id, content]
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+          default: default
+        title:
+          type: string
+        source:
+          type: string
+        content:
+          type: string
+          minLength: 1
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+    RAGIngestResponse:
+      type: object
+      required: [document_id, chunks]
+      properties:
+        document_id:
+          type: string
+        chunks:
+          type: integer
+          minimum: 1
+    RAGSearchResponse:
+      type: object
+      required: [query, results]
+      properties:
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RAGSearchResult'
+    RAGSearchResult:
+      type: object
+      required: [chunk_id, document_id, text, score]
+      properties:
+        chunk_id:
+          type: string
+        document_id:
+          type: string
+        tenant_id:
+          type: string
+        title:
+          type: string
+        source:
+          type: string
+        text:
+          type: string
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
     ComplianceCheckRequest:
       type: object
       properties:
@@ -1817,6 +2170,32 @@ components:
         requested_by:
           type: string
           description: Operator identity recorded in workflow audit events.
+    StartContentGenerationWorkflowRequest:
+      type: object
+      required: [product_id]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        requested_by:
+          type: string
+          description: Operator identity recorded in workflow audit events.
+        style:
+          type: string
+          enum: [professional, casual, luxury, technical]
+          default: professional
+        language:
+          type: string
+          default: en-AU
+        max_words:
+          type: integer
+          minimum: 20
+          maximum: 500
+          default: 120
+        keywords:
+          type: array
+          items:
+            type: string
     WorkflowStartResponse:
       type: object
       required: [workflow_id, run_id, status, task_queue]
