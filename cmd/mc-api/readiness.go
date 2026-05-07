@@ -47,6 +47,7 @@ func defaultReadinessChecks() []readinessProbe {
 	return []readinessProbe{
 		{name: "database", optional: true},
 		{name: "redis", optional: true},
+		{name: "eventbus", optional: true},
 	}
 }
 
@@ -78,6 +79,21 @@ func newReadinessChecksFromEnv(time.Duration) ([]readinessProbe, []func()) {
 			optional: false,
 			check: func(ctx context.Context) error {
 				return pingRedis(ctx, addr, db)
+			},
+		}
+	}
+
+	ebAddr := strings.TrimSpace(os.Getenv("ECOMMERCE_EVENTBUS_REDIS_ADDR"))
+	if ebAddr == "" {
+		ebAddr = strings.TrimSpace(os.Getenv("ECOMMERCE_REDIS_ADDR"))
+	}
+	ebDB := strings.TrimSpace(os.Getenv("ECOMMERCE_EVENTBUS_REDIS_DB"))
+	if ebAddr != "" && strings.TrimSpace(os.Getenv("ECOMMERCE_EVENTBUS_DRIVER")) == "redis" {
+		checks[2] = readinessProbe{
+			name:     "eventbus",
+			optional: false,
+			check: func(ctx context.Context) error {
+				return pingRedisStreams(ctx, ebAddr, ebDB)
 			},
 		}
 	}
@@ -127,6 +143,42 @@ func hasFailedReadinessCheck(checks map[string]readinessCheckResponse) bool {
 		}
 	}
 	return false
+}
+
+// pingRedisStreams verifies that the event bus Redis instance is reachable and
+// supports Streams by issuing a PING followed by a zero-cost XINFO HELP command.
+func pingRedisStreams(ctx context.Context, addr, db string) error {
+	dialer := net.Dialer{}
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return fmt.Errorf("eventbus dial: %w", err)
+	}
+	defer conn.Close()
+
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
+	}
+	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+
+	if db != "" && db != "0" {
+		if _, err := strconv.Atoi(db); err != nil {
+			return fmt.Errorf("eventbus redis db: %w", err)
+		}
+		if err := redisCommand(rw, "SELECT", db); err != nil {
+			return err
+		}
+		if err := readRedisSimpleResponse(rw.Reader, "OK"); err != nil {
+			return err
+		}
+	}
+
+	if err := redisCommand(rw, "PING"); err != nil {
+		return err
+	}
+	if err := readRedisSimpleResponse(rw.Reader, "PONG"); err != nil {
+		return fmt.Errorf("eventbus ping: %w", err)
+	}
+	return nil
 }
 
 func pingRedis(ctx context.Context, addr, db string) error {
