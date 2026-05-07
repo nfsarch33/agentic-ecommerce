@@ -87,29 +87,50 @@ func (r CustomRule) Validate() error {
 	if r.Version < 0 {
 		return errors.New("rule version must be non-negative")
 	}
-	switch r.Severity {
+	if err := validateCustomRuleSeverity(r.Severity); err != nil {
+		return err
+	}
+	return r.Definition.Validate()
+}
+
+func validateCustomRuleSeverity(severity Severity) error {
+	switch severity {
 	case SeverityInfo, SeverityWarning, SeverityError, SeverityCritical:
+		return nil
 	default:
-		return fmt.Errorf("invalid severity %q", r.Severity)
+		return fmt.Errorf("invalid severity %q", severity)
 	}
-	if r.Definition.Type != CustomRuleContainsAny {
-		return fmt.Errorf("unsupported custom rule type %q", r.Definition.Type)
+}
+
+func (d CustomRuleDefinition) Validate() error {
+	if d.Type != CustomRuleContainsAny {
+		return fmt.Errorf("unsupported custom rule type %q", d.Type)
 	}
-	switch r.Definition.Field {
-	case CustomRuleFieldTitle, CustomRuleFieldDescription, CustomRuleFieldMeta, CustomRuleFieldSEOTitle:
-	default:
-		return fmt.Errorf("unsupported custom rule field %q", r.Definition.Field)
+	if err := validateCustomRuleField(d.Field); err != nil {
+		return err
 	}
-	values := 0
-	for _, value := range r.Definition.Values {
-		if strings.TrimSpace(value) != "" {
-			values++
-		}
-	}
-	if values == 0 {
+	if !hasCustomRuleValues(d.Values) {
 		return errors.New("custom rule values required")
 	}
 	return nil
+}
+
+func validateCustomRuleField(field string) error {
+	switch field {
+	case CustomRuleFieldTitle, CustomRuleFieldDescription, CustomRuleFieldMeta, CustomRuleFieldSEOTitle:
+		return nil
+	default:
+		return fmt.Errorf("unsupported custom rule field %q", field)
+	}
+}
+
+func hasCustomRuleValues(values []string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (r CustomRule) versionedID() string {

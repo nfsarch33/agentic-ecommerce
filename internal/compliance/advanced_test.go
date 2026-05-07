@@ -120,19 +120,7 @@ func TestCustomRuleValidationRejectsInvalidDefinition(t *testing.T) {
 func TestHistoryStoreAggregatesByTenantRuleProductAndTrend(t *testing.T) {
 	t.Parallel()
 
-	store := NewInMemoryHistoryStore()
-	now := time.Date(2026, 5, 8, 2, 0, 0, 0, time.UTC)
-	records := []EvaluationRecord{
-		{TenantID: "tenant-a", ProductID: "product-1", CheckedAt: now.Add(-24 * time.Hour), Result: Result{Pass: false, Results: []RuleResult{{ID: "seo", Pass: false}, {ID: "legal", Pass: true}}}},
-		{TenantID: "tenant-a", ProductID: "product-1", CheckedAt: now, Result: Result{Pass: true, Results: []RuleResult{{ID: "seo", Pass: true}, {ID: "legal", Pass: true}}}},
-		{TenantID: "tenant-b", ProductID: "product-2", CheckedAt: now, Result: Result{Pass: false, Results: []RuleResult{{ID: "seo", Pass: false}}}},
-	}
-	for _, record := range records {
-		if err := store.RecordEvaluation(context.Background(), record); err != nil {
-			t.Fatalf("record evaluation: %v", err)
-		}
-	}
-
+	store := seedHistoryStore(t)
 	summary, err := store.Summary(context.Background(), SummaryFilter{TenantID: "tenant-a"})
 	if err != nil {
 		t.Fatalf("summary: %v", err)
@@ -149,6 +137,23 @@ func TestHistoryStoreAggregatesByTenantRuleProductAndTrend(t *testing.T) {
 	if len(summary.Trends) != 2 {
 		t.Fatalf("trends = %+v, want two tenant-a days", summary.Trends)
 	}
+}
+
+func seedHistoryStore(t *testing.T) *InMemoryHistoryStore {
+	t.Helper()
+	store := NewInMemoryHistoryStore()
+	now := time.Date(2026, 5, 8, 2, 0, 0, 0, time.UTC)
+	records := []EvaluationRecord{
+		{TenantID: "tenant-a", ProductID: "product-1", CheckedAt: now.Add(-24 * time.Hour), Result: Result{Pass: false, Results: []RuleResult{{ID: "seo", Pass: false}, {ID: "legal", Pass: true}}}},
+		{TenantID: "tenant-a", ProductID: "product-1", CheckedAt: now, Result: Result{Pass: true, Results: []RuleResult{{ID: "seo", Pass: true}, {ID: "legal", Pass: true}}}},
+		{TenantID: "tenant-b", ProductID: "product-2", CheckedAt: now, Result: Result{Pass: false, Results: []RuleResult{{ID: "seo", Pass: false}}}},
+	}
+	for _, record := range records {
+		if err := store.RecordEvaluation(context.Background(), record); err != nil {
+			t.Fatalf("record evaluation: %v", err)
+		}
+	}
+	return store
 }
 
 func TestHistoryStoreExportsJSONAndCSV(t *testing.T) {

@@ -29,11 +29,64 @@ func TestApplyOverridesDisablesRulesAndOverridesSeverity(t *testing.T) {
 	}
 }
 
-func TestInMemoryCustomRuleStoreCRUDVersioningIsolationAndDelete(t *testing.T) {
+func TestInMemoryCustomRuleStoreCreatesAndListsByTenant(t *testing.T) {
 	t.Parallel()
 
 	store := NewInMemoryCustomRuleStore()
-	rule := CustomRule{
+	rule := validCustomRule()
+	created, err := store.CreateCustomRule(context.Background(), rule)
+	if err != nil {
+		t.Fatalf("create custom rule: %v", err)
+	}
+	if created.Version != 1 || created.CreatedAt.IsZero() || created.UpdatedAt.IsZero() {
+		t.Fatalf("created rule = %+v", created)
+	}
+	if _, err := store.CreateCustomRule(context.Background(), rule); err == nil {
+		t.Fatal("duplicate custom rule was accepted")
+	}
+	assertCustomRuleList(t, store, "tenant-a", 1)
+	assertCustomRuleList(t, store, "tenant-b", 0)
+}
+
+func TestInMemoryCustomRuleStoreUpdatesVersion(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryCustomRuleStore()
+	rule := validCustomRule()
+	if _, err := store.CreateCustomRule(context.Background(), rule); err != nil {
+		t.Fatalf("create custom rule: %v", err)
+	}
+	rule.Name = "No claims v2"
+	rule.Severity = SeverityWarning
+	updated, err := store.UpdateCustomRule(context.Background(), rule)
+	if err != nil {
+		t.Fatalf("update custom rule: %v", err)
+	}
+	if updated.Version != 2 || updated.Severity != SeverityWarning || updated.CreatedAt.IsZero() {
+		t.Fatalf("updated rule = %+v", updated)
+	}
+}
+
+func TestInMemoryCustomRuleStoreDeletesAndRejectsMissingTenant(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryCustomRuleStore()
+	if _, err := store.CreateCustomRule(context.Background(), validCustomRule()); err != nil {
+		t.Fatalf("create custom rule: %v", err)
+	}
+	if err := store.DeleteCustomRule(context.Background(), "tenant-a", "no-claims"); err != nil {
+		t.Fatalf("delete custom rule: %v", err)
+	}
+	if err := store.DeleteCustomRule(context.Background(), "tenant-a", "no-claims"); !errors.Is(err, ErrCustomRuleNotFound) {
+		t.Fatalf("delete missing error = %v, want ErrCustomRuleNotFound", err)
+	}
+	if _, err := store.ListCustomRules(context.Background(), " "); err == nil {
+		t.Fatal("ListCustomRules accepted missing tenant")
+	}
+}
+
+func validCustomRule() CustomRule {
+	return CustomRule{
 		TenantID: "tenant-a",
 		ID:       "no-claims",
 		Name:     "No claims",
@@ -45,50 +98,16 @@ func TestInMemoryCustomRuleStoreCRUDVersioningIsolationAndDelete(t *testing.T) {
 			Values: []string{"miracle"},
 		},
 	}
-	created, err := store.CreateCustomRule(context.Background(), rule)
-	if err != nil {
-		t.Fatalf("create custom rule: %v", err)
-	}
-	if created.Version != 1 || created.CreatedAt.IsZero() || created.UpdatedAt.IsZero() {
-		t.Fatalf("created rule = %+v", created)
-	}
-	if _, err := store.CreateCustomRule(context.Background(), rule); err == nil {
-		t.Fatal("duplicate custom rule was accepted")
-	}
+}
 
-	list, err := store.ListCustomRules(context.Background(), "tenant-a")
+func assertCustomRuleList(t *testing.T, store *InMemoryCustomRuleStore, tenantID string, want int) {
+	t.Helper()
+	list, err := store.ListCustomRules(context.Background(), tenantID)
 	if err != nil {
-		t.Fatalf("list tenant A rules: %v", err)
+		t.Fatalf("list %s rules: %v", tenantID, err)
 	}
-	if len(list) != 1 || list[0].ID != "no-claims" {
-		t.Fatalf("tenant A rules = %+v", list)
-	}
-	isolated, err := store.ListCustomRules(context.Background(), "tenant-b")
-	if err != nil {
-		t.Fatalf("list tenant B rules: %v", err)
-	}
-	if len(isolated) != 0 {
-		t.Fatalf("tenant B rules = %+v, want isolated empty list", isolated)
-	}
-
-	rule.Name = "No claims v2"
-	rule.Severity = SeverityWarning
-	updated, err := store.UpdateCustomRule(context.Background(), rule)
-	if err != nil {
-		t.Fatalf("update custom rule: %v", err)
-	}
-	if updated.Version != 2 || updated.Severity != SeverityWarning || updated.CreatedAt.IsZero() {
-		t.Fatalf("updated rule = %+v", updated)
-	}
-
-	if err := store.DeleteCustomRule(context.Background(), "tenant-a", "no-claims"); err != nil {
-		t.Fatalf("delete custom rule: %v", err)
-	}
-	if err := store.DeleteCustomRule(context.Background(), "tenant-a", "no-claims"); !errors.Is(err, ErrCustomRuleNotFound) {
-		t.Fatalf("delete missing error = %v, want ErrCustomRuleNotFound", err)
-	}
-	if _, err := store.ListCustomRules(context.Background(), " "); err == nil {
-		t.Fatal("ListCustomRules accepted missing tenant")
+	if len(list) != want {
+		t.Fatalf("%s rules = %+v, want %d", tenantID, list, want)
 	}
 }
 

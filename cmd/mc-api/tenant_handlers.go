@@ -109,15 +109,31 @@ func (s *server) customRulesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/compliance/custom-rules"), "/")
-	switch {
-	case path == "" && r.Method == http.MethodGet:
+	if path == "" {
+		s.customRulesCollectionHandler(w, r, tenantID)
+		return
+	}
+	if r.Method == http.MethodPut {
+		s.updateCustomRule(w, r, tenantID, path)
+		return
+	}
+	if r.Method == http.MethodDelete {
+		s.deleteCustomRule(w, r, tenantID, path)
+		return
+	}
+	writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+}
+
+func (s *server) customRulesCollectionHandler(w http.ResponseWriter, r *http.Request, tenantID tenantpkg.ID) {
+	switch r.Method {
+	case http.MethodGet:
 		rules, err := s.customRuleStore.ListCustomRules(r.Context(), string(tenantID))
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
 			return
 		}
 		writeJSON(w, http.StatusOK, customRulesResponse{Rules: rules})
-	case path == "" && r.Method == http.MethodPost:
+	case http.MethodPost:
 		rule, ok := decodeCustomRuleRequest(w, r)
 		if !ok {
 			return
@@ -129,36 +145,40 @@ func (s *server) customRulesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusCreated, created)
-	case path != "" && r.Method == http.MethodPut:
-		rule, ok := decodeCustomRuleRequest(w, r)
-		if !ok {
-			return
-		}
-		rule.TenantID = string(tenantID)
-		rule.ID = path
-		updated, err := s.customRuleStore.UpdateCustomRule(r.Context(), rule)
-		if err != nil {
-			if errors.Is(err, compliance.ErrCustomRuleNotFound) {
-				writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
-				return
-			}
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, updated)
-	case path != "" && r.Method == http.MethodDelete:
-		if err := s.customRuleStore.DeleteCustomRule(r.Context(), string(tenantID), path); err != nil {
-			if errors.Is(err, compliance.ErrCustomRuleNotFound) {
-				writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
-				return
-			}
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 	}
+}
+
+func (s *server) updateCustomRule(w http.ResponseWriter, r *http.Request, tenantID tenantpkg.ID, ruleID string) {
+	rule, ok := decodeCustomRuleRequest(w, r)
+	if !ok {
+		return
+	}
+	rule.TenantID = string(tenantID)
+	rule.ID = ruleID
+	updated, err := s.customRuleStore.UpdateCustomRule(r.Context(), rule)
+	if err != nil {
+		writeCustomRuleMutationError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *server) deleteCustomRule(w http.ResponseWriter, r *http.Request, tenantID tenantpkg.ID, ruleID string) {
+	if err := s.customRuleStore.DeleteCustomRule(r.Context(), string(tenantID), ruleID); err != nil {
+		writeCustomRuleMutationError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func writeCustomRuleMutationError(w http.ResponseWriter, err error) {
+	if errors.Is(err, compliance.ErrCustomRuleNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+		return
+	}
+	writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 }
 
 func decodeCustomRuleRequest(w http.ResponseWriter, r *http.Request) (compliance.CustomRule, bool) {

@@ -84,49 +84,32 @@ func TestTenantMiddlewareExtractsTenantFromJWTClaims(t *testing.T) {
 	}
 }
 
-func TestCustomRulesEndpointIsTenantScoped(t *testing.T) {
+func TestCustomRulesEndpointCreatesAndListsPerTenant(t *testing.T) {
 	t.Parallel()
 
 	srv, _ := testServer(t)
-	createBody := `{"id":"no-greenwashing","name":"No greenwashing","description":"Reject unsupported claims","severity":"error","enabled":true,"definition":{"type":"contains_any","field":"description","values":["carbon neutral"],"fail_reason":"unsupported sustainability claim"}}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/compliance/custom-rules", strings.NewReader(createBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Tenant-ID", "tenant-a")
-	rec := httptest.NewRecorder()
-	srv.mux().ServeHTTP(rec, req)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create status = %d, want 201; body=%s", rec.Code, rec.Body.String())
-	}
-	var created compliance.CustomRule
-	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
-		t.Fatalf("decode created rule: %v", err)
-	}
+	created := createCustomRuleAPI(t, srv, "tenant-a")
 	if created.TenantID != "tenant-a" || created.Version != 1 {
 		t.Fatalf("created rule = %+v", created)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/compliance/custom-rules", nil)
-	req.Header.Set("X-Tenant-ID", "tenant-b")
-	rec = httptest.NewRecorder()
-	srv.mux().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("tenant B list status = %d, want 200; body=%s", rec.Code, rec.Body.String())
-	}
-	var tenantB struct {
-		Rules []compliance.CustomRule `json:"rules"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&tenantB); err != nil {
-		t.Fatalf("decode tenant B rules: %v", err)
-	}
+	tenantB := listCustomRulesAPI(t, srv, "tenant-b")
 	if len(tenantB.Rules) != 0 {
 		t.Fatalf("tenant B rules = %+v, want isolated empty list", tenantB.Rules)
 	}
+}
+
+func TestCustomRulesEndpointUpdatesVersionAndEnabledState(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := testServer(t)
+	createCustomRuleAPI(t, srv, "tenant-a")
 
 	updateBody := `{"name":"No greenwashing v2","description":"Reject unsupported claims","severity":"warning","enabled":false,"definition":{"type":"contains_any","field":"description","values":["carbon neutral"],"fail_reason":"unsupported sustainability claim"}}`
-	req = httptest.NewRequest(http.MethodPut, "/api/v1/compliance/custom-rules/no-greenwashing", strings.NewReader(updateBody))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/compliance/custom-rules/no-greenwashing", strings.NewReader(updateBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Tenant-ID", "tenant-a")
-	rec = httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 	srv.mux().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update status = %d, want 200; body=%s", rec.Code, rec.Body.String())
@@ -155,9 +138,90 @@ func TestCustomRulesEndpointValidatesDefinitions(t *testing.T) {
 	}
 }
 
-func TestComplianceReportsSummaryAndExportAreTenantScoped(t *testing.T) {
+func TestComplianceReportsSummaryIsTenantScoped(t *testing.T) {
 	t.Parallel()
 
+	srv, _ := seedComplianceReport(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/compliance/reports/summary", nil)
+	req.Header.Set("X-Tenant-ID", "tenant-a")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("summary status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var summary compliance.Summary
+	if err := json.NewDecoder(rec.Body).Decode(&summary); err != nil {
+		t.Fatalf("decode summary: %v", err)
+	}
+	if summary.TenantID != "tenant-a" || summary.TotalChecks != 1 || summary.FailedChecks != 1 {
+		t.Fatalf("summary = %+v", summary)
+	}
+	if summary.RuleStats["prohibited_words"].Failed != 1 {
+		t.Fatalf("rule stats = %+v", summary.RuleStats)
+	}
+}
+
+func TestComplianceReportsExportCSVIsTenantScoped(t *testing.T) {
+	t.Parallel()
+
+	srv, productID := seedComplianceReport(t)
+
+	export := httptest.NewRequest(http.MethodGet, "/api/v1/compliance/reports/export?format=csv", nil)
+	export.Header.Set("X-Tenant-ID", "tenant-a")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, export)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("export status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "text/csv" {
+		t.Fatalf("content-type = %q, want text/csv", got)
+	}
+	rows, err := csv.NewReader(strings.NewReader(rec.Body.String())).ReadAll()
+	if err != nil {
+		t.Fatalf("read csv: %v\n%s", err, rec.Body.String())
+	}
+	if len(rows) != 2 || rows[1][0] != "tenant-a" || rows[1][1] != productID {
+		t.Fatalf("csv rows = %+v", rows)
+	}
+}
+
+func createCustomRuleAPI(t *testing.T, srv *server, tenantID string) compliance.CustomRule {
+	t.Helper()
+	createBody := `{"id":"no-greenwashing","name":"No greenwashing","description":"Reject unsupported claims","severity":"error","enabled":true,"definition":{"type":"contains_any","field":"description","values":["carbon neutral"],"fail_reason":"unsupported sustainability claim"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/compliance/custom-rules", strings.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-ID", tenantID)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+	var created compliance.CustomRule
+	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode created rule: %v", err)
+	}
+	return created
+}
+
+func listCustomRulesAPI(t *testing.T, srv *server, tenantID string) customRulesResponse {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/compliance/custom-rules", nil)
+	req.Header.Set("X-Tenant-ID", tenantID)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var resp customRulesResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode rules: %v", err)
+	}
+	return resp
+}
+
+func seedComplianceReport(t *testing.T) (*server, string) {
+	t.Helper()
 	srv, repo := testServer(t)
 	product := addProductWithContent(t, repo, catalog.ProductInput{
 		SKU:         "BAD-CLAIM",
@@ -174,42 +238,7 @@ func TestComplianceReportsSummaryAndExportAreTenantScoped(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("check status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/compliance/reports/summary", nil)
-	req.Header.Set("X-Tenant-ID", "tenant-a")
-	rec = httptest.NewRecorder()
-	srv.mux().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("summary status = %d, want 200; body=%s", rec.Code, rec.Body.String())
-	}
-	var summary compliance.Summary
-	if err := json.NewDecoder(rec.Body).Decode(&summary); err != nil {
-		t.Fatalf("decode summary: %v", err)
-	}
-	if summary.TenantID != "tenant-a" || summary.TotalChecks != 1 || summary.FailedChecks != 1 {
-		t.Fatalf("summary = %+v", summary)
-	}
-	if summary.RuleStats["prohibited_words"].Failed != 1 {
-		t.Fatalf("rule stats = %+v", summary.RuleStats)
-	}
-
-	export := httptest.NewRequest(http.MethodGet, "/api/v1/compliance/reports/export?format=csv", nil)
-	export.Header.Set("X-Tenant-ID", "tenant-a")
-	rec = httptest.NewRecorder()
-	srv.mux().ServeHTTP(rec, export)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("export status = %d, want 200; body=%s", rec.Code, rec.Body.String())
-	}
-	if got := rec.Header().Get("Content-Type"); got != "text/csv" {
-		t.Fatalf("content-type = %q, want text/csv", got)
-	}
-	rows, err := csv.NewReader(strings.NewReader(rec.Body.String())).ReadAll()
-	if err != nil {
-		t.Fatalf("read csv: %v\n%s", err, rec.Body.String())
-	}
-	if len(rows) != 2 || rows[1][0] != "tenant-a" || rows[1][1] != product.ID().String() {
-		t.Fatalf("csv rows = %+v", rows)
-	}
+	return srv, product.ID().String()
 }
 
 func mintTestAccessTokenForTenant(t *testing.T, srv *server, subject string, role security.Role, tenantID string) string {
