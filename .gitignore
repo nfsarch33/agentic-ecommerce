@@ -1,0 +1,30 @@
+/bin/
+/coverage.out
+/mc-api
+/wc-sync
+/content-worker
+
+# secrets and local configuration
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# local editor state
+.vscode/
+.idea/
+.DS_Store
+
+# local databases, dumps, and generated state
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.bak
+*.log

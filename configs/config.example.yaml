@@ -1,0 +1,7 @@
+http_addr: 127.0.0.1:8080
+woocommerce:
+  base_url: https://example.invalid
+  consumer_key_ref: op://vault/woocommerce/consumer_key
+  consumer_secret_ref: op://vault/woocommerce/consumer_secret
+llm_router:
+  base_url: http://127.0.0.1:8081
