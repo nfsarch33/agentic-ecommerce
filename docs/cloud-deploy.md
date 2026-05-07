@@ -85,7 +85,9 @@ Store complete connection strings or credentials in the cloud secret manager. Te
 Backend secrets:
 
 - `ECOMMERCE_DB_URL`: full PostgreSQL DSN for `mc-api`, `wc-sync`, and `agent-worker`.
+- `ECOMMERCE_DB_POOL_MAX_CONNS`, `ECOMMERCE_DB_POOL_MIN_CONNS`, `ECOMMERCE_DB_POOL_MAX_CONN_LIFETIME`, `ECOMMERCE_DB_POOL_MAX_CONN_IDLE_TIME`, `ECOMMERCE_DB_CONNECT_TIMEOUT`: non-secret pgxpool tuning values for cloud database connection budgets.
 - `ECOMMERCE_REDIS_ADDR`: Redis host:port, or a runtime-composed value if the provider resource exposes it directly.
+- `ECOMMERCE_REDIS_TIMEOUT`: non-secret Redis operation timeout for request paths that do not already carry a deadline.
 - `ECOMMERCE_API_TOKEN`: optional legacy backend bearer token for migration windows only.
 - `ECOMMERCE_WC_CONSUMER_KEY`: WooCommerce REST consumer key.
 - `ECOMMERCE_WC_CONSUMER_SECRET`: WooCommerce REST consumer secret.
@@ -97,7 +99,7 @@ Frontend secrets:
 
 - `FLEET_AI_BRIDGE_URL`: only if the frontend BFF route needs to call the approved fleet bridge.
 
-Non-secret environment variables can stay in Terraform state, including `ECOMMERCE_ALLOWED_ORIGIN`, `ECOMMERCE_JWT_ISSUER`, `ECOMMERCE_JWT_AUDIENCE`, `ECOMMERCE_JWT_ACCESS_TTL`, `ECOMMERCE_REFRESH_TTL`, `ECOMMERCE_RATE_LIMIT_CAPACITY`, `ECOMMERCE_RATE_LIMIT_REFILL`, `ECOMMERCE_CSP_CONNECT_SRC`, `ECOMMERCE_CSP_REPORT_URI`, `ECOMMERCE_EVENTBUS_DRIVER`, `ECOMMERCE_EVENTBUS_CHANNEL_SYNC`, `ECOMMERCE_EVENTBUS_CHANNEL_DLQ`, `ECOMMERCE_EMBEDDING_MODEL`, `ECOMMERCE_EMBEDDING_DIMENSIONS`, `ECOMMERCE_RAG_CHUNK_SIZE`, `ECOMMERCE_MEDIA_STORAGE_DRIVER`, `ECOMMERCE_MEDIA_BUCKET`, `ECOMMERCE_MEDIA_BASE_PATH`, `ECOMMERCE_MEDIA_PUBLIC_BASE_URL`, `ECOMMERCE_MEDIA_REGION`, `ECOMMERCE_MEDIA_MAX_SIZE_BYTES`, `ECOMMERCE_MEDIA_ALLOWED_MIME_TYPES`, and worker scheduling flags.
+Non-secret environment variables can stay in Terraform state, including `ECOMMERCE_ALLOWED_ORIGIN`, `ECOMMERCE_JWT_ISSUER`, `ECOMMERCE_JWT_AUDIENCE`, `ECOMMERCE_JWT_ACCESS_TTL`, `ECOMMERCE_REFRESH_TTL`, `ECOMMERCE_RATE_LIMIT_CAPACITY`, `ECOMMERCE_RATE_LIMIT_REFILL`, `ECOMMERCE_READINESS_TIMEOUT`, `ECOMMERCE_REDIS_TIMEOUT`, the `ECOMMERCE_DB_POOL_*` values, `ECOMMERCE_DB_CONNECT_TIMEOUT`, `ECOMMERCE_CSP_CONNECT_SRC`, `ECOMMERCE_CSP_REPORT_URI`, `ECOMMERCE_EVENTBUS_DRIVER`, `ECOMMERCE_EVENTBUS_CHANNEL_SYNC`, `ECOMMERCE_EVENTBUS_CHANNEL_DLQ`, `ECOMMERCE_EMBEDDING_MODEL`, `ECOMMERCE_EMBEDDING_DIMENSIONS`, `ECOMMERCE_RAG_CHUNK_SIZE`, `ECOMMERCE_MEDIA_STORAGE_DRIVER`, `ECOMMERCE_MEDIA_BUCKET`, `ECOMMERCE_MEDIA_BASE_PATH`, `ECOMMERCE_MEDIA_PUBLIC_BASE_URL`, `ECOMMERCE_MEDIA_REGION`, `ECOMMERCE_MEDIA_MAX_SIZE_BYTES`, `ECOMMERCE_MEDIA_ALLOWED_MIME_TYPES`, and worker scheduling flags.
 
 For cloud media storage, prefer IAM over static credentials:
 
@@ -148,7 +150,7 @@ Carry these alert thresholds into cloud monitoring:
 - `mc-api` scrape or health failure for 1 minute.
 - Media validation failure spikes above 5 failures in 15 minutes.
 
-CloudWatch or Cloud Logging should receive structured JSON logs. Use request IDs and service labels so API, worker, sync, and frontend events can be correlated.
+CloudWatch or Cloud Logging should receive structured JSON logs. Use `request_id`, `trace_id`, `tenant_id`, `actor_id`, `route`, `http_status`, and `duration_seconds` so API, worker, sync, and frontend events can be correlated without relying on provider-specific parsers.
 
 ## Safety Rules
 

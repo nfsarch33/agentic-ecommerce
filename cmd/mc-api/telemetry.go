@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -43,4 +44,31 @@ func traceIDFromContext(ctx context.Context) string {
 		return ""
 	}
 	return spanCtx.TraceID().String()
+}
+
+func traceIDFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if traceID := traceIDFromContext(r.Context()); traceID != "" {
+		return traceID
+	}
+	return traceIDFromTraceparent(r.Header.Get("Traceparent"))
+}
+
+func traceIDFromTraceparent(header string) string {
+	parts := strings.Split(strings.TrimSpace(header), "-")
+	if len(parts) != 4 || parts[0] != "00" {
+		return ""
+	}
+	traceID := strings.ToLower(parts[1])
+	if len(traceID) != 32 || traceID == "00000000000000000000000000000000" {
+		return ""
+	}
+	for _, ch := range traceID {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
+			return ""
+		}
+	}
+	return traceID
 }

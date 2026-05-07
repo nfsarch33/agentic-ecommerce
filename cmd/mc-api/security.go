@@ -69,6 +69,7 @@ func (s *server) configureSecurity() {
 	rateConfig := security.TokenBucketConfig{
 		Capacity:       s.cfg.rateLimitCapacity,
 		RefillInterval: s.cfg.rateLimitRefill,
+		RedisTimeout:   s.cfg.redisTimeout,
 	}
 	if redisAddr := strings.TrimSpace(os.Getenv("ECOMMERCE_REDIS_ADDR")); redisAddr != "" {
 		s.rateLimiter = security.NewRedisTokenBucket(redisAddr, os.Getenv("ECOMMERCE_REDIS_DB"), rateConfig)
@@ -108,6 +109,9 @@ func (s *server) withRBAC(resolve roleResolver, next http.HandlerFunc) http.Hand
 		if !actor.Role.Allows(required) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 			return
+		}
+		if corr := requestCorrelationFromContext(r.Context()); corr != nil {
+			corr.ActorID = actor.Subject
 		}
 		ctx := context.WithValue(r.Context(), actorContextKey{}, actor)
 		next(w, r.WithContext(ctx))
@@ -210,15 +214,25 @@ func (s *server) recordAuditEvent(r *http.Request, action auditAction, status in
 	}
 	attrs := []any{
 		"actor", actor.Subject,
+		"actor_id", actor.Subject,
 		"role", string(actor.Role),
 		"action", action.Action,
 		"resource", action.Resource,
 		"status", status,
+		"http_status", status,
 		"method", r.Method,
+		"http_method", r.Method,
 		"path", r.URL.Path,
+		"http_path", r.URL.Path,
 	}
 	if requestID, ok := r.Context().Value(requestIDContextKey{}).(string); ok && requestID != "" {
 		attrs = append(attrs, "request_id", requestID)
+	}
+	if corr := requestCorrelationFromContext(r.Context()); corr != nil && corr.TenantID != "" {
+		attrs = append(attrs, "tenant_id", corr.TenantID)
+	}
+	if traceID := traceIDFromRequest(r); traceID != "" {
+		attrs = append(attrs, "trace_id", traceID)
 	}
 	logger.InfoContext(r.Context(), "audit.event", attrs...)
 }
