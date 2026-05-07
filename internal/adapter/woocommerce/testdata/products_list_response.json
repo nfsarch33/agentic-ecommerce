@@ -1,0 +1,12 @@
+[
+  {
+    "description": "Deterministic WooCommerce product fixture.",
+    "id": 1,
+    "name": "Resistance Band",
+    "regular_price": "49.95",
+    "sku": "BAND-001",
+    "status": "publish",
+    "stock_quantity": 12
+  }
+]
+
