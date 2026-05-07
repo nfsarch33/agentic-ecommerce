@@ -63,6 +63,38 @@ func TestImportFromWooCommerceCreatesLocalProductsAndRecordsEvent(t *testing.T) 
 	}
 }
 
+func TestImportFromWooCommerceIsIdempotentForUnchangedRemoteProducts(t *testing.T) {
+	t.Parallel()
+
+	repo := inmemory.NewProductRepository()
+	wc := &fakeWooCommerce{products: []woocommerce.Product{{
+		ID: 7, SKU: " wc-001 ", Name: "Woo Band", Regular: "19.95", Description: "Imported from Woo", StockQuantity: intPtr(4),
+	}}}
+	engine := NewEngine(Config{ProductRepository: repo, WooCommerce: wc, DefaultCurrency: "AUD"})
+
+	first, err := engine.ImportFromWooCommerce(context.Background(), ImportOptions{PerPage: 50})
+	if err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	second, err := engine.ImportFromWooCommerce(context.Background(), ImportOptions{PerPage: 50})
+	if err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+	if first.Imported != 1 || second.Imported != 0 || second.Conflicts != 0 {
+		t.Fatalf("first=%+v second=%+v, want initial import only", first, second)
+	}
+	list, err := repo.List(context.Background(), 1, 10)
+	if err != nil {
+		t.Fatalf("list products: %v", err)
+	}
+	if len(list.Products) != 1 || list.Products[0].Title() != "Woo Band" {
+		t.Fatalf("products = %+v", list.Products)
+	}
+	if events := engine.Events(); len(events) != 1 || events[0].Type != EventProductImported {
+		t.Fatalf("events = %+v, want one import event", events)
+	}
+}
+
 func TestImportFromWooCommerceDetectsDivergentProductConflict(t *testing.T) {
 	t.Parallel()
 
@@ -102,6 +134,52 @@ func TestImportFromWooCommerceDetectsDivergentProductConflict(t *testing.T) {
 	}
 }
 
+func TestImportFromWooCommerceDoesNotDuplicateConflictRecords(t *testing.T) {
+	t.Parallel()
+
+	repo := inmemory.NewProductRepository()
+	local := mustProduct(t, "SKU-1", "Local title", "Local description", 1000, 3)
+	if err := repo.Create(context.Background(), local); err != nil {
+		t.Fatalf("create local: %v", err)
+	}
+	wc := &fakeWooCommerce{products: []woocommerce.Product{{
+		ID: 11, SKU: "SKU-1", Name: "Remote title", Regular: "12.50", Description: "Remote description", StockQuantity: intPtr(8),
+	}}}
+	engine := NewEngine(Config{ProductRepository: repo, WooCommerce: wc, DefaultCurrency: "AUD"})
+
+	if _, err := engine.ImportFromWooCommerce(context.Background(), ImportOptions{}); err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	if _, err := engine.ImportFromWooCommerce(context.Background(), ImportOptions{}); err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+
+	conflicts := engine.Conflicts()
+	if len(conflicts) != 1 {
+		t.Fatalf("conflicts = %+v, want one deterministic conflict", conflicts)
+	}
+	if conflicts[0].ID == "" || conflicts[0].ProductID != local.ID().String() || conflicts[0].SKU != "SKU-1" || conflicts[0].RemoteID != 11 {
+		t.Fatalf("conflict identity = %+v", conflicts[0])
+	}
+	wantFields := []ConflictField{
+		{Field: "title", LocalValue: "Local title", RemoteValue: "Remote title"},
+		{Field: "price", LocalValue: "1000", RemoteValue: "1250"},
+		{Field: "stock", LocalValue: "3", RemoteValue: "8"},
+		{Field: "description", LocalValue: "Local description", RemoteValue: "Remote description"},
+	}
+	if len(conflicts[0].Fields) != len(wantFields) {
+		t.Fatalf("fields = %+v, want %+v", conflicts[0].Fields, wantFields)
+	}
+	for idx, want := range wantFields {
+		if conflicts[0].Fields[idx] != want {
+			t.Fatalf("field[%d] = %+v, want %+v", idx, conflicts[0].Fields[idx], want)
+		}
+	}
+	if events := engine.Events(); len(events) != 1 || events[0].Type != EventConflictDetected {
+		t.Fatalf("events = %+v, want one conflict event", events)
+	}
+}
+
 func TestPublishToWooCommerceRecordsPublishedOrFailedEvent(t *testing.T) {
 	t.Parallel()
 
@@ -133,6 +211,32 @@ func TestPublishToWooCommerceRecordsPublishedOrFailedEvent(t *testing.T) {
 	}
 }
 
+func TestPublishToWooCommerceIsIdempotentForUnchangedProducts(t *testing.T) {
+	t.Parallel()
+
+	repo := inmemory.NewProductRepository()
+	product := mustProduct(t, "SKU-2", "Publish me", "Ready", 2500, 9)
+	if err := repo.Create(context.Background(), product); err != nil {
+		t.Fatalf("create product: %v", err)
+	}
+	wc := &fakeWooCommerce{}
+	engine := NewEngine(Config{ProductRepository: repo, WooCommerce: wc, DefaultCurrency: "AUD"})
+
+	if err := engine.PublishToWooCommerce(context.Background(), product.ID()); err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+	if err := engine.PublishToWooCommerce(context.Background(), product.ID()); err != nil {
+		t.Fatalf("second publish: %v", err)
+	}
+
+	if len(wc.upserts) != 1 {
+		t.Fatalf("upserts = %d, want one unchanged publish", len(wc.upserts))
+	}
+	if events := engine.Events(); len(events) != 1 || events[0].Type != EventProductPublished {
+		t.Fatalf("events = %+v, want one publish event", events)
+	}
+}
+
 func TestResolveConflictMarksManualDecision(t *testing.T) {
 	t.Parallel()
 
@@ -148,15 +252,43 @@ func TestResolveConflictMarksManualDecision(t *testing.T) {
 	}
 
 	conflictID := engine.Conflicts()[0].ID
-	resolved, err := engine.ResolveConflict(conflictID, "accept_local", "keep local catalog copy")
+	resolved, err := engine.ResolveConflict(conflictID, "local", "keep local catalog copy")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if resolved.Status != ConflictResolved || resolved.Resolution != "accept_local" {
+	if resolved.Status != ConflictResolved || resolved.Resolution != "local" {
 		t.Fatalf("resolved conflict = %+v", resolved)
 	}
 	if pending := engine.Conflicts(); len(pending) != 0 {
 		t.Fatalf("pending conflicts = %+v", pending)
+	}
+}
+
+func TestResolveConflictAcceptsLocalRemoteAndManualDecisions(t *testing.T) {
+	t.Parallel()
+
+	for _, resolution := range []string{"local", "remote", "manual"} {
+		t.Run(resolution, func(t *testing.T) {
+			t.Parallel()
+			repo := inmemory.NewProductRepository()
+			local := mustProduct(t, "SKU-"+resolution, "Local", "Local", 1000, 1)
+			if err := repo.Create(context.Background(), local); err != nil {
+				t.Fatalf("create local: %v", err)
+			}
+			wc := &fakeWooCommerce{products: []woocommerce.Product{{ID: 12, SKU: local.SKU(), Name: "Remote", Regular: "10.00"}}}
+			engine := NewEngine(Config{ProductRepository: repo, WooCommerce: wc, DefaultCurrency: "AUD"})
+			if _, err := engine.ImportFromWooCommerce(context.Background(), ImportOptions{}); err != nil {
+				t.Fatalf("import: %v", err)
+			}
+
+			resolved, err := engine.ResolveConflict(engine.Conflicts()[0].ID, resolution, "operator decision")
+			if err != nil {
+				t.Fatalf("resolve %q: %v", resolution, err)
+			}
+			if resolved.Status != ConflictResolved || resolved.Resolution != resolution {
+				t.Fatalf("resolved = %+v", resolved)
+			}
+		})
 	}
 }
 
@@ -181,6 +313,26 @@ func TestReconcileInventoryRecordsSummaryEventAndStatus(t *testing.T) {
 	status := engine.Status()
 	if status.TotalEvents != 2 || status.PendingConflicts != 0 || status.LastEvent == nil {
 		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestReconcileInventoryIsIdempotentForUnchangedRemoteProducts(t *testing.T) {
+	t.Parallel()
+
+	repo := inmemory.NewProductRepository()
+	wc := &fakeWooCommerce{products: []woocommerce.Product{{ID: 21, SKU: "REC-1", Name: "Reconcile", Regular: "7.50", StockQuantity: intPtr(6)}}}
+	engine := NewEngine(Config{ProductRepository: repo, WooCommerce: wc, DefaultCurrency: "AUD"})
+
+	if _, err := engine.ReconcileInventory(context.Background()); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+	if _, err := engine.ReconcileInventory(context.Background()); err != nil {
+		t.Fatalf("second reconcile: %v", err)
+	}
+
+	events := engine.Events()
+	if len(events) != 2 || events[0].Type != EventProductImported || events[1].Type != EventInventoryReconciled {
+		t.Fatalf("events = %+v, want one import and one reconcile event", events)
 	}
 }
 

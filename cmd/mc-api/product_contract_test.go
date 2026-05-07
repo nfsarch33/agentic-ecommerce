@@ -199,6 +199,74 @@ func TestCartHandlersMatchOpenAPIContract(t *testing.T) {
 	assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/cart/{session_id}", http.MethodPut, "200"), payload)
 }
 
+func TestSyncHandlersMatchOpenAPIContract(t *testing.T) {
+	t.Parallel()
+	spec := loadOpenAPIContract(t)
+	srv, repo, wc := testSyncServer(t)
+	product := seedSyncConflict(t, srv, repo, wc)
+
+	t.Run("status", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/status", nil)
+		rec := httptest.NewRecorder()
+		srv.mux().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+		var payload map[string]any
+		decodeJSONPayload(t, rec.Body.Bytes(), &payload)
+		assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/sync/status", http.MethodGet, "200"), payload)
+	})
+
+	t.Run("conflicts", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/conflicts", nil)
+		rec := httptest.NewRecorder()
+		srv.mux().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+		var payload map[string]any
+		decodeJSONPayload(t, rec.Body.Bytes(), &payload)
+		schema := responseSchema(t, spec, "/api/v1/sync/conflicts", http.MethodGet, "200")
+		assertSchemaRequiredFields(t, spec, schema, payload)
+		conflicts, ok := payload["conflicts"].([]any)
+		if !ok || len(conflicts) != 1 {
+			t.Fatalf("conflicts = %#v, want one conflict", payload["conflicts"])
+		}
+		first, ok := conflicts[0].(map[string]any)
+		if !ok {
+			t.Fatalf("conflict = %#v, want object", conflicts[0])
+		}
+		conflictSchema := dereferenceSchema(t, spec, schema.Properties["conflicts"].Items.Ref)
+		assertSchemaRequiredFields(t, spec, conflictSchema, first)
+	})
+
+	t.Run("publish", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sync/products/"+product.ID().String()+"/publish", nil)
+		rec := httptest.NewRecorder()
+		srv.mux().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+		var payload map[string]any
+		decodeJSONPayload(t, rec.Body.Bytes(), &payload)
+		assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/sync/products/{id}/publish", http.MethodPost, "200"), payload)
+	})
+
+	t.Run("resolve", func(t *testing.T) {
+		conflictID := srv.syncEngine.Conflicts()[0].ID
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sync/conflicts/"+conflictID+"/resolve", bytes.NewBufferString(`{"resolution":"manual","note":"contract test"}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.mux().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+		var payload map[string]any
+		decodeJSONPayload(t, rec.Body.Bytes(), &payload)
+		assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/sync/conflicts/{id}/resolve", http.MethodPost, "200"), payload)
+	})
+}
+
 func fixedProduct(t *testing.T) catalog.Product {
 	t.Helper()
 	price, err := catalog.NewMoney(4995, "AUD")
