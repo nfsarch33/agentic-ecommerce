@@ -41,9 +41,13 @@ migrate-up:
 	@echo "==> Running migrations UP against $(DB_URL)"
 	docker compose -f $(COMPOSE_FILE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0001_create_products.up.sql
+	docker compose -f $(COMPOSE_FILE) exec -T postgres \
+		psql "$(DB_URL)" -f /dev/stdin < migrations/0002_create_orders.up.sql
 
 migrate-down:
 	@echo "==> Running migrations DOWN against $(DB_URL)"
+	docker compose -f $(COMPOSE_FILE) exec -T postgres \
+		psql "$(DB_URL)" -f /dev/stdin < migrations/0002_create_orders.down.sql
 	docker compose -f $(COMPOSE_FILE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0001_create_products.down.sql
 

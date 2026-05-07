@@ -19,9 +19,11 @@ func testServer(t *testing.T) (*server, *inmemory.ProductRepository) {
 	repo := inmemory.NewProductRepository()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	srv := &server{
-		cfg:  serverConfig{allowedOrigin: "", apiToken: ""},
-		repo: repo,
-		log:  logger,
+		cfg:       serverConfig{allowedOrigin: "", apiToken: ""},
+		repo:      repo,
+		orderRepo: inmemory.NewOrderRepository(),
+		cartRepo:  inmemory.NewCartRepository(),
+		log:       logger,
 	}
 	return srv, repo
 }
@@ -30,7 +32,7 @@ func testServerWithCfg(t *testing.T, cfg serverConfig) (*server, *inmemory.Produ
 	t.Helper()
 	repo := inmemory.NewProductRepository()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	return &server{cfg: cfg, repo: repo, log: logger}, repo
+	return &server{cfg: cfg, repo: repo, orderRepo: inmemory.NewOrderRepository(), cartRepo: inmemory.NewCartRepository(), log: logger}, repo
 }
 
 func addProduct(t *testing.T, repo *inmemory.ProductRepository, sku, title string, amount int) catalog.Product {
@@ -178,6 +180,114 @@ func TestCreateProduct_MissingSKU(t *testing.T) {
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCreateOrder_Success(t *testing.T) {
+	t.Parallel()
+	srv, _ := testServer(t)
+
+	body := `{
+		"customer_email":"shopper@example.com",
+		"items":[{"product_id":"c1000000-0000-0000-0000-000000000001","sku":"BAND-001","title":"Resistance Band","quantity":2,"unit_price":{"amount":2495,"currency":"AUD"}}],
+		"shipping_address":{"name":"Jane Shopper","line1":"1 Market Street","city":"Sydney","region":"NSW","postal_code":"2000","country":"AU"}
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/orders", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+	var resp orderResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.ID == "" || resp.Status != "pending" || resp.Totals.Total.Amount != 4990 {
+		t.Fatalf("order response = %+v", resp)
+	}
+}
+
+func TestGetOrder_ByID(t *testing.T) {
+	t.Parallel()
+	srv, _ := testServer(t)
+	orderID := createTestOrder(t, srv)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/orders/"+orderID, nil)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var resp orderResponse
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
+	if resp.ID != orderID || resp.CustomerEmail != "shopper@example.com" {
+		t.Fatalf("order response = %+v", resp)
+	}
+}
+
+func TestPatchOrderStatus_ValidTransition(t *testing.T) {
+	t.Parallel()
+	srv, _ := testServer(t)
+	orderID := createTestOrder(t, srv)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/orders/"+orderID+"/status", bytes.NewBufferString(`{"status":"paid"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var resp orderResponse
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
+	if resp.Status != "paid" {
+		t.Fatalf("Status = %q, want paid", resp.Status)
+	}
+}
+
+func TestPatchOrderStatus_InvalidTransition(t *testing.T) {
+	t.Parallel()
+	srv, _ := testServer(t)
+	orderID := createTestOrder(t, srv)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/orders/"+orderID+"/status", bytes.NewBufferString(`{"status":"fulfilled"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPutAndGetCart(t *testing.T) {
+	t.Parallel()
+	srv, _ := testServer(t)
+
+	body := `{"items":[{"product_id":"c1000000-0000-0000-0000-000000000001","sku":"BAND-001","title":"Resistance Band","quantity":2,"unit_price":{"amount":2495,"currency":"AUD"}}]}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/cart/session-123", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("put status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/cart/session-123", nil)
+	rec = httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var resp cartResponse
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
+	if resp.SessionID != "session-123" || resp.Totals.Total.Amount != 4990 {
+		t.Fatalf("cart response = %+v", resp)
 	}
 }
 
@@ -358,4 +468,21 @@ func TestGetenvValue(t *testing.T) {
 	if got := getenv("ECOMMERCE_TEST_VALUE", "fallback"); got != "custom" {
 		t.Fatalf("getenv value = %q", got)
 	}
+}
+
+func createTestOrder(t *testing.T, srv *server) string {
+	t.Helper()
+	body := `{"customer_email":"shopper@example.com","items":[{"product_id":"c1000000-0000-0000-0000-000000000001","sku":"BAND-001","title":"Resistance Band","quantity":1,"unit_price":{"amount":2495,"currency":"AUD"}}],"shipping_address":{"name":"Jane Shopper","line1":"1 Market Street","city":"Sydney","region":"NSW","postal_code":"2000","country":"AU"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/orders", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create order status = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+	var resp orderResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode order: %v", err)
+	}
+	return resp.ID
 }

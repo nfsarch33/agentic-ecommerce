@@ -57,9 +57,11 @@ type serverConfig struct {
 }
 
 type server struct {
-	cfg  serverConfig
-	repo port.ProductRepository
-	log  *slog.Logger
+	cfg       serverConfig
+	repo      port.ProductRepository
+	orderRepo port.OrderRepository
+	cartRepo  port.CartRepository
+	log       *slog.Logger
 }
 
 func main() {
@@ -67,25 +69,29 @@ func main() {
 
 	repo := inmemory.NewProductRepository()
 	seedDefaultProducts(repo)
+	orderRepo := inmemory.NewOrderRepository()
+	cartRepo := inmemory.NewCartRepository()
 
 	addr := getenv("ECOMMERCE_HTTP_ADDR", "127.0.0.1:8080")
 	logger.Info("mc-api.start", "addr", addr)
 
-	srv := newServer(logger, repo)
+	srv := newServer(logger, repo, orderRepo, cartRepo)
 	if err := http.ListenAndServe(addr, srv.mux()); err != nil {
 		logger.Error("mc-api.stop", "error", err)
 		os.Exit(1)
 	}
 }
 
-func newServer(logger *slog.Logger, repo port.ProductRepository) *server {
+func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.OrderRepository, cartRepo port.CartRepository) *server {
 	return &server{
 		cfg: serverConfig{
 			allowedOrigin: getenv("ECOMMERCE_ALLOWED_ORIGIN", ""),
 			apiToken:      getenv("ECOMMERCE_API_TOKEN", ""),
 		},
-		repo: repo,
-		log:  logger,
+		repo:      repo,
+		orderRepo: orderRepo,
+		cartRepo:  cartRepo,
+		log:       logger,
 	}
 }
 
@@ -96,6 +102,11 @@ func (s *server) mux() *http.ServeMux {
 	api := s.withCORS(s.withBearerAuth(s.productsHandler))
 	mux.HandleFunc("/api/v1/products", api)
 	mux.HandleFunc("/api/v1/products/", api)
+	ordersAPI := s.withCORS(s.withBearerAuth(s.ordersHandler))
+	mux.HandleFunc("/api/v1/orders", ordersAPI)
+	mux.HandleFunc("/api/v1/orders/", ordersAPI)
+	cartAPI := s.withCORS(s.withBearerAuth(s.cartHandler))
+	mux.HandleFunc("/api/v1/cart/", cartAPI)
 
 	return mux
 }
@@ -323,7 +334,7 @@ func (s *server) withCORS(next http.HandlerFunc) http.HandlerFunc {
 			}
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		}
 		if r.Method == http.MethodOptions {
@@ -392,7 +403,7 @@ func seedDefaultProducts(repo *inmemory.ProductRepository) {
 }
 
 func isNotFound(err error) bool {
-	return errors.Is(err, inmemory.ErrProductNotFound)
+	return errors.Is(err, inmemory.ErrProductNotFound) || errors.Is(err, inmemory.ErrOrderNotFound)
 }
 
 func queryInt(r *http.Request, key string, fallback int) int {
