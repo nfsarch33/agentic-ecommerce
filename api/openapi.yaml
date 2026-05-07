@@ -786,7 +786,7 @@ components:
           const: agentic-ecommerce-mc-api
     ReadyResponse:
       type: object
-      required: [status, service, agents]
+      required: [status, service, agents, agent_worker]
       properties:
         status:
           type: string
@@ -795,6 +795,20 @@ components:
           type: string
           const: agentic-ecommerce-mc-api
         agents:
+          type: integer
+          minimum: 0
+        agent_worker:
+          $ref: '#/components/schemas/AgentWorkerReadiness'
+    AgentWorkerReadiness:
+      type: object
+      required: [ready, scheduler, registered_agents]
+      properties:
+        ready:
+          type: boolean
+        scheduler:
+          type: string
+          enum: [in_process]
+        registered_agents:
           type: integer
           minimum: 0
     AgentDescriptor:
