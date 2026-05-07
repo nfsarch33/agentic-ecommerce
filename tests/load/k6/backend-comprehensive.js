@@ -6,6 +6,9 @@ const bearerToken = __ENV.BEARER_TOKEN || '';
 const productID = __ENV.PRODUCT_ID || 'b1000000-0000-0000-0000-000000000001';
 const aiProductID = __ENV.AI_PRODUCT_ID || productID;
 const workflowProductID = __ENV.WORKFLOW_PRODUCT_ID || productID;
+const mediaProductID = __ENV.MEDIA_PRODUCT_ID || productID;
+const mediaSourceURL = __ENV.MEDIA_SOURCE_URL || 'http://127.0.0.1:18081/fixtures/resistance-band.png';
+const webhookURL = __ENV.WEBHOOK_URL || 'http://127.0.0.1:18081/n8n/order-placed';
 
 const authHeaders = bearerToken
   ? { Authorization: `Bearer ${bearerToken}`, 'Content-Type': 'application/json' }
@@ -49,6 +52,24 @@ export const options = {
       preAllocatedVUs: Number(__ENV.K6_WORKFLOW_VUS || 8),
       tags: { endpoint: 'temporal_workflow_start' },
     },
+    media_validation: {
+      executor: 'constant-arrival-rate',
+      exec: 'mediaValidation',
+      duration: __ENV.K6_DURATION || '30s',
+      rate: Number(__ENV.K6_MEDIA_RPS || 5),
+      timeUnit: '1s',
+      preAllocatedVUs: Number(__ENV.K6_MEDIA_VUS || 8),
+      tags: { endpoint: 'media_validation' },
+    },
+    webhook_delivery: {
+      executor: 'constant-arrival-rate',
+      exec: 'webhookDelivery',
+      duration: __ENV.K6_DURATION || '30s',
+      rate: Number(__ENV.K6_WEBHOOK_RPS || 5),
+      timeUnit: '1s',
+      preAllocatedVUs: Number(__ENV.K6_WEBHOOK_VUS || 8),
+      tags: { endpoint: 'webhook_delivery' },
+    },
   },
   thresholds: {
     'http_req_failed{endpoint:product_catalog}': ['rate<0.01'],
@@ -59,6 +80,10 @@ export const options = {
     'http_req_duration{endpoint:ai_generation_mocked}': ['p(95)<2000'],
     'http_req_failed{endpoint:temporal_workflow_start}': ['rate<0.01'],
     'http_req_duration{endpoint:temporal_workflow_start}': ['p(95)<500'],
+    'http_req_failed{endpoint:media_validation}': ['rate<0.01'],
+    'http_req_duration{endpoint:media_validation}': ['p(95)<500'],
+    'http_req_failed{endpoint:webhook_delivery}': ['rate<0.01'],
+    'http_req_duration{endpoint:webhook_delivery}': ['p(95)<500'],
   },
 };
 
@@ -134,5 +159,83 @@ export function temporalWorkflowStart() {
   check(res, {
     'workflow start status is 202': (r) => r.status === 202,
     'workflow id present': (r) => Boolean(r.json('workflow_id')),
+  });
+}
+
+export function mediaValidation() {
+  const suffix = `${__VU}-${__ITER}-${Date.now()}`;
+  const sourcePayload = JSON.stringify({
+    product_id: mediaProductID,
+    source_url: mediaSourceURL,
+    url: mediaSourceURL,
+    alt_text: `Resistance band product image ${suffix}`,
+    metadata: {
+      title: `k6 release media ${suffix}`,
+      tags: ['release', 'k6'],
+    },
+  });
+  const sourceRes = http.post(`${baseURL}/api/v1/media/source`, sourcePayload, {
+    headers: authHeaders,
+    tags: { endpoint: 'media_validation' },
+  });
+  const mediaID = sourceRes.json('asset.id') || sourceRes.json('id') || sourceRes.json('media_id');
+  check(sourceRes, {
+    'media source accepted': (r) => r.status === 200 || r.status === 201 || r.status === 202,
+    'media id present after source': () => Boolean(mediaID),
+  });
+  if (!mediaID) return;
+
+  const processRes = http.post(`${baseURL}/api/v1/media/process`, JSON.stringify({ media_id: mediaID }), {
+    headers: authHeaders,
+    tags: { endpoint: 'media_validation' },
+  });
+  check(processRes, {
+    'media process accepted': (r) => r.status === 200 || r.status === 202,
+  });
+
+  const validateRes = http.post(`${baseURL}/api/v1/media/${mediaID}/validate`, null, {
+    headers: authHeaders,
+    tags: { endpoint: 'media_validation' },
+  });
+  check(validateRes, {
+    'media validation status ok': (r) => r.status === 200 || r.status === 202,
+    'media qa passed': (r) => {
+      const status = r.json('asset.qa_result.status') || r.json('qa_result.status') || r.json('status');
+      return status === 'passed' || status === 'validated';
+    },
+  });
+}
+
+export function webhookDelivery() {
+  const suffix = `${__VU}-${__ITER}-${Date.now()}`;
+  const registrationRes = http.post(
+    `${baseURL}/api/v1/webhooks`,
+    JSON.stringify({
+      url: `${webhookURL}/${suffix}`,
+      event_types: ['order.placed'],
+      secret: `k6-local-secret-${suffix}`,
+    }),
+    { headers: authHeaders, tags: { endpoint: 'webhook_delivery' } },
+  );
+  const webhookID = registrationRes.json('id') || registrationRes.json('webhook.id');
+  check(registrationRes, {
+    'webhook registered': (r) => r.status === 201,
+    'webhook id present': () => Boolean(webhookID),
+  });
+  if (!webhookID) return;
+
+  const deliveryRes = http.post(
+    `${baseURL}/api/v1/webhooks/${webhookID}/test`,
+    JSON.stringify({ event_type: 'order.placed' }),
+    { headers: authHeaders, tags: { endpoint: 'webhook_delivery' } },
+  );
+  check(deliveryRes, {
+    'webhook test accepted': (r) => r.status === 202,
+    'webhook delivered': (r) => r.json('delivery.success') === true || r.json('delivery.status') === 'delivered',
+  });
+
+  http.del(`${baseURL}/api/v1/webhooks/${webhookID}`, null, {
+    headers: authHeaders,
+    tags: { endpoint: 'webhook_delivery' },
   });
 }

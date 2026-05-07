@@ -4,14 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/security"
+	"github.com/nfsarch33/agentic-ecommerce/internal/webhook/outbound"
 )
 
 func TestReleasePerformanceSmoke(t *testing.T) {
@@ -38,6 +42,24 @@ func TestReleasePerformanceSmoke(t *testing.T) {
 		TokensUsed: 42,
 	}}
 	srv.workflowClient = &fakeTemporalWorkflowClient{run: fakeWorkflowRun{id: "product-publish-" + product.ID().String(), runID: "run-perf-smoke"}}
+	srv.mediaService = intelligence.NewService(intelligence.ServiceConfig{HTTPClient: mediaRoundTripClient(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"image/png"}},
+			Body:       io.NopCloser(strings.NewReader(mediaOnePixelPNGString())),
+		}, nil
+	})})
+	webhookReceiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer webhookReceiver.Close()
+	srv.webhookService = outbound.NewService(outbound.ServiceConfig{
+		Client: outbound.NewClient(outbound.ClientConfig{
+			HTTPClient:  webhookReceiver.Client(),
+			MaxAttempts: 1,
+			Backoff:     func(int) time.Duration { return 0 },
+		}),
+	})
 	srv.configureSecurity()
 
 	httpServer := httptest.NewServer(srv.mux())
@@ -85,6 +107,80 @@ func TestReleasePerformanceSmoke(t *testing.T) {
 			run: func() error {
 				body := []byte(`{"product_id":"` + product.ID().String() + `","requested_by":"perf-smoke"}`)
 				return perfRequest(client, http.MethodPost, httpServer.URL+"/api/v1/workflows/product-publish", adminToken, body)
+			},
+		},
+		{
+			name:   "POST /api/v1/media/{id}/validate",
+			target: 500 * time.Millisecond,
+			run: func() error {
+				sourceBody, err := perfRequestBody(
+					client,
+					http.MethodPost,
+					httpServer.URL+"/api/v1/media/source",
+					adminToken,
+					[]byte(`{"url":"http://127.0.0.1:18081/fixtures/resistance-band.png","product_id":"`+product.ID().String()+`","alt_text":"Resistance band product image"}`),
+				)
+				if err != nil {
+					return err
+				}
+				var sourced struct {
+					ID string `json:"id"`
+				}
+				if err := json.Unmarshal(sourceBody, &sourced); err != nil {
+					return err
+				}
+				if sourced.ID == "" {
+					return fmt.Errorf("missing sourced media id")
+				}
+				processBody, err := perfRequestBody(
+					client,
+					http.MethodPost,
+					httpServer.URL+"/api/v1/media/process",
+					adminToken,
+					[]byte(`{"media_id":"`+sourced.ID+`","format":"image/webp"}`),
+				)
+				if err != nil {
+					return err
+				}
+				var processed struct {
+					ID string `json:"id"`
+				}
+				if err := json.Unmarshal(processBody, &processed); err != nil {
+					return err
+				}
+				if processed.ID == "" {
+					return fmt.Errorf("missing processed media id")
+				}
+				return perfRequest(client, http.MethodPost, httpServer.URL+"/api/v1/media/"+processed.ID+"/validate", adminToken, nil)
+			},
+		},
+		{
+			name:   "POST /api/v1/webhooks/{id}/test",
+			target: 500 * time.Millisecond,
+			run: func() error {
+				createBody, err := perfRequestBody(
+					client,
+					http.MethodPost,
+					httpServer.URL+"/api/v1/webhooks",
+					adminToken,
+					[]byte(`{"url":"`+webhookReceiver.URL+`","event_types":["order.placed"],"secret":"perf-local-secret"}`),
+				)
+				if err != nil {
+					return err
+				}
+				var created struct {
+					ID string `json:"id"`
+				}
+				if err := json.Unmarshal(createBody, &created); err != nil {
+					return err
+				}
+				if created.ID == "" {
+					return fmt.Errorf("missing webhook id")
+				}
+				if err := perfRequest(client, http.MethodPost, httpServer.URL+"/api/v1/webhooks/"+created.ID+"/test", adminToken, []byte(`{"event_type":"order.placed"}`)); err != nil {
+					return err
+				}
+				return perfRequest(client, http.MethodDelete, httpServer.URL+"/api/v1/webhooks/"+created.ID, adminToken, nil)
 			},
 		},
 	}
@@ -149,6 +245,11 @@ func perfLoginResponse(client *http.Client, baseURL string) (string, error) {
 }
 
 func perfRequest(client *http.Client, method, url, bearerToken string, body []byte) error {
+	_, err := perfRequestBody(client, method, url, bearerToken, body)
+	return err
+}
+
+func perfRequestBody(client *http.Client, method, url, bearerToken string, body []byte) ([]byte, error) {
 	var reader *bytes.Reader
 	if body == nil {
 		reader = bytes.NewReader(nil)
@@ -157,7 +258,7 @@ func perfRequest(client *http.Client, method, url, bearerToken string, body []by
 	}
 	req, err := http.NewRequest(method, url, reader)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
@@ -168,13 +269,17 @@ func perfRequest(client *http.Client, method, url, bearerToken string, body []by
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer res.Body.Close()
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("status %d", res.StatusCode)
+	payload, readErr := io.ReadAll(res.Body)
+	if readErr != nil {
+		return nil, readErr
 	}
-	return nil
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, fmt.Errorf("status %d body=%s", res.StatusCode, string(payload))
+	}
+	return payload, nil
 }
 
 func percentile(samples []time.Duration, p int) time.Duration {
