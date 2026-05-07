@@ -59,3 +59,61 @@ func TestScheduleManagerRejectsMissingSchedule(t *testing.T) {
 		t.Fatalf("disable missing err = %v, want ErrScheduleNotFound", err)
 	}
 }
+
+func TestValidateScheduleDefinitionsRejectsInvalidConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		definitions []ScheduleDefinition
+	}{
+		{
+			name: "missing id",
+			definitions: []ScheduleDefinition{{
+				AgentID:  "pricing",
+				Interval: time.Hour,
+			}},
+		},
+		{
+			name: "missing agent",
+			definitions: []ScheduleDefinition{{
+				ID:       "pricing-hourly",
+				Interval: time.Hour,
+			}},
+		},
+		{
+			name: "missing cadence",
+			definitions: []ScheduleDefinition{{
+				ID:      "pricing-hourly",
+				AgentID: "pricing",
+			}},
+		},
+		{
+			name: "duplicate id",
+			definitions: []ScheduleDefinition{
+				{ID: "pricing-hourly", AgentID: "pricing", Interval: time.Hour},
+				{ID: "pricing-hourly", AgentID: "pricing", Interval: time.Hour},
+			},
+		},
+		{
+			name: "negative priority",
+			definitions: []ScheduleDefinition{{
+				ID:       "pricing-hourly",
+				AgentID:  "pricing",
+				Interval: time.Hour,
+				Priority: -1,
+			}},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if err := ValidateScheduleDefinitions(tt.definitions); err == nil {
+				t.Fatalf("ValidateScheduleDefinitions(%s) returned nil error", tt.name)
+			}
+		})
+	}
+}

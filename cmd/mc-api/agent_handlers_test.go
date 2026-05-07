@@ -160,6 +160,35 @@ func TestAgentRunEndpointPublishesAgentEventToWebhookBridge(t *testing.T) {
 	}
 }
 
+func TestAgentRunEndpointPublishesFailedAgentEventToWebhookBridge(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := testServer(t)
+	body := `{"payload":{"sku":"RB-SET","cost_cents":-100,"shipping_cents":0}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/pricing/run", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", rec.Code, rec.Body.String())
+	}
+	var submitted agentRunResponse
+	if err := json.NewDecoder(rec.Body).Decode(&submitted); err != nil {
+		t.Fatalf("decode submitted: %v", err)
+	}
+	completed, err := srv.agentScheduler.Wait(req.Context(), submitted.ID)
+	if err != nil {
+		t.Fatalf("wait run: %v", err)
+	}
+	if completed.State != orchestrator.RunFailed || completed.Error.Code != "agent_failed" {
+		t.Fatalf("completed run = %#v, want failed pricing run", completed)
+	}
+
+	events := srv.eventBus.Delivered()
+	if !hasAgentRunEvent(events, submitted.ID, "pricing", "agent_run_failed") {
+		t.Fatalf("delivered events = %#v, want failed agent event for run %s", events, submitted.ID)
+	}
+}
+
 func TestAgentScheduleEndpointsListEnableAndDisable(t *testing.T) {
 	t.Parallel()
 
@@ -206,6 +235,43 @@ func TestAgentScheduleEndpointsListEnableAndDisable(t *testing.T) {
 	if disabled.Schedule.Enabled {
 		t.Fatalf("disabled schedule = %#v", disabled.Schedule)
 	}
+}
+
+func TestAgentScheduleEndpointsReturnNotFoundForMissingSchedule(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := testServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent-schedules/missing/enable", nil)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("enable missing status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/agent-schedules/missing/disable", nil)
+	rec = httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("disable missing status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAgentScheduleEndpointShapeMatchesOpenAPIContract(t *testing.T) {
+	t.Parallel()
+
+	spec := loadOpenAPIContract(t)
+	srv, _ := testServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent-schedules/pricing-competition-hourly/enable", nil)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("enable status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var enabled map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&enabled); err != nil {
+		t.Fatalf("decode enabled: %v", err)
+	}
+	assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/agent-schedules/{id}/enable", http.MethodPost, "200"), enabled)
 }
 
 func TestAgentRunEndpointRejectsMissingAgent(t *testing.T) {

@@ -95,6 +95,20 @@ func TestRecommendStrategyGoldenFiles(t *testing.T) {
 			},
 			golden: "demand_based.golden.json",
 		},
+		{
+			name: "low margin floor edge",
+			request: Request{
+				SKU:                   "RB-SET",
+				Strategy:              StrategyCompetitionBased,
+				CostCents:             4600,
+				ShippingCents:         250,
+				CurrentPriceCents:     4995,
+				CompetitorPricesCents: []int{4895, 4995, 5095},
+				TargetMarginPct:       0.4,
+				MinimumMarginPct:      0.32,
+			},
+			golden: "low_margin_floor.golden.json",
+		},
 	}
 
 	agent := NewAgent()
@@ -110,6 +124,22 @@ func TestRecommendStrategyGoldenFiles(t *testing.T) {
 			assertGoldenJSON(t, tc.golden, result)
 		})
 	}
+}
+
+func TestRecommendInvalidCostGoldenFile(t *testing.T) {
+	t.Parallel()
+
+	agent := NewAgent()
+	_, err := agent.Recommend(context.Background(), Request{
+		SKU:           "RB-SET",
+		Strategy:      StrategyMarginBased,
+		CostCents:     -1200,
+		ShippingCents: 100,
+	})
+	if err == nil {
+		t.Fatal("Recommend accepted negative total cost")
+	}
+	assertGoldenJSON(t, "negative_cost_error.golden.json", map[string]any{"error": err.Error()})
 }
 
 func TestPricingDescriptorAdvertisesMarginCapability(t *testing.T) {

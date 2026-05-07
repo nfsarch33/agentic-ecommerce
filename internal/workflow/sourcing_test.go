@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
 )
 
 func TestSourcingWorkflowSearchesScoresChecksMarginAndRecommends(t *testing.T) {
@@ -132,6 +133,17 @@ func TestSourcingWorkflowE2EWithDeterministicActivities(t *testing.T) {
 	}
 	if result.Status != SourcingWorkflowStatusRecommended || result.Recommendation.SupplierID != "balanced" {
 		t.Fatalf("result = %+v, want deterministic balanced recommendation", result)
+	}
+}
+
+func TestSourcingWorkflowReplaysMarginFailureHistory(t *testing.T) {
+	t.Parallel()
+
+	replayer := worker.NewWorkflowReplayer()
+	replayer.RegisterWorkflow(SourcingWorkflow)
+
+	if err := replayer.ReplayWorkflowHistoryFromJSONFile(nil, "testdata/sourcing_margin_failure_history.json"); err != nil {
+		t.Fatalf("replay sourcing workflow history: %v", err)
 	}
 }
 
