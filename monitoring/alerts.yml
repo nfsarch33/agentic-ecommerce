@@ -74,6 +74,28 @@ groups:
           summary: "Compliance failure spike detected"
           description: "Backend and worker compliance failures exceeded the v1.0.0 spike threshold in 15 minutes."
 
+      - alert: AgenticEcommerceRAGSearchLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(agentic_ecommerce_rag_search_duration_seconds_bucket[5m])) by (le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAG search p95 latency above 1s"
+          description: "The RAG vector search p95 latency exceeded the v1.3.0 warning threshold."
+
+      - alert: AgenticEcommerceEmbeddingFailuresHigh
+        expr: increase(agentic_ecommerce_embedding_failures_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Embedding bridge failures detected"
+          description: "The backend observed embedding generation failures from the approved bridge."
+
       - alert: AgenticEcommerceAgentSuccessMissing
         expr: increase(agentic_ecommerce_agent_success_total[30m]) == 0
         for: 30m

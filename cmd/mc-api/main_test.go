@@ -192,6 +192,12 @@ func TestMetricsEndpointExposesPrometheusText(t *testing.T) {
 		"# HELP agentic_ecommerce_media_validation_failures_total Media uploads rejected by validation.",
 		"# TYPE agentic_ecommerce_media_validation_failures_total counter",
 		`agentic_ecommerce_media_validation_failures_total{reason="stub"} 0`,
+		"# HELP agentic_ecommerce_rag_search_duration_seconds RAG vector search latency for content grounding.",
+		"# TYPE agentic_ecommerce_rag_search_duration_seconds histogram",
+		`agentic_ecommerce_rag_search_duration_seconds_bucket{le="0.1"} 0`,
+		"# HELP agentic_ecommerce_embedding_failures_total Embedding generation failures returned by the approved bridge.",
+		"# TYPE agentic_ecommerce_embedding_failures_total counter",
+		`agentic_ecommerce_embedding_failures_total{provider="bridge",reason="stub"} 0`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("metrics body missing %q:\n%s", want, body)
