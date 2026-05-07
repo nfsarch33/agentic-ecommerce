@@ -61,6 +61,24 @@ func TestNewContentGenerationActivitiesFromEnvCreatesFactChecker(t *testing.T) {
 	}
 }
 
+func TestNewMediaProcessingActivitiesFromEnvCreatesLocalStoreBackedActivities(t *testing.T) {
+	t.Setenv("ECOMMERCE_MEDIA_STORE_PROVIDER", "local")
+	t.Setenv("ECOMMERCE_MEDIA_STORE_ROOT", t.TempDir())
+	t.Setenv("ECOMMERCE_MEDIA_PUBLIC_BASE_URL", "/media")
+
+	activities := newMediaProcessingActivitiesFromEnv(slog.Default(), nil)
+	link, err := activities.LinkMediaToProduct(context.Background(), ecworkflow.MediaProductLinkInput{
+		ProductID: "product-123",
+		MediaID:   "media-123",
+	})
+	if err != nil {
+		t.Fatalf("LinkMediaToProduct: %v", err)
+	}
+	if !link.Linked || link.ProductID != "product-123" || link.MediaID != "media-123" {
+		t.Fatalf("link = %+v", link)
+	}
+}
+
 func TestContentFactCheckLogRecorderAcceptsResults(t *testing.T) {
 	t.Parallel()
 

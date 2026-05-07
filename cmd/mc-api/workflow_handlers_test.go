@@ -85,6 +85,34 @@ func TestStartContentGenerationWorkflowStartsTemporalExecution(t *testing.T) {
 	}
 }
 
+func TestStartMediaProcessingWorkflowStartsTemporalExecution(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := testServer(t)
+	fake := &fakeTemporalWorkflowClient{run: fakeWorkflowRun{id: "media-processing-product-123", runID: "run-media-123"}}
+	srv.workflowClient = fake
+
+	body := bytes.NewBufferString(`{"product_id":"product-123","source_url":"https://supplier.example/images/lamp.png","alt_text":"Matte black desk lamp on white background","requested_by":"operator@example.com"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/media-processing", body)
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.startedOptions.TaskQueue != ecworkflow.TaskQueue {
+		t.Fatalf("task queue = %q, want %q", fake.startedOptions.TaskQueue, ecworkflow.TaskQueue)
+	}
+	input, ok := fake.startedArgs[0].(ecworkflow.MediaProcessingInput)
+	if !ok {
+		t.Fatalf("workflow arg = %#v, want MediaProcessingInput", fake.startedArgs)
+	}
+	if input.ProductID != "product-123" || input.SourceURL != "https://supplier.example/images/lamp.png" || input.AltText == "" {
+		t.Fatalf("input = %+v", input)
+	}
+}
+
 func TestStartProductPublishWorkflowRequiresConfiguredTemporalClient(t *testing.T) {
 	t.Parallel()
 

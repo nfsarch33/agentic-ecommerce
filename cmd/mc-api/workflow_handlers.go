@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 )
 
@@ -41,6 +42,16 @@ type startContentGenerationWorkflowRequest struct {
 	Language    string   `json:"language,omitempty"`
 	MaxWords    int      `json:"max_words,omitempty"`
 	Keywords    []string `json:"keywords,omitempty"`
+}
+
+type startMediaProcessingWorkflowRequest struct {
+	ProductID        string                     `json:"product_id"`
+	SourceURL        string                     `json:"source_url"`
+	AltText          string                     `json:"alt_text,omitempty"`
+	RequestedBy      string                     `json:"requested_by,omitempty"`
+	Resize           intelligence.ResizeOptions `json:"resize,omitempty"`
+	Format           string                     `json:"format,omitempty"`
+	RemoveBackground bool                       `json:"remove_background,omitempty"`
 }
 
 type workflowStartResponse struct {
@@ -90,6 +101,8 @@ func (s *server) workflowsHandler(w http.ResponseWriter, r *http.Request) {
 		s.startProductPublishWorkflow(w, r)
 	case path == "content-generation" && r.Method == http.MethodPost:
 		s.startContentGenerationWorkflow(w, r)
+	case path == "media-processing" && r.Method == http.MethodPost:
+		s.startMediaProcessingWorkflow(w, r)
 	case strings.HasSuffix(path, "/signals/review") && r.Method == http.MethodPost:
 		s.signalProductPublishReview(w, r, path)
 	case path != "" && r.Method == http.MethodGet:
@@ -97,6 +110,53 @@ func (s *server) workflowsHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 	}
+}
+
+func (s *server) startMediaProcessingWorkflow(w http.ResponseWriter, r *http.Request) {
+	if s.workflowClient == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporal_not_configured"})
+		return
+	}
+	var req startMediaProcessingWorkflowRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		return
+	}
+	if strings.TrimSpace(req.ProductID) == "" {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "product_id_required"})
+		return
+	}
+	if strings.TrimSpace(req.SourceURL) == "" {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "source_url_required"})
+		return
+	}
+	input := ecworkflow.MediaProcessingInput{
+		ProductID:        strings.TrimSpace(req.ProductID),
+		SourceURL:        strings.TrimSpace(req.SourceURL),
+		AltText:          req.AltText,
+		RequestedBy:      req.RequestedBy,
+		Resize:           req.Resize,
+		Format:           req.Format,
+		RemoveBackground: req.RemoveBackground,
+	}
+	workflowID := fmt.Sprintf("media-processing-%s-%s", sanitizeWorkflowIDPart(input.ProductID), uuid.NewString())
+	run, err := s.workflowClient.ExecuteWorkflow(
+		r.Context(),
+		client.StartWorkflowOptions{ID: workflowID, TaskQueue: ecworkflow.TaskQueue},
+		ecworkflow.MediaProcessingWorkflow,
+		input,
+	)
+	if err != nil {
+		s.log.Error("start media processing workflow", "product_id", input.ProductID, "error", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "workflow_start_failed"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, workflowStartResponse{
+		WorkflowID: run.GetID(),
+		RunID:      run.GetRunID(),
+		Status:     "started",
+		TaskQueue:  ecworkflow.TaskQueue,
+	})
 }
 
 func (s *server) startContentGenerationWorkflow(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +213,16 @@ func (s *server) startContentGenerationWorkflow(w http.ResponseWriter, r *http.R
 		Status:     "started",
 		TaskQueue:  ecworkflow.TaskQueue,
 	})
+}
+
+func sanitizeWorkflowIDPart(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.ReplaceAll(value, "/", "-")
+	value = strings.ReplaceAll(value, " ", "-")
+	if value == "" {
+		return "media"
+	}
+	return value
 }
 
 func (s *server) startProductPublishWorkflow(w http.ResponseWriter, r *http.Request) {

@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/minimax"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/objectstore"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
 	complianceagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/compliance"
@@ -28,6 +29,7 @@ import (
 	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	"github.com/nfsarch33/agentic-ecommerce/internal/security"
@@ -117,9 +119,11 @@ type server struct {
 	factChecker       *contentagent.FactChecker
 	factChecksMu      sync.RWMutex
 	factChecks        map[string]contentagent.FactCheckResult
+	mediaService      *intelligence.Service
 	workflowClient    temporalWorkflowClient
 	agentRegistry     *orchestrator.Registry
 	agentScheduler    *orchestrator.Scheduler
+	schedulerMu       sync.Mutex
 	webhookSecret     string
 	tokenManager      *security.TokenManager
 	sessions          security.RefreshSessionStore
@@ -330,6 +334,18 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	if workflowCleanup != nil {
 		cleanup = append(cleanup, workflowCleanup)
 	}
+	mediaStore, err := objectstore.New(objectstore.Config{
+		Provider:      objectstore.Provider(getenv("ECOMMERCE_MEDIA_STORE_PROVIDER", "local")),
+		RootDir:       getenv("ECOMMERCE_MEDIA_STORE_ROOT", ".local/media-uploads"),
+		PublicBaseURL: getenv("ECOMMERCE_MEDIA_PUBLIC_BASE_URL", "/media"),
+		Bucket:        getenv("ECOMMERCE_MEDIA_BUCKET", ""),
+		Region:        getenv("ECOMMERCE_MEDIA_REGION", ""),
+		Endpoint:      getenv("ECOMMERCE_MEDIA_ENDPOINT", ""),
+		Prefix:        getenv("ECOMMERCE_MEDIA_PREFIX", ""),
+	})
+	if err != nil {
+		logger.Warn("media object store disabled", "error", err)
+	}
 	registry := defaultAgentRegistry()
 	srv := &server{
 		cfg: serverConfig{
@@ -358,6 +374,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		contentAgent:   generator,
 		rag:            ragService,
 		factChecks:     map[string]contentagent.FactCheckResult{},
+		mediaService:   intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
 		workflowClient: workflowClient,
 		agentRegistry:  registry,
 		agentScheduler: orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), orchestrator.NewEventRecorder(), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
@@ -379,6 +396,8 @@ func (s *server) Close() {
 }
 
 func (s *server) ensureAgentScheduler() {
+	s.schedulerMu.Lock()
+	defer s.schedulerMu.Unlock()
 	if s.agentRegistry == nil {
 		s.agentRegistry = defaultAgentRegistry()
 	}
@@ -441,6 +460,7 @@ func (s *server) mux() http.Handler {
 	workflowsAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.withAudit(workflowAuditAction, s.workflowsHandler))))
 	mux.HandleFunc("/api/v1/workflows/product-publish", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/content-generation", workflowsAPI)
+	mux.HandleFunc("/api/v1/workflows/media-processing", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/", workflowsAPI)
 	ragAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.ragHandler)))
 	mux.HandleFunc("/api/v1/rag/documents", ragAPI)
@@ -448,6 +468,10 @@ func (s *server) mux() http.Handler {
 	contentAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.contentFactCheckHandler)))
 	mux.HandleFunc("/api/v1/content/generate", contentAPI)
 	mux.HandleFunc("/api/v1/content/fact-checks/", contentAPI)
+	mediaAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.mediaHandler)))
+	mux.HandleFunc("/api/v1/media/source", mediaAPI)
+	mux.HandleFunc("/api/v1/media/process", mediaAPI)
+	mux.HandleFunc("/api/v1/media/", mediaAPI)
 
 	return s.withSecurityHeaders(s.withTelemetry(s.withRequestLogging(mux)))
 }
