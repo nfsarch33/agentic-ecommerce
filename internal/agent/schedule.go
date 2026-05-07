@@ -3,12 +3,17 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
 
-var ErrScheduleNotFound = errors.New("agent schedule not found")
+var (
+	ErrScheduleNotFound = errors.New("agent schedule not found")
+	ErrInvalidSchedule  = errors.New("invalid agent schedule")
+)
 
 type ScheduleDefinition struct {
 	ID       string         `json:"id"`
@@ -36,6 +41,30 @@ type ScheduleManager struct {
 	mu        sync.RWMutex
 	clock     Clock
 	schedules map[string]Schedule
+}
+
+func ValidateScheduleDefinitions(definitions []ScheduleDefinition) error {
+	seen := make(map[string]struct{}, len(definitions))
+	for _, def := range definitions {
+		id := strings.TrimSpace(def.ID)
+		if id == "" {
+			return fmt.Errorf("%w: id is required", ErrInvalidSchedule)
+		}
+		if _, ok := seen[id]; ok {
+			return fmt.Errorf("%w: duplicate id %q", ErrInvalidSchedule, id)
+		}
+		seen[id] = struct{}{}
+		if strings.TrimSpace(def.AgentID) == "" {
+			return fmt.Errorf("%w: agent_id is required for %q", ErrInvalidSchedule, id)
+		}
+		if strings.TrimSpace(def.Cron) == "" && def.Interval <= 0 {
+			return fmt.Errorf("%w: cadence is required for %q", ErrInvalidSchedule, id)
+		}
+		if def.Priority < 0 {
+			return fmt.Errorf("%w: priority must be >= 0 for %q", ErrInvalidSchedule, id)
+		}
+	}
+	return nil
 }
 
 func NewScheduleManager(definitions []ScheduleDefinition, clock Clock) *ScheduleManager {
