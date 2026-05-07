@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	defaultModel       = "minimax-text-01"
-	defaultHTTPTimeout = 30 * time.Second
-	maxResponseBytes   = 5 * 1024 * 1024
+	defaultModel          = "minimax-text-01"
+	defaultEmbeddingModel = "embo-01"
+	defaultHTTPTimeout    = 30 * time.Second
+	maxResponseBytes      = 5 * 1024 * 1024
 )
 
 var (
@@ -31,13 +32,15 @@ var (
 type Config struct {
 	BridgeURL          string
 	Model              string
+	EmbeddingModel     string
 	AllowTestLocalhost bool
 }
 
 type Client struct {
-	bridgeURL string
-	model     string
-	http      HTTPDoer
+	bridgeURL      string
+	model          string
+	embeddingModel string
+	http           HTTPDoer
 }
 
 type HTTPDoer interface {
@@ -56,7 +59,11 @@ func NewClient(cfg Config, doer HTTPDoer) (*Client, error) {
 	if model == "" {
 		model = defaultModel
 	}
-	return &Client{bridgeURL: bridgeURL, model: model, http: doer}, nil
+	embeddingModel := cfg.EmbeddingModel
+	if embeddingModel == "" {
+		embeddingModel = defaultEmbeddingModel
+	}
+	return &Client{bridgeURL: bridgeURL, model: model, embeddingModel: embeddingModel, http: doer}, nil
 }
 
 func (c *Client) Complete(ctx context.Context, req port.AICompletionRequest) (port.AICompletionResponse, error) {
@@ -118,6 +125,61 @@ func (c *Client) chatCompletionsURL() string {
 		return c.bridgeURL + "/chat/completions"
 	}
 	return c.bridgeURL + "/v1/chat/completions"
+}
+
+func (c *Client) Embed(ctx context.Context, texts []string) ([][]float64, error) {
+	if len(texts) == 0 {
+		return [][]float64{}, nil
+	}
+	body, err := json.Marshal(embeddingRequest{Model: c.embeddingModel, Input: texts})
+	if err != nil {
+		return nil, fmt.Errorf("marshal minimax embedding request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.embeddingsURL(), bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("build minimax embedding request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("call minimax embedding bridge: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read minimax embedding response: %w", err)
+	}
+	if len(respBody) > maxResponseBytes {
+		return nil, fmt.Errorf("minimax embedding bridge response exceeds %d bytes", maxResponseBytes)
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("minimax embedding bridge status %d: %s", resp.StatusCode, string(respBody))
+	}
+	var out embeddingResponse
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return nil, fmt.Errorf("decode minimax embedding response: %w", err)
+	}
+	embeddings := make([][]float64, len(out.Data))
+	for _, item := range out.Data {
+		if item.Index < 0 || item.Index >= len(embeddings) {
+			return nil, fmt.Errorf("minimax embedding bridge returned invalid index %d", item.Index)
+		}
+		embeddings[item.Index] = append([]float64(nil), item.Embedding...)
+	}
+	for i := range embeddings {
+		if len(embeddings[i]) == 0 {
+			return nil, fmt.Errorf("minimax embedding bridge missing embedding for index %d", i)
+		}
+	}
+	return embeddings, nil
+}
+
+func (c *Client) embeddingsURL() string {
+	if strings.HasSuffix(c.bridgeURL, "/v1") {
+		return c.bridgeURL + "/embeddings"
+	}
+	return c.bridgeURL + "/v1/embeddings"
 }
 
 func validateBridgeURL(raw string, allowTestLocalhost bool) (string, error) {
@@ -183,4 +245,16 @@ type chatCompletionResponse struct {
 	Usage struct {
 		TotalTokens int `json:"total_tokens"`
 	} `json:"usage"`
+}
+
+type embeddingRequest struct {
+	Model string   `json:"model"`
+	Input []string `json:"input"`
+}
+
+type embeddingResponse struct {
+	Data []struct {
+		Index     int       `json:"index"`
+		Embedding []float64 `json:"embedding"`
+	} `json:"data"`
 }

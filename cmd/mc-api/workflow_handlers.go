@@ -14,6 +14,7 @@ import (
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
+	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 )
 
@@ -31,6 +32,15 @@ type workflowRun interface {
 type startProductPublishWorkflowRequest struct {
 	ProductID   string `json:"product_id"`
 	RequestedBy string `json:"requested_by,omitempty"`
+}
+
+type startContentGenerationWorkflowRequest struct {
+	ProductID   string   `json:"product_id"`
+	RequestedBy string   `json:"requested_by,omitempty"`
+	Style       string   `json:"style,omitempty"`
+	Language    string   `json:"language,omitempty"`
+	MaxWords    int      `json:"max_words,omitempty"`
+	Keywords    []string `json:"keywords,omitempty"`
 }
 
 type workflowStartResponse struct {
@@ -78,6 +88,8 @@ func (s *server) workflowsHandler(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case path == "product-publish" && r.Method == http.MethodPost:
 		s.startProductPublishWorkflow(w, r)
+	case path == "content-generation" && r.Method == http.MethodPost:
+		s.startContentGenerationWorkflow(w, r)
 	case strings.HasSuffix(path, "/signals/review") && r.Method == http.MethodPost:
 		s.signalProductPublishReview(w, r, path)
 	case path != "" && r.Method == http.MethodGet:
@@ -85,6 +97,62 @@ func (s *server) workflowsHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 	}
+}
+
+func (s *server) startContentGenerationWorkflow(w http.ResponseWriter, r *http.Request) {
+	if s.workflowClient == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporal_not_configured"})
+		return
+	}
+	var req startContentGenerationWorkflowRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		return
+	}
+	productID, err := uuid.Parse(req.ProductID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_product_id"})
+		return
+	}
+	product, err := s.repo.GetByID(r.Context(), productID)
+	if err != nil {
+		if isNotFound(err) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+			return
+		}
+		s.log.Error("get product for content workflow", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+		return
+	}
+	productInfo := toContentProductInfo(product)
+	agentReq := contentagent.GenerateRequest{
+		Product:  productInfo,
+		Style:    normalizeContentStyle(req.Style),
+		Language: req.Language,
+		MaxWords: req.MaxWords,
+		Keywords: req.Keywords,
+	}
+	if agentReq.MaxWords == 0 {
+		agentReq.MaxWords = 120
+	}
+	workflowID := fmt.Sprintf("content-generation-%s-%s", productID.String(), uuid.NewString())
+	run, err := s.workflowClient.ExecuteWorkflow(
+		r.Context(),
+		client.StartWorkflowOptions{ID: workflowID, TaskQueue: ecworkflow.TaskQueue},
+		ecworkflow.ContentGenerationWorkflow,
+		ecworkflow.ContentGenerationInput{Product: productInfo, Request: agentReq, RequestedBy: req.RequestedBy},
+	)
+	if err != nil {
+		s.log.Error("start content generation workflow", "product_id", productID.String(), "error", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "workflow_start_failed"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, workflowStartResponse{
+		WorkflowID: run.GetID(),
+		RunID:      run.GetRunID(),
+		Status:     "started",
+		TaskQueue:  ecworkflow.TaskQueue,
+	})
 }
 
 func (s *server) startProductPublishWorkflow(w http.ResponseWriter, r *http.Request) {

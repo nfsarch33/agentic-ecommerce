@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 )
 
@@ -40,6 +41,39 @@ func TestLogRecorderAcceptsWorkflowEvents(t *testing.T) {
 	err := recorder.RecordWorkflowEvent(context.Background(), ecworkflow.WorkflowEvent{ProductID: uuid.NewString(), Type: "product_publish.started"})
 	if err != nil {
 		t.Fatalf("RecordWorkflowEvent: %v", err)
+	}
+}
+
+func TestNewContentGenerationActivitiesFromEnvCreatesFactChecker(t *testing.T) {
+	t.Setenv("ECOMMERCE_AI_BRIDGE_URL", "")
+	t.Setenv("MINIMAX_BRIDGE_URL", "")
+
+	activities := newContentGenerationActivitiesFromEnv(slog.Default())
+	result, err := activities.FactCheckContent(context.Background(), ecworkflow.ContentFactCheckActivityInput{
+		ProductID: uuid.NewString(),
+		Content:   contentagent.GeneratedContent{Description: "Plain marketing copy without factual claims."},
+	})
+	if err != nil {
+		t.Fatalf("FactCheckContent: %v", err)
+	}
+	if !result.Pass || result.Confidence != 1 {
+		t.Fatalf("fact check = %+v, want no-claim pass", result)
+	}
+}
+
+func TestContentFactCheckLogRecorderAcceptsResults(t *testing.T) {
+	t.Parallel()
+
+	recorder := contentFactCheckLogRecorder{logger: slog.Default()}
+	err := recorder.RecordContentFactCheck(context.Background(), ecworkflow.ContentGenerationResult{
+		ProductID: uuid.NewString(),
+		Status:    ecworkflow.ContentGenerationStatusApproved,
+		FactCheck: contentagent.FactCheckResult{
+			Confidence: 0.91,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RecordContentFactCheck: %v", err)
 	}
 }
 

@@ -12,9 +12,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/minimax"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
+	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 	"go.temporal.io/sdk/activity"
@@ -50,19 +53,55 @@ func main() {
 		Publisher: syncPublisher{engine: syncEngine},
 		Recorder:  logRecorder{logger: logger},
 	})
+	contentActivities := newContentGenerationActivitiesFromEnv(logger)
 
 	w := worker.New(c, ecworkflow.TaskQueue, worker.Options{})
 	w.RegisterWorkflow(ecworkflow.ProductPublishWorkflow)
+	w.RegisterWorkflow(ecworkflow.ContentGenerationWorkflow)
 	w.RegisterActivityWithOptions(activities.CheckCompliance, activity.RegisterOptions{Name: ecworkflow.CheckComplianceActivity})
 	w.RegisterActivityWithOptions(activities.ValidateMedia, activity.RegisterOptions{Name: ecworkflow.ValidateMediaActivity})
 	w.RegisterActivityWithOptions(activities.PublishToWooCommerce, activity.RegisterOptions{Name: ecworkflow.PublishToWooCommerceActivity})
 	w.RegisterActivityWithOptions(activities.RecordWorkflowEvent, activity.RegisterOptions{Name: ecworkflow.RecordWorkflowEventActivity})
+	w.RegisterActivityWithOptions(contentActivities.GenerateContent, activity.RegisterOptions{Name: ecworkflow.ContentGenerateActivity})
+	w.RegisterActivityWithOptions(contentActivities.FactCheckContent, activity.RegisterOptions{Name: ecworkflow.ContentFactCheckActivity})
+	w.RegisterActivityWithOptions(contentActivities.EvaluateContent, activity.RegisterOptions{Name: ecworkflow.ContentEvaluateActivity})
+	w.RegisterActivityWithOptions(contentActivities.RecordContentFactCheck, activity.RegisterOptions{Name: ecworkflow.RecordContentFactCheckActivity})
 
 	logger.Info("temporal_worker.start", "task_queue", ecworkflow.TaskQueue, "addr", temporalAddr)
 	if err := w.Run(worker.InterruptCh()); err != nil {
 		logger.Error("temporal_worker.run", "error", err)
 		os.Exit(1)
 	}
+}
+
+func newContentGenerationActivitiesFromEnv(logger *slog.Logger) *ecworkflow.ContentGenerationActivities {
+	dimensions := rag.DefaultEmbeddingDimensions
+	ragService := rag.NewService(rag.NewHashEmbedder(dimensions), rag.NewInMemoryVectorStore(dimensions), rag.ChunkOptions{MaxWords: 180, OverlapWords: 24})
+	factChecker := contentagent.NewFactChecker(ragService, contentagent.FactCheckOptions{MinConfidence: 0.72, TopK: 5})
+
+	var generator interface {
+		Generate(context.Context, contentagent.GenerateRequest) (contentagent.GenerateResult, error)
+	}
+	if bridgeURL := firstNonEmpty(getenv("ECOMMERCE_AI_BRIDGE_URL", ""), getenv("MINIMAX_BRIDGE_URL", "")); bridgeURL != "" {
+		bridge, err := minimax.NewClient(minimax.Config{
+			BridgeURL:          bridgeURL,
+			Model:              getenv("ECOMMERCE_AI_MODEL", ""),
+			EmbeddingModel:     getenv("ECOMMERCE_AI_EMBEDDING_MODEL", ""),
+			AllowTestLocalhost: getenv("ECOMMERCE_AI_BRIDGE_TEST_MODE", "") == "true",
+		}, &http.Client{Timeout: 30 * time.Second})
+		if err != nil {
+			if logger != nil {
+				logger.Warn("temporal_worker.content_agent_disabled", "error", err)
+			}
+		} else {
+			generator = contentagent.NewAgent(bridge)
+		}
+	}
+	return ecworkflow.NewContentGenerationActivities(ecworkflow.ContentGenerationActivityDeps{
+		Generator:   generator,
+		FactChecker: factChecker,
+		Recorder:    contentFactCheckLogRecorder{logger: logger},
+	})
 }
 
 type syncPublisher struct {
@@ -86,6 +125,17 @@ type logRecorder struct {
 func (r logRecorder) RecordWorkflowEvent(_ context.Context, event ecworkflow.WorkflowEvent) error {
 	if r.logger != nil {
 		r.logger.Info("product_publish.event", "type", event.Type, "product_id", event.ProductID, "status", event.Status)
+	}
+	return nil
+}
+
+type contentFactCheckLogRecorder struct {
+	logger *slog.Logger
+}
+
+func (r contentFactCheckLogRecorder) RecordContentFactCheck(_ context.Context, result ecworkflow.ContentGenerationResult) error {
+	if r.logger != nil {
+		r.logger.Info("content_generation.fact_check", "product_id", result.ProductID, "status", result.Status, "confidence", result.FactCheck.Confidence)
 	}
 	return nil
 }

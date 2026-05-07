@@ -109,6 +109,69 @@ func TestClientAcceptsBridgeURLWithV1Path(t *testing.T) {
 	}
 }
 
+func TestClientCallsEmbeddingBridge(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+	var gotModel string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		var body struct {
+			Model string   `json:"model"`
+			Input []string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		gotModel = body.Model
+		if len(body.Input) != 2 || body.Input[0] != "first" {
+			t.Fatalf("input = %+v", body.Input)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0,0]},{"index":1,"embedding":[0,1,0]}]}`))
+	}))
+	defer server.Close()
+
+	client, err := minimax.NewClient(minimax.Config{
+		BridgeURL:          server.URL + "/v1",
+		EmbeddingModel:     "embo-01",
+		AllowTestLocalhost: true,
+	}, server.Client())
+	if err != nil {
+		t.Fatalf("NewClient returned error: %v", err)
+	}
+
+	embeddings, err := client.Embed(context.Background(), []string{"first", "second"})
+	if err != nil {
+		t.Fatalf("Embed returned error: %v", err)
+	}
+	if gotPath != "/v1/embeddings" || gotModel != "embo-01" {
+		t.Fatalf("path/model = %q/%q", gotPath, gotModel)
+	}
+	if len(embeddings) != 2 || embeddings[1][1] != 1 {
+		t.Fatalf("embeddings = %+v", embeddings)
+	}
+}
+
+func TestClientEmbeddingBridgeReportsInvalidPayload(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"index":3,"embedding":[1]}]}`))
+	}))
+	defer server.Close()
+	client, err := minimax.NewClient(minimax.Config{BridgeURL: server.URL, AllowTestLocalhost: true}, server.Client())
+	if err != nil {
+		t.Fatalf("NewClient returned error: %v", err)
+	}
+
+	_, err = client.Embed(context.Background(), []string{"first"})
+	if err == nil {
+		t.Fatal("expected invalid embedding payload error")
+	}
+}
+
 func TestClientReportsBridgeErrors(t *testing.T) {
 	t.Parallel()
 

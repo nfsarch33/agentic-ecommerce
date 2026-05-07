@@ -1,10 +1,9 @@
-.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed rag-seed rag-search-smoke media-seed media-clean compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke tf-fmt tf-fmt-check tf-validate
+.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-seed media-clean compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke tf-fmt tf-fmt-check tf-validate
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
 DB_URL       ?= postgres://postgres:postgres@127.0.0.1:5432/ecommerce?sslmode=disable
 MEDIA_DIR    ?= .local/media-uploads
-RAG_LIMIT    ?= 3
 COMPOSE      := docker compose -f $(COMPOSE_FILE)
 PROD_COMPOSE := docker compose -f $(COMPOSE_PROD_FILE)
 WC_PROFILES  := --profile woocommerce --profile tools
@@ -169,18 +168,6 @@ seed:
 	@echo "==> Seeding test data"
 	$(COMPOSE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < seed/products.sql
-
-rag-seed:
-	@echo "==> Applying pgvector/RAG migration and deterministic fixtures"
-	$(COMPOSE) exec -T postgres \
-		psql "$(DB_URL)" -v ON_ERROR_STOP=1 -f /dev/stdin < migrations/0005_enable_pgvector_rag.up.sql
-	$(COMPOSE) exec -T postgres \
-		psql "$(DB_URL)" -v ON_ERROR_STOP=1 -f /dev/stdin < seed/rag_documents.sql
-
-rag-search-smoke: rag-seed
-	@echo "==> Running deterministic pgvector cosine search smoke"
-	$(COMPOSE) exec -T postgres \
-		psql "$(DB_URL)" -v ON_ERROR_STOP=1 -v rag_limit="$(RAG_LIMIT)" -f /dev/stdin < seed/rag_search_smoke.sql
 
 media-seed:
 	@echo "==> Seeding local media directory at $(MEDIA_DIR)"
