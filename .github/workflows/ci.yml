@@ -9,10 +9,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   go:
     name: Go gates
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,14 +25,26 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24.11"
+          go-version-file: go.mod
           cache: true
+          cache-dependency-path: go.sum
 
-      - name: Vet
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Run race tests
+        run: go test -race ./...
+
+      - name: Run go vet
         run: go vet ./...
 
-      - name: Test
-        run: go test -race ./...
+      - name: Run govulncheck when available
+        run: |
+          if command -v govulncheck >/dev/null 2>&1; then
+            govulncheck ./...
+          else
+            echo "govulncheck not installed; skipping optional vulnerability check"
+          fi
 
       - name: Build binaries
         run: make build
@@ -35,6 +52,7 @@ jobs:
   compose:
     name: Compose and Docker build
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,10 +64,10 @@ jobs:
         run: docker compose --env-file .env.compose.example -f docker-compose.yml config --quiet
 
       - name: Build mc-api image
-        run: docker build --build-arg TARGET=mc-api -t agentic-ecommerce:test .
+        run: docker build --build-arg TARGET=mc-api --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }} .
 
       - name: Build wc-sync image
-        run: docker build --build-arg TARGET=wc-sync -t agentic-ecommerce:test-wc-sync .
+        run: docker build --build-arg TARGET=wc-sync --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }}-wc-sync .
 
       - name: Build content-worker image
-        run: docker build --build-arg TARGET=content-worker -t agentic-ecommerce:test-content-worker .
+        run: docker build --build-arg TARGET=content-worker --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }}-content-worker .
