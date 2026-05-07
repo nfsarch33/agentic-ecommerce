@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -20,10 +23,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Run gitleaks secret scan
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 detect --source=/repo --no-git --redact --verbose
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -38,13 +44,11 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
-      - name: Run govulncheck when available
-        run: |
-          if command -v govulncheck >/dev/null 2>&1; then
-            govulncheck ./...
-          else
-            echo "govulncheck not installed; skipping optional vulnerability check"
-          fi
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+
+      - name: Run govulncheck
+        run: govulncheck ./...
 
       - name: Build binaries
         run: make build
@@ -55,7 +59,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate dev compose
         run: docker compose -f docker-compose.dev.yml config --quiet
@@ -71,3 +75,33 @@ jobs:
 
       - name: Build content-worker image
         run: docker build --build-arg TARGET=content-worker --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }}-content-worker .
+
+      - name: Scan mc-api image with Trivy
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: agentic-ecommerce:${{ github.sha }}
+          format: table
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan wc-sync image with Trivy
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: agentic-ecommerce:${{ github.sha }}-wc-sync
+          format: table
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan content-worker image with Trivy
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: agentic-ecommerce:${{ github.sha }}-content-worker
+          format: table
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
