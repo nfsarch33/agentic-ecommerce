@@ -118,6 +118,25 @@ func TestRequiredAlertRules(t *testing.T) {
 				"> 5",
 			},
 		},
+		{
+			alert:    "AgenticEcommerceRAGSearchLatencyHigh",
+			severity: "warning",
+			forValue: "5m",
+			contains: []string{
+				"histogram_quantile",
+				"agentic_ecommerce_rag_search_duration_seconds_bucket",
+				"> 1",
+			},
+		},
+		{
+			alert:    "AgenticEcommerceEmbeddingFailuresHigh",
+			severity: "warning",
+			forValue: "5m",
+			contains: []string{
+				"agentic_ecommerce_embedding_failures_total",
+				"> 0",
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -202,6 +221,21 @@ func TestGrafanaDashboardCoversV080ObservabilityViews(t *testing.T) {
 			contains: []string{
 				"agentic_ecommerce_compliance_checks_total",
 				"agentic_ecommerce_compliance_failures_total",
+			},
+		},
+		{
+			name:  "rag search latency",
+			title: "RAG Search p95 Latency",
+			contains: []string{
+				"histogram_quantile",
+				"agentic_ecommerce_rag_search_duration_seconds_bucket",
+			},
+		},
+		{
+			name:  "embedding failures",
+			title: "Embedding Bridge Failures",
+			contains: []string{
+				"agentic_ecommerce_embedding_failures_total",
 			},
 		},
 	}

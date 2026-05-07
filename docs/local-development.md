@@ -33,6 +33,37 @@ For local Temporal workflow infrastructure, use `make temporal-up` and the
 runbook in `docs/temporal-local.md`. Temporal is opt-in and does not gate
 `/healthz` or `/readyz` until workflow APIs are implemented.
 
+## Local RAG and Embedding Fixtures
+
+The dev PostgreSQL service already uses `pgvector/pgvector:pg16`. v1.3.0 adds
+`migrations/0005_enable_pgvector_rag.*.sql` for the `vector` extension and RAG
+document/chunk tables. Apply the migration with the normal migration target:
+
+```bash
+make migrate-up
+```
+
+RAG smoke targets use deterministic fixture vectors only and do not call the
+embedding bridge or MiniMax:
+
+```bash
+make rag-seed
+make rag-search-smoke
+```
+
+Embedding runtime configuration is reserved for the backend RAG package:
+
+```bash
+ECOMMERCE_EMBEDDING_BRIDGE_URL=
+ECOMMERCE_EMBEDDING_MODEL=minimax-embedding-01
+ECOMMERCE_EMBEDDING_DIMENSIONS=1536
+ECOMMERCE_RAG_CHUNK_SIZE=1000
+```
+
+`ECOMMERCE_EMBEDDING_BRIDGE_URL` must point to the approved fleet bridge when
+enabled. Do not point app containers or MacBook-local runs directly at MiniMax
+provider endpoints.
+
 ## Local Media Directory
 
 v0.7.0 reserves `.local/media-uploads/` for filesystem-backed media storage in
