@@ -37,6 +37,38 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  temporal:
+    image: temporalio/temporal:${TEMPORAL_IMAGE_TAG:-latest}
+    container_name: ec-temporal
+    profiles: ["temporal", "temporal-worker"]
+    restart: unless-stopped
+    command:
+      - server
+      - start-dev
+      - --ip
+      - 0.0.0.0
+      - --port
+      - "7233"
+      - --ui-port
+      - "8233"
+      - --db-filename
+      - /var/lib/temporal/temporal.db
+      - --namespace
+      - default
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${TEMPORAL_GRPC_HOST_PORT:-7233}:7233"
+      - "${BIND_HOST:-127.0.0.1}:${TEMPORAL_UI_HOST_PORT:-8233}:8233"
+    volumes:
+      - ec-temporaldata:/var/lib/temporal
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
   wc-db:
     image: ${WC_DB_IMAGE:-mariadb:11.4}
     container_name: ec-wc-db
@@ -242,8 +274,40 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  temporal-worker:
+    # TODO(v1.2 backend): switch to Dockerfile TARGET=temporal-worker once
+    # cmd/temporal-worker is merged. Keeping this image-only preserves config
+    # validation for the infra branch without pretending the binary exists.
+    image: ${TEMPORAL_WORKER_IMAGE:-ghcr.io/nfsarch33/agentic-ecommerce:dev-temporal-worker}
+    container_name: ec-temporal-worker
+    profiles: ["temporal-worker"]
+    restart: unless-stopped
+    depends_on:
+      temporal:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ECOMMERCE_TEMPORAL_ADDRESS: ${ECOMMERCE_TEMPORAL_ADDRESS:-temporal:7233}
+      ECOMMERCE_TEMPORAL_NAMESPACE: ${ECOMMERCE_TEMPORAL_NAMESPACE:-default}
+      ECOMMERCE_TEMPORAL_TASK_QUEUE: ${ECOMMERCE_TEMPORAL_TASK_QUEUE:-ec-workflows}
+      ECOMMERCE_DB_URL: "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ecommerce}?sslmode=disable"
+      ECOMMERCE_REDIS_ADDR: "redis:6379"
+      ECOMMERCE_REDIS_DB: ${ECOMMERCE_REDIS_DB:-0}
+      ECOMMERCE_REDIS_KEY_PREFIX: ${ECOMMERCE_REDIS_KEY_PREFIX:-ec:dev:}
+      ECOMMERCE_EVENTBUS_DRIVER: ${ECOMMERCE_EVENTBUS_DRIVER:-redis}
+      ECOMMERCE_EVENTBUS_REDIS_ADDR: "redis:6379"
+      ECOMMERCE_EVENTBUS_REDIS_DB: ${ECOMMERCE_EVENTBUS_REDIS_DB:-0}
+      ECOMMERCE_EVENTBUS_CHANNEL_SYNC: ${ECOMMERCE_EVENTBUS_CHANNEL_SYNC:-ec.sync.events}
+      ECOMMERCE_EVENTBUS_CHANNEL_DLQ: ${ECOMMERCE_EVENTBUS_CHANNEL_DLQ:-ec.sync.deadletter}
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   ec-pgdata:
   ec-redisdata:
+  ec-temporaldata:
   ec-wc-dbdata:
   ec-wpdata:
