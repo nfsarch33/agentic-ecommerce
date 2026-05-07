@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -12,7 +13,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/minimax"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
+	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
@@ -65,8 +68,13 @@ type server struct {
 	orderRepo     port.OrderRepository
 	cartRepo      port.CartRepository
 	syncEngine    *enginesync.Engine
+	contentAgent  contentGenerator
 	webhookSecret string
 	log           *slog.Logger
+}
+
+type contentGenerator interface {
+	Generate(ctx context.Context, req contentagent.GenerateRequest) (contentagent.GenerateResult, error)
 }
 
 func main() {
@@ -93,6 +101,19 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		ConsumerKey:    getenv("ECOMMERCE_WC_CONSUMER_KEY", ""),
 		ConsumerSecret: getenv("ECOMMERCE_WC_CONSUMER_SECRET", ""),
 	}, nil)
+	var generator contentGenerator
+	if bridgeURL := firstNonEmpty(getenv("ECOMMERCE_AI_BRIDGE_URL", ""), getenv("MINIMAX_BRIDGE_URL", "")); bridgeURL != "" {
+		bridge, err := minimax.NewClient(minimax.Config{
+			BridgeURL:          bridgeURL,
+			Model:              getenv("ECOMMERCE_AI_MODEL", ""),
+			AllowTestLocalhost: getenv("ECOMMERCE_AI_BRIDGE_TEST_MODE", "") == "true",
+		}, nil)
+		if err != nil {
+			logger.Warn("content agent disabled", "error", err)
+		} else {
+			generator = contentagent.NewAgent(bridge)
+		}
+	}
 	webhookSecret := getenv("ECOMMERCE_WC_WEBHOOK_SECRET", "")
 	return &server{
 		cfg: serverConfig{
@@ -104,6 +125,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		orderRepo:     orderRepo,
 		cartRepo:      cartRepo,
 		syncEngine:    enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
+		contentAgent:  generator,
 		webhookSecret: webhookSecret,
 		log:           logger,
 	}
@@ -148,6 +170,10 @@ func (s *server) productsHandler(w http.ResponseWriter, r *http.Request) {
 		s.listProducts(w, r)
 	case path == "" && r.Method == http.MethodPost:
 		s.createProduct(w, r)
+	case strings.HasSuffix(path, "/generate-description") && r.Method == http.MethodPost:
+		s.generateDescription(w, r, path)
+	case strings.HasSuffix(path, "/ai-suggestions") && r.Method == http.MethodGet:
+		s.aiSuggestions(w, r, path)
 	case path != "" && r.Method == http.MethodGet:
 		s.getProduct(w, r, path)
 	case path != "" && r.Method == http.MethodPut:
@@ -450,4 +476,13 @@ func getenv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

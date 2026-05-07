@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"gopkg.in/yaml.v3"
 )
@@ -264,6 +265,50 @@ func TestSyncHandlersMatchOpenAPIContract(t *testing.T) {
 		var payload map[string]any
 		decodeJSONPayload(t, rec.Body.Bytes(), &payload)
 		assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/sync/conflicts/{id}/resolve", http.MethodPost, "200"), payload)
+	})
+}
+
+func TestContentHandlersMatchOpenAPIContract(t *testing.T) {
+	t.Parallel()
+	spec := loadOpenAPIContract(t)
+	srv, repo := testServer(t)
+	product := fixedProduct(t)
+	if err := repo.Create(context.Background(), product); err != nil {
+		t.Fatalf("repo create: %v", err)
+	}
+	srv.contentAgent = &fakeContentAgent{result: content.GenerateResult{
+		GeneratedContent: content.GeneratedContent{
+			Description:     "Resistance Band Set supports progressive home workouts.",
+			SEOTitle:        "Resistance Band Set for Home Workouts",
+			MetaDescription: "Shop a resistance band set for progressive home workouts.",
+		},
+		Evaluation: content.Evaluation{Score: 88, Pass: true},
+		TokensUsed: 77,
+	}}
+
+	t.Run("generate description", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/products/"+product.ID().String()+"/generate-description", bytes.NewBufferString(`{"style":"casual"}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.mux().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+		var payload map[string]any
+		decodeJSONPayload(t, rec.Body.Bytes(), &payload)
+		assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/products/{id}/generate-description", http.MethodPost, "200"), payload)
+	})
+
+	t.Run("ai suggestions", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/products/"+product.ID().String()+"/ai-suggestions", nil)
+		rec := httptest.NewRecorder()
+		srv.mux().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+		var payload map[string]any
+		decodeJSONPayload(t, rec.Body.Bytes(), &payload)
+		assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/products/{id}/ai-suggestions", http.MethodGet, "200"), payload)
 	})
 }
 
