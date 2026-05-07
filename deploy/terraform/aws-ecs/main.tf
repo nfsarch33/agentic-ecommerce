@@ -17,19 +17,23 @@ locals {
     ECOMMERCE_EVENTBUS_DRIVER       = "redis"
     ECOMMERCE_EVENTBUS_CHANNEL_SYNC = "ec.sync.events"
     ECOMMERCE_EVENTBUS_CHANNEL_DLQ  = "ec.sync.deadletter"
+    ECOMMERCE_EMBEDDING_MODEL       = "minimax-embedding-01"
+    ECOMMERCE_EMBEDDING_DIMENSIONS  = "1536"
+    ECOMMERCE_RAG_CHUNK_SIZE        = "1000"
     ECOMMERCE_MEDIA_STORE           = "object"
   }
 
   common_backend_secrets = {
-    ECOMMERCE_DB_URL             = module.postgres.connection_secret_ref
-    ECOMMERCE_REDIS_ADDR         = module.redis.endpoint_secret_ref
-    ECOMMERCE_JWT_SECRET         = "aws-secretsmanager:${var.jwt_secret_name}"
-    ECOMMERCE_ADMIN_USERNAME     = "aws-secretsmanager:${var.admin_username_secret_name}"
-    ECOMMERCE_ADMIN_PASSWORD     = "aws-secretsmanager:${var.admin_password_secret_name}"
-    ECOMMERCE_API_TOKEN          = "aws-secretsmanager:${var.api_token_secret_name}"
-    ECOMMERCE_AI_BRIDGE_URL      = "aws-secretsmanager:${var.fleet_ai_bridge_url_secret_name}"
-    ECOMMERCE_WC_CONSUMER_KEY    = "aws-secretsmanager:${var.wc_consumer_key_secret_name}"
-    ECOMMERCE_WC_CONSUMER_SECRET = "aws-secretsmanager:${var.wc_consumer_secret_secret_name}"
+    ECOMMERCE_DB_URL               = module.postgres.connection_secret_ref
+    ECOMMERCE_REDIS_ADDR           = module.redis.endpoint_secret_ref
+    ECOMMERCE_JWT_SECRET           = "aws-secretsmanager:${var.jwt_secret_name}"
+    ECOMMERCE_ADMIN_USERNAME       = "aws-secretsmanager:${var.admin_username_secret_name}"
+    ECOMMERCE_ADMIN_PASSWORD       = "aws-secretsmanager:${var.admin_password_secret_name}"
+    ECOMMERCE_API_TOKEN            = "aws-secretsmanager:${var.api_token_secret_name}"
+    ECOMMERCE_AI_BRIDGE_URL        = "aws-secretsmanager:${var.fleet_ai_bridge_url_secret_name}"
+    ECOMMERCE_EMBEDDING_BRIDGE_URL = "aws-secretsmanager:${var.embedding_bridge_url_secret_name}"
+    ECOMMERCE_WC_CONSUMER_KEY      = "aws-secretsmanager:${var.wc_consumer_key_secret_name}"
+    ECOMMERCE_WC_CONSUMER_SECRET   = "aws-secretsmanager:${var.wc_consumer_secret_secret_name}"
   }
 }
 

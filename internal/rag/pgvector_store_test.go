@@ -31,13 +31,13 @@ func TestPGVectorStoreUpsertsDocumentAndChunks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertChunks: %v", err)
 	}
-	if len(db.execs) != 2 {
-		t.Fatalf("execs = %d, want document and chunk upserts", len(db.execs))
+	if len(db.execs) != 1 {
+		t.Fatalf("execs = %d, want combined document and chunk upsert", len(db.execs))
 	}
-	if !strings.Contains(db.execs[1].sql, "document_chunks") {
-		t.Fatalf("chunk upsert SQL = %s", db.execs[1].sql)
+	if !strings.Contains(db.execs[0].sql, "rag_document_chunks") {
+		t.Fatalf("chunk upsert SQL = %s", db.execs[0].sql)
 	}
-	if got := db.execs[1].args[6]; got != "[1,0,0.5]" {
+	if got := db.execs[0].args[12]; got != "[1,0,0.5]" {
 		t.Fatalf("embedding literal = %v", got)
 	}
 }

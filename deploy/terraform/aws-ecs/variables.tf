@@ -118,6 +118,12 @@ variable "fleet_ai_bridge_url_secret_name" {
   default     = "example/agentic-ecommerce/fleet-ai-bridge-url"
 }
 
+variable "embedding_bridge_url_secret_name" {
+  description = "AWS Secrets Manager name for the fleet embedding bridge URL."
+  type        = string
+  default     = "example/agentic-ecommerce/embedding-bridge-url"
+}
+
 variable "sync_dry_run" {
   description = "Keep WooCommerce sync dry-run by default for cloud dry-runs."
   type        = bool

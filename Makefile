@@ -149,12 +149,12 @@ migrate-up:
 	$(COMPOSE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0004_add_tenant_id.up.sql
 	$(COMPOSE) exec -T postgres \
-		psql "$(DB_URL)" -f /dev/stdin < migrations/0005_add_rag_pgvector.up.sql
+		psql "$(DB_URL)" -f /dev/stdin < migrations/0005_enable_pgvector_rag.up.sql
 
 migrate-down:
 	@echo "==> Running migrations DOWN against $(DB_URL)"
 	$(COMPOSE) exec -T postgres \
-		psql "$(DB_URL)" -f /dev/stdin < migrations/0005_add_rag_pgvector.down.sql
+		psql "$(DB_URL)" -f /dev/stdin < migrations/0005_enable_pgvector_rag.down.sql
 	$(COMPOSE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0004_add_tenant_id.down.sql
 	$(COMPOSE) exec -T postgres \
