@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agentic Ecommerce Mission Control API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Public contract for the Agentic Ecommerce Go backend consumed by
     agentic-ecommerce-web. This spec intentionally excludes private
@@ -373,6 +373,187 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/sync/status:
+    get:
+      summary: Get WooCommerce sync status
+      operationId: getSyncStatus
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current sync status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatus'
+  /api/v1/sync/conflicts:
+    get:
+      summary: List pending WooCommerce sync conflicts
+      operationId: listSyncConflicts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Pending conflicts queued for manual review
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictListResponse'
+  /api/v1/sync/conflicts/{id}/resolve:
+    post:
+      summary: Resolve a WooCommerce sync conflict
+      operationId: resolveSyncConflict
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveConflictRequest'
+      responses:
+        '200':
+          description: Conflict marked resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncConflict'
+        '400':
+          description: Invalid JSON body or conflict ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Conflict cannot be resolved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/sync/products/{id}/publish:
+    post:
+      summary: Publish a local product to WooCommerce
+      operationId: publishProductToWooCommerce
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Product published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          description: Invalid product ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: WooCommerce publish failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/webhooks/woocommerce/orders:
+    post:
+      summary: Receive WooCommerce order webhooks
+      operationId: receiveWooCommerceOrderWebhook
+      parameters:
+        - name: X-WC-Webhook-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-WC-Webhook-Topic
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WooCommerceOrderWebhook'
+      responses:
+        '200':
+          description: Webhook accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '401':
+          description: Invalid HMAC signature.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid WooCommerce order payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/webhooks/woocommerce/products:
+    post:
+      summary: Receive WooCommerce product webhooks
+      operationId: receiveWooCommerceProductWebhook
+      parameters:
+        - name: X-WC-Webhook-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-WC-Webhook-Topic
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WooCommerceProductWebhook'
+      responses:
+        '200':
+          description: Webhook accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '401':
+          description: Invalid HMAC signature.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid WooCommerce product payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -621,6 +802,160 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrderItemInput'
+    StatusResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+    SyncEvent:
+      type: object
+      required: [id, type, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [product_imported, product_published, inventory_reconciled, conflict_detected, sync_failed]
+        product_id:
+          type: string
+          format: uuid
+        remote_id:
+          type: integer
+        message:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+    SyncStatus:
+      type: object
+      required: [total_events, pending_conflicts, updated_at]
+      properties:
+        total_events:
+          type: integer
+          minimum: 0
+        pending_conflicts:
+          type: integer
+          minimum: 0
+        last_event:
+          $ref: '#/components/schemas/SyncEvent'
+        last_error:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+    SyncConflictField:
+      type: object
+      required: [field, local_value, remote_value]
+      properties:
+        field:
+          type: string
+          enum: [title, price, stock, description]
+        local_value:
+          type: string
+        remote_value:
+          type: string
+    SyncConflict:
+      type: object
+      required: [id, sku, remote_id, status, fields, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        remote_id:
+          type: integer
+        status:
+          type: string
+          enum: [pending, resolved]
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncConflictField'
+        resolution:
+          type: string
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+    ConflictListResponse:
+      type: object
+      required: [conflicts]
+      properties:
+        conflicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncConflict'
+    ResolveConflictRequest:
+      type: object
+      required: [resolution]
+      properties:
+        resolution:
+          type: string
+          minLength: 1
+          description: Manual operator decision, for example accept_local, accept_remote, or ignore.
+        note:
+          type: string
+    WooCommerceOrderWebhook:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+        total:
+          type: string
+        currency:
+          type: string
+        billing:
+          type: object
+          properties:
+            email:
+              type: string
+              format: email
+        line_items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+              product_id:
+                type: integer
+              quantity:
+                type: integer
+              total:
+                type: string
+    WooCommerceProductWebhook:
+      type: object
+      required: [id, sku, name]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        sku:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
     ErrorResponse:
       type: object
       required: [error]
