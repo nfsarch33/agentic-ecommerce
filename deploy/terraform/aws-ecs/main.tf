@@ -170,11 +170,15 @@ module "agent_worker_service" {
   security_group_id    = module.network.security_group_id
   service_account_name = "${var.project_name}-${var.environment}-ecs-task"
   env_vars = merge(local.common_backend_env, {
-    ECOMMERCE_AGENT_WORKER_ENABLED      = "true"
-    ECOMMERCE_AGENT_WORKER_RUN_ONCE     = "false"
-    ECOMMERCE_AGENT_WORKER_CONCURRENCY  = "1"
-    ECOMMERCE_AGENT_WORKER_INTERVAL     = "5m"
-    ECOMMERCE_AGENT_WORKER_METRICS_ADDR = "0.0.0.0:8081"
+    ECOMMERCE_AGENT_WORKER_ENABLED                = "true"
+    ECOMMERCE_AGENT_WORKER_RUN_ONCE               = "false"
+    ECOMMERCE_AGENT_WORKER_CONCURRENCY            = "1"
+    ECOMMERCE_AGENT_WORKER_INTERVAL               = "5m"
+    ECOMMERCE_AGENT_WORKER_METRICS_ADDR           = "0.0.0.0:8081"
+    ECOMMERCE_AGENT_SCHEDULES_ENABLED             = "false"
+    ECOMMERCE_AGENT_SCHEDULES_DEFAULT_INTERVAL    = "15m"
+    ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS = "1"
+    ECOMMERCE_AGENT_SCHEDULES_TASK_QUEUE          = "ec-workflows"
   })
   secret_env_vars = local.common_backend_secrets
 }
