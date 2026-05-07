@@ -39,10 +39,13 @@ func NewClient(config Config, httpClient *http.Client) Client {
 }
 
 func (c Client) UpsertProduct(ctx context.Context, product catalog.Product) error {
-	payload := map[string]string{
+	payload := map[string]any{
 		"sku":               product.SKU(),
 		"name":              product.Title(),
 		"short_description": product.Description(),
+		"regular_price":     fmt.Sprintf("%.2f", float64(product.Price().Amount())/100),
+		"stock_quantity":    product.Stock(),
+		"status":            wcStatus(product.Status()),
 	}
 
 	body, err := json.Marshal(payload)
@@ -80,4 +83,15 @@ func (c Client) UpsertProduct(ctx context.Context, product catalog.Product) erro
 	}
 
 	return nil
+}
+
+func wcStatus(s catalog.ProductStatus) string {
+	switch s {
+	case catalog.StatusActive:
+		return "publish"
+	case catalog.StatusArchived:
+		return "private"
+	default:
+		return "draft"
+	}
 }
