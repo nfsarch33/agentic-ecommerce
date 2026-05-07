@@ -58,6 +58,54 @@ variable "image_tag" {
   default     = "sha-placeholder"
 }
 
+variable "temporal_image" {
+  description = "Temporal server image repository without tag."
+  type        = string
+  default     = "temporalio/temporal"
+}
+
+variable "temporal_image_tag" {
+  description = "Temporal server image tag placeholder. Pin before real deployment."
+  type        = string
+  default     = "1.26.2"
+}
+
+variable "temporal_namespace" {
+  description = "Temporal namespace used by backend workflow clients and workers."
+  type        = string
+  default     = "default"
+}
+
+variable "temporal_task_queue" {
+  description = "Temporal task queue used by ecommerce workflows."
+  type        = string
+  default     = "ec-workflows"
+}
+
+variable "mc_api_min_instances" {
+  description = "Minimum ECS task count for mc-api."
+  type        = number
+  default     = 1
+}
+
+variable "mc_api_max_instances" {
+  description = "Maximum ECS task count for mc-api."
+  type        = number
+  default     = 6
+}
+
+variable "temporal_worker_min_instances" {
+  description = "Minimum ECS task count for temporal-worker."
+  type        = number
+  default     = 1
+}
+
+variable "temporal_worker_max_instances" {
+  description = "Maximum ECS task count for temporal-worker."
+  type        = number
+  default     = 5
+}
+
 variable "allowed_origin" {
   description = "Public frontend origin allowed by mc-api CORS."
   type        = string
@@ -106,10 +154,22 @@ variable "wc_consumer_key_secret_name" {
   default     = "example/agentic-ecommerce/wc-consumer-key"
 }
 
+variable "wc_store_url_secret_name" {
+  description = "AWS Secrets Manager name for WooCommerce store URL."
+  type        = string
+  default     = "example/agentic-ecommerce/wc-store-url"
+}
+
 variable "wc_consumer_secret_secret_name" {
   description = "AWS Secrets Manager name for WooCommerce consumer secret."
   type        = string
   default     = "example/agentic-ecommerce/wc-consumer-secret"
+}
+
+variable "wc_webhook_secret_name" {
+  description = "AWS Secrets Manager name for WooCommerce webhook HMAC secret."
+  type        = string
+  default     = "example/agentic-ecommerce/wc-webhook-secret"
 }
 
 variable "fleet_ai_bridge_url_secret_name" {

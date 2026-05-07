@@ -17,12 +17,17 @@ locals {
     ECOMMERCE_EVENTBUS_DRIVER                 = "redis"
     ECOMMERCE_EVENTBUS_CHANNEL_SYNC           = "ec.sync.events"
     ECOMMERCE_EVENTBUS_CHANNEL_DLQ            = "ec.sync.deadletter"
+    ECOMMERCE_TEMPORAL_ADDR                   = module.temporal_server_service.endpoint_placeholder
+    ECOMMERCE_TEMPORAL_NAMESPACE              = var.temporal_namespace
+    ECOMMERCE_TEMPORAL_TASK_QUEUE             = var.temporal_task_queue
     ECOMMERCE_EMBEDDING_MODEL                 = "minimax-embedding-01"
     ECOMMERCE_EMBEDDING_DIMENSIONS            = "1536"
     ECOMMERCE_RAG_CHUNK_SIZE                  = "1000"
     ECOMMERCE_MEDIA_STORAGE_DRIVER            = module.media_store.storage_driver
     ECOMMERCE_MEDIA_STORE                     = module.media_store.storage_driver
+    ECOMMERCE_MEDIA_STORE_PROVIDER            = module.media_store.storage_driver
     ECOMMERCE_MEDIA_BASE_PATH                 = module.media_store.object_prefix
+    ECOMMERCE_MEDIA_PREFIX                    = module.media_store.object_prefix
     ECOMMERCE_MEDIA_BUCKET                    = module.media_store.bucket_name
     ECOMMERCE_MEDIA_PUBLIC_BASE_URL           = module.media_store.public_base_url_placeholder
     ECOMMERCE_MEDIA_REGION                    = var.aws_region
@@ -41,8 +46,26 @@ locals {
     ECOMMERCE_API_TOKEN            = "aws-secretsmanager:${var.api_token_secret_name}"
     ECOMMERCE_AI_BRIDGE_URL        = "aws-secretsmanager:${var.fleet_ai_bridge_url_secret_name}"
     ECOMMERCE_EMBEDDING_BRIDGE_URL = "aws-secretsmanager:${var.embedding_bridge_url_secret_name}"
+    ECOMMERCE_WC_STORE_URL         = "aws-secretsmanager:${var.wc_store_url_secret_name}"
     ECOMMERCE_WC_CONSUMER_KEY      = "aws-secretsmanager:${var.wc_consumer_key_secret_name}"
     ECOMMERCE_WC_CONSUMER_SECRET   = "aws-secretsmanager:${var.wc_consumer_secret_secret_name}"
+    ECOMMERCE_WC_WEBHOOK_SECRET    = "aws-secretsmanager:${var.wc_webhook_secret_name}"
+  }
+
+  mc_api_autoscaling_policy = {
+    enabled                    = true
+    metric                     = "ECSServiceAverageCPUUtilization"
+    target_value               = 60
+    scale_in_cooldown_seconds  = 300
+    scale_out_cooldown_seconds = 60
+  }
+
+  temporal_worker_autoscaling_policy = {
+    enabled                    = true
+    metric                     = "ECSServiceAverageCPUUtilization"
+    target_value               = 70
+    scale_in_cooldown_seconds  = 300
+    scale_out_cooldown_seconds = 60
   }
 }
 
@@ -109,8 +132,8 @@ module "mc_api_service" {
   container_port       = 8080
   cpu                  = 512
   memory_mb            = 1024
-  min_instances        = 1
-  max_instances        = 3
+  min_instances        = var.mc_api_min_instances
+  max_instances        = var.mc_api_max_instances
   health_check_path    = "/readyz"
   allow_public_ingress = true
   network_id           = module.network.network_id
@@ -119,6 +142,7 @@ module "mc_api_service" {
   service_account_name = "${var.project_name}-${var.environment}-ecs-task"
   env_vars             = merge(local.common_backend_env, { ECOMMERCE_HTTP_ADDR = "0.0.0.0:8080" })
   secret_env_vars      = local.common_backend_secrets
+  autoscaling_policy   = local.mc_api_autoscaling_policy
 }
 
 module "wc_sync_service" {
@@ -181,6 +205,69 @@ module "agent_worker_service" {
     ECOMMERCE_AGENT_SCHEDULES_TASK_QUEUE          = "ec-workflows"
   })
   secret_env_vars = local.common_backend_secrets
+}
+
+module "temporal_server_service" {
+  source = "../modules/service"
+
+  provider_name        = local.provider_name
+  runtime_target       = "ecs-fargate"
+  name_prefix          = var.project_name
+  environment          = var.environment
+  service_name         = "temporal-server"
+  image                = var.temporal_image
+  image_tag            = var.temporal_image_tag
+  container_port       = 7233
+  protocol             = "grpc"
+  command              = ["server", "start", "--address", "0.0.0.0:7233"]
+  cpu                  = 1024
+  memory_mb            = 2048
+  min_instances        = 1
+  max_instances        = 1
+  health_check_path    = "temporal operator cluster health"
+  allow_public_ingress = false
+  network_id           = module.network.network_id
+  private_subnet_ids   = module.network.private_subnet_ids
+  security_group_id    = module.network.security_group_id
+  service_account_name = "${var.project_name}-${var.environment}-ecs-task"
+  env_vars = {
+    TEMPORAL_NAMESPACE = var.temporal_namespace
+  }
+  secret_env_vars = {
+    TEMPORAL_DB_URL = module.postgres.connection_secret_ref
+  }
+}
+
+module "temporal_worker_service" {
+  source = "../modules/service"
+
+  provider_name        = local.provider_name
+  runtime_target       = "ecs-fargate"
+  name_prefix          = var.project_name
+  environment          = var.environment
+  service_name         = "temporal-worker"
+  image                = var.backend_image
+  image_tag            = "${var.image_tag}-temporal-worker"
+  container_port       = 0
+  protocol             = "worker"
+  cpu                  = 512
+  memory_mb            = 1024
+  min_instances        = var.temporal_worker_min_instances
+  max_instances        = var.temporal_worker_max_instances
+  health_check_path    = "/healthz"
+  allow_public_ingress = false
+  network_id           = module.network.network_id
+  private_subnet_ids   = module.network.private_subnet_ids
+  security_group_id    = module.network.security_group_id
+  service_account_name = "${var.project_name}-${var.environment}-ecs-task"
+  env_vars = merge(local.common_backend_env, {
+    ECOMMERCE_AGENT_SCHEDULES_ENABLED             = "false"
+    ECOMMERCE_AGENT_SCHEDULES_DEFAULT_INTERVAL    = "15m"
+    ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS = "1"
+    ECOMMERCE_AGENT_SCHEDULES_TASK_QUEUE          = var.temporal_task_queue
+  })
+  secret_env_vars    = local.common_backend_secrets
+  autoscaling_policy = local.temporal_worker_autoscaling_policy
 }
 
 module "frontend_service" {
