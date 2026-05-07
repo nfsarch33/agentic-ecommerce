@@ -1,0 +1,11 @@
+{
+  "created_at": "2026-05-07T00:00:00Z",
+  "enabled": true,
+  "event_types": [
+    "product.created"
+  ],
+  "id": "00000000-0000-0000-0000-000000000000",
+  "secret_hash": "\u003csha256\u003e",
+  "secret_ref": "local:test",
+  "url": "https://hooks.example.test/product"
+}
