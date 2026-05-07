@@ -27,6 +27,7 @@ import (
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	pricingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/pricing"
 	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
+	compliancedomain "github.com/nfsarch33/agentic-ecommerce/internal/compliance"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
@@ -34,6 +35,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	"github.com/nfsarch33/agentic-ecommerce/internal/security"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
+	"github.com/nfsarch33/agentic-ecommerce/internal/tenant"
 	"github.com/nfsarch33/agentic-ecommerce/internal/webhook/outbound"
 )
 
@@ -129,6 +131,9 @@ type server struct {
 	schedulerMu       sync.Mutex
 	webhookService    *outbound.Service
 	webhookSecret     string
+	tenantService     *tenant.Service
+	customRuleStore   compliancedomain.CustomRuleStore
+	complianceHistory compliancedomain.HistoryStore
 	tokenManager      *security.TokenManager
 	sessions          security.RefreshSessionStore
 	rateLimiter       security.RateLimiter
@@ -378,24 +383,27 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 			shutdownTimeout:   shutdownTimeout,
 			otelEnabled:       otelEnabled,
 		},
-		repo:           repo,
-		orderRepo:      orderRepo,
-		cartRepo:       cartRepo,
-		eventBus:       bus,
-		syncEngine:     enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
-		contentAgent:   generator,
-		rag:            ragService,
-		factChecks:     map[string]contentagent.FactCheckResult{},
-		mediaService:   intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
-		workflowClient: workflowClient,
-		agentRegistry:  registry,
-		agentScheduler: orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), eventbus.NewEventBusAdapter(bus, "mc-api.agent"), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
-		agentSchedules: defaultAgentScheduleManager(),
-		webhookService: webhookService,
-		webhookSecret:  webhookSecret,
-		readiness:      readinessChecks,
-		cleanup:        cleanup,
-		log:            logger,
+		repo:              repo,
+		orderRepo:         orderRepo,
+		cartRepo:          cartRepo,
+		eventBus:          bus,
+		syncEngine:        enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
+		contentAgent:      generator,
+		rag:               ragService,
+		factChecks:        map[string]contentagent.FactCheckResult{},
+		mediaService:      intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
+		workflowClient:    workflowClient,
+		agentRegistry:     registry,
+		agentScheduler:    orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), eventbus.NewEventBusAdapter(bus, "mc-api.agent"), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
+		agentSchedules:    defaultAgentScheduleManager(),
+		webhookService:    webhookService,
+		webhookSecret:     webhookSecret,
+		tenantService:     tenant.NewService(tenant.NewInMemoryRepository()),
+		customRuleStore:   compliancedomain.NewInMemoryCustomRuleStore(),
+		complianceHistory: compliancedomain.NewInMemoryHistoryStore(),
+		readiness:         readinessChecks,
+		cleanup:           cleanup,
+		log:               logger,
 	}
 	srv.configureSecurity()
 	return srv
@@ -477,6 +485,14 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/webhooks/", webhooksAPI)
 	complianceAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.complianceRulesHandler)))
 	mux.HandleFunc("/api/v1/compliance/rules", complianceAPI)
+	tenantSettingsAPI := s.withCORS(s.withRateLimit(s.withRBAC(tenantSettingsRole, s.withTenantRequired(s.tenantSettingsHandler))))
+	mux.HandleFunc("/api/v1/tenant/settings", tenantSettingsAPI)
+	customRulesAPI := s.withCORS(s.withRateLimit(s.withRBAC(customRulesRole, s.withTenantRequired(s.customRulesHandler))))
+	mux.HandleFunc("/api/v1/compliance/custom-rules", customRulesAPI)
+	mux.HandleFunc("/api/v1/compliance/custom-rules/", customRulesAPI)
+	reportsAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.withTenantRequired(s.complianceReportsHandler))))
+	mux.HandleFunc("/api/v1/compliance/reports/summary", reportsAPI)
+	mux.HandleFunc("/api/v1/compliance/reports/export", reportsAPI)
 	agentsAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.withAudit(agentAuditAction, s.agentsHandler))))
 	mux.HandleFunc("/api/v1/agents", agentsAPI)
 	mux.HandleFunc("/api/v1/agents/", agentsAPI)

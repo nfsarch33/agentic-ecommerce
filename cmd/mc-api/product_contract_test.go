@@ -26,10 +26,11 @@ type openAPIContract struct {
 }
 
 type openAPIPath struct {
-	Get   openAPIOperation `yaml:"get"`
-	Post  openAPIOperation `yaml:"post"`
-	Put   openAPIOperation `yaml:"put"`
-	Patch openAPIOperation `yaml:"patch"`
+	Get    openAPIOperation `yaml:"get"`
+	Post   openAPIOperation `yaml:"post"`
+	Put    openAPIOperation `yaml:"put"`
+	Patch  openAPIOperation `yaml:"patch"`
+	Delete openAPIOperation `yaml:"delete"`
 }
 
 type openAPIOperation struct {
@@ -459,6 +460,42 @@ func TestOpenAPIIncludesComplianceEndpointSchemas(t *testing.T) {
 	_ = responseSchema(t, spec, "/api/v1/compliance/rules", http.MethodGet, "200")
 }
 
+func TestOpenAPIIncludesTenantComplianceReportingEndpoints(t *testing.T) {
+	t.Parallel()
+	spec := loadOpenAPIContract(t)
+
+	settings := responseSchema(t, spec, "/api/v1/tenant/settings", http.MethodGet, "200")
+	for _, field := range []string{"tenant_id", "branding", "woocommerce", "ai", "compliance", "updated_at"} {
+		if !containsString(settings.Required, field) {
+			t.Fatalf("TenantSettings required fields = %v, want %q", settings.Required, field)
+		}
+	}
+	_ = responseSchema(t, spec, "/api/v1/tenant/settings", http.MethodPut, "200")
+
+	customRules := responseSchema(t, spec, "/api/v1/compliance/custom-rules", http.MethodGet, "200")
+	ruleSchema := dereferenceSchema(t, spec, customRules.Properties["rules"].Items.Ref)
+	for _, field := range []string{"tenant_id", "id", "version", "name", "severity", "enabled", "definition", "created_at", "updated_at"} {
+		if !containsString(ruleSchema.Required, field) {
+			t.Fatalf("ComplianceCustomRule required fields = %v, want %q", ruleSchema.Required, field)
+		}
+	}
+	_ = responseSchema(t, spec, "/api/v1/compliance/custom-rules", http.MethodPost, "201")
+	_ = responseSchema(t, spec, "/api/v1/compliance/custom-rules/{id}", http.MethodPut, "200")
+
+	deleteOp := spec.Paths["/api/v1/compliance/custom-rules/{id}"].Delete
+	if _, ok := deleteOp.Responses["204"]; !ok {
+		t.Fatalf("missing DELETE /api/v1/compliance/custom-rules/{id} 204 response")
+	}
+
+	summary := responseSchema(t, spec, "/api/v1/compliance/reports/summary", http.MethodGet, "200")
+	for _, field := range []string{"tenant_id", "total_checks", "passed_checks", "failed_checks", "pass_rate", "rule_stats", "product_stats", "trends"} {
+		if !containsString(summary.Required, field) {
+			t.Fatalf("ComplianceSummary required fields = %v, want %q", summary.Required, field)
+		}
+	}
+	_ = responseSchema(t, spec, "/api/v1/compliance/reports/export", http.MethodGet, "200")
+}
+
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
@@ -518,6 +555,8 @@ func responseSchema(t *testing.T, spec openAPIContract, path, method, status str
 		operation = item.Put
 	case http.MethodPatch:
 		operation = item.Patch
+	case http.MethodDelete:
+		operation = item.Delete
 	default:
 		t.Fatalf("unsupported method %s", method)
 	}

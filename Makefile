@@ -213,9 +213,13 @@ migrate-up:
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0004_add_tenant_id.up.sql
 	$(COMPOSE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0005_enable_pgvector_rag.up.sql
+	$(COMPOSE) exec -T postgres \
+		psql "$(DB_URL)" -f /dev/stdin < migrations/0006_tenant_settings_compliance_reporting.up.sql
 
 migrate-down:
 	@echo "==> Running migrations DOWN against $(DB_URL)"
+	$(COMPOSE) exec -T postgres \
+		psql "$(DB_URL)" -f /dev/stdin < migrations/0006_tenant_settings_compliance_reporting.down.sql
 	$(COMPOSE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < migrations/0005_enable_pgvector_rag.down.sql
 	$(COMPOSE) exec -T postgres \
