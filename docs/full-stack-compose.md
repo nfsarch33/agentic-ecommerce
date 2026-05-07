@@ -27,6 +27,36 @@ curl http://127.0.0.1:8080/metrics
 
 Grafana is available at `http://127.0.0.1:${GRAFANA_HOST_PORT:-3001}`. Prometheus is available at `http://127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}`.
 
+## Observability Alert Runbook
+
+Validate the checked-in monitoring config before booting the stack:
+
+```bash
+make monitoring-validate
+make compose-config-prod
+make compose-workers-config
+```
+
+`make monitoring-validate` runs `promtool check config` and `promtool check rules` when `promtool` is installed, then falls back to the repository Go validation tests for Prometheus YAML and Grafana dashboard JSON coverage.
+
+Inspect alerts locally after `compose-up`:
+
+```bash
+open http://127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}/alerts
+open http://127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}/rules
+open http://127.0.0.1:${GRAFANA_HOST_PORT:-3001}
+```
+
+Expected v0.8.0 rules:
+
+- `AgenticEcommerceHighApiLatency`: API p95 latency above 500ms for 5 minutes.
+- `AgenticEcommerceHighErrorRate`: API 5xx error rate above 1% for 5 minutes.
+- `AgenticEcommerceSyncLagHigh`: WooCommerce sync lag above 5 minutes.
+- `AgenticEcommerceAgentFailureRateHigh`: agent-worker failure rate above 5% for 10 minutes.
+- `AgenticEcommerceComplianceFailureSpike`: backend plus worker compliance failures above the 15-minute spike threshold.
+
+The `Agentic Ecommerce Overview` dashboard should show API latency/error rate, WooCommerce sync lag/conflicts, agent run success/failure, and compliance pass/fail rates. The worker-backed panels populate when the `workers` profile is running.
+
 Run scaffolded workers explicitly:
 
 ```bash

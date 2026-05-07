@@ -93,6 +93,7 @@ func TestMetricsEndpointExposesPrometheusText(t *testing.T) {
 	for _, want := range []string{
 		"# TYPE agentic_ecommerce_build_info gauge",
 		"# TYPE agentic_ecommerce_sync_lag_seconds gauge",
+		"# TYPE agentic_ecommerce_sync_conflicts_total counter",
 		"# TYPE agentic_ecommerce_agent_success_total counter",
 		"# HELP agentic_ecommerce_compliance_checks_total Compliance checks evaluated by the backend.",
 		"# TYPE agentic_ecommerce_compliance_checks_total counter",
