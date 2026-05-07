@@ -48,7 +48,7 @@ open http://127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}/rules
 open http://127.0.0.1:${GRAFANA_HOST_PORT:-3001}
 ```
 
-Expected v0.8.0 rules:
+Expected v1.0.0 rules:
 
 - `AgenticEcommerceHighApiLatency`: API p95 latency above 500ms for 5 minutes.
 - `AgenticEcommerceHighErrorRate`: API 5xx error rate above 1% for 5 minutes.
