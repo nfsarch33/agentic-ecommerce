@@ -84,9 +84,6 @@ Backend secrets:
 
 - `ECOMMERCE_DB_URL`: full PostgreSQL DSN for `mc-api`, `wc-sync`, and `agent-worker`.
 - `ECOMMERCE_REDIS_ADDR`: Redis host:port, or a runtime-composed value if the provider resource exposes it directly.
-- `ECOMMERCE_JWT_SECRET`: HMAC signing secret for short-lived access tokens. Use a generated secret of at least 32 bytes and rotate through the cloud secret manager.
-- `ECOMMERCE_ADMIN_USERNAME`: bootstrap admin username.
-- `ECOMMERCE_ADMIN_PASSWORD`: bootstrap admin password. Keep this out of Terraform state and rotate after first production operator provisioning.
 - `ECOMMERCE_API_TOKEN`: optional legacy backend bearer token for migration windows only.
 - `ECOMMERCE_WC_CONSUMER_KEY`: WooCommerce REST consumer key.
 - `ECOMMERCE_WC_CONSUMER_SECRET`: WooCommerce REST consumer secret.
@@ -97,7 +94,13 @@ Frontend secrets:
 
 - `FLEET_AI_BRIDGE_URL`: only if the frontend BFF route needs to call the approved fleet bridge.
 
-Non-secret environment variables can stay in Terraform state, including `ECOMMERCE_ALLOWED_ORIGIN`, `ECOMMERCE_JWT_ISSUER`, `ECOMMERCE_JWT_AUDIENCE`, `ECOMMERCE_JWT_ACCESS_TTL`, `ECOMMERCE_REFRESH_TTL`, `ECOMMERCE_RATE_LIMIT_CAPACITY`, `ECOMMERCE_RATE_LIMIT_REFILL`, `ECOMMERCE_EVENTBUS_DRIVER`, `ECOMMERCE_EVENTBUS_CHANNEL_SYNC`, `ECOMMERCE_EVENTBUS_CHANNEL_DLQ`, and worker scheduling flags.
+Non-secret environment variables can stay in Terraform state, including `ECOMMERCE_ALLOWED_ORIGIN`, `ECOMMERCE_JWT_ISSUER`, `ECOMMERCE_JWT_AUDIENCE`, `ECOMMERCE_JWT_ACCESS_TTL`, `ECOMMERCE_REFRESH_TTL`, `ECOMMERCE_RATE_LIMIT_CAPACITY`, `ECOMMERCE_RATE_LIMIT_REFILL`, `ECOMMERCE_CSP_CONNECT_SRC`, `ECOMMERCE_CSP_REPORT_URI`, `ECOMMERCE_EVENTBUS_DRIVER`, `ECOMMERCE_EVENTBUS_CHANNEL_SYNC`, `ECOMMERCE_EVENTBUS_CHANNEL_DLQ`, and worker scheduling flags.
+
+## Browser Boundary Headers
+
+Set `ECOMMERCE_ALLOWED_ORIGIN` to the exact HTTPS storefront origin before enabling authenticated browser traffic. Do not use wildcard CORS with JWT, refresh-token, or API-key authenticated routes.
+
+Set Content Security Policy headers at the CDN, load balancer, reverse proxy, or frontend platform. The baseline should be deny-by-default and allow only the deployed storefront, backend API, approved image/media hosts, and fleet bridge endpoints required by BFF routes. Keep report-only mode separate from enforcement by sending CSP reports to `ECOMMERCE_CSP_REPORT_URI` first, then promote the policy after violations are reviewed.
 
 ## Database Migrations
 
