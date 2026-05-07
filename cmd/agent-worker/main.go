@@ -26,7 +26,8 @@ var (
 	version = "dev"
 	commit  = "unknown"
 
-	agentWorkerRunsTotal atomic.Int64
+	agentWorkerRunsSucceededTotal atomic.Int64
+	agentWorkerRunsFailedTotal    atomic.Int64
 )
 
 // Config is the runtime contract between compose and the future v0.6.0 orchestrator.
@@ -232,11 +233,12 @@ func (r workerRuntime) RunOnce(ctx context.Context, logger *slog.Logger) (worker
 		}
 		if completed.State == orchestrator.RunSucceeded {
 			summary.Succeeded++
-			agentWorkerRunsTotal.Add(1)
+			agentWorkerRunsSucceededTotal.Add(1)
 			logger.Info("agent-worker.scheduler_run_succeeded", "agent_id", completed.AgentID, "run_id", completed.ID)
 			continue
 		}
 		summary.Failed++
+		agentWorkerRunsFailedTotal.Add(1)
 		logger.Error("agent-worker.scheduler_run_failed", "agent_id", completed.AgentID, "run_id", completed.ID, "state", completed.State, "error_code", completed.Error.Code)
 	}
 	return summary, nil
@@ -308,7 +310,8 @@ agentic_ecommerce_agent_worker_concurrency %d
 agentic_ecommerce_agent_worker_scheduler_interval_seconds %.0f
 # HELP agentic_ecommerce_agent_worker_runs_total Orchestrator-backed agent runs completed by this worker.
 # TYPE agentic_ecommerce_agent_worker_runs_total counter
-agentic_ecommerce_agent_worker_runs_total{eventbus_driver=%q,sync_channel=%q} %d
+agentic_ecommerce_agent_worker_runs_total{eventbus_driver=%q,sync_channel=%q,status="succeeded"} %d
+agentic_ecommerce_agent_worker_runs_total{eventbus_driver=%q,sync_channel=%q,status="failed"} %d
 # HELP agentic_ecommerce_agent_worker_compliance_checks_total Compliance checks evaluated by this worker.
 # TYPE agentic_ecommerce_agent_worker_compliance_checks_total counter
 agentic_ecommerce_agent_worker_compliance_checks_total{eventbus_driver=%q,sync_channel=%q} 0
@@ -318,7 +321,7 @@ agentic_ecommerce_agent_worker_compliance_failures_total{eventbus_driver=%q,sync
 # HELP agentic_ecommerce_agent_worker_media_validation_failures_total Media validations rejected by this worker.
 # TYPE agentic_ecommerce_agent_worker_media_validation_failures_total counter
 agentic_ecommerce_agent_worker_media_validation_failures_total{eventbus_driver=%q,sync_channel=%q} 0
-`, version, commit, enabled, cfg.Concurrency, cfg.Interval.Seconds(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel)
+`, version, commit, enabled, cfg.Concurrency, cfg.Interval.Seconds(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsSucceededTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsFailedTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel)
 	}
 }
 

@@ -193,6 +193,9 @@ agentic_ecommerce_http_request_duration_seconds_count 0
 # HELP agentic_ecommerce_sync_lag_seconds WooCommerce sync lag placeholder.
 # TYPE agentic_ecommerce_sync_lag_seconds gauge
 agentic_ecommerce_sync_lag_seconds 0
+# HELP agentic_ecommerce_sync_conflicts_total WooCommerce sync conflicts detected by the backend.
+# TYPE agentic_ecommerce_sync_conflicts_total counter
+agentic_ecommerce_sync_conflicts_total{resolution="pending"} 0
 # HELP agentic_ecommerce_agent_success_total Agent success count placeholder.
 # TYPE agentic_ecommerce_agent_success_total counter
 agentic_ecommerce_agent_success_total{agent="content"} 0
