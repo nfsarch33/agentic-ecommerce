@@ -17,6 +17,7 @@ output "deployment_summary" {
       instance   = module.redis.instance_name
       secret_ref = module.redis.endpoint_secret_ref
     }
+    media_store = module.media_store.deployment_contract
     services = {
       mc_api       = module.mc_api_service.deployment_contract
       wc_sync      = module.wc_sync_service.deployment_contract

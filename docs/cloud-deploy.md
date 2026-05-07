@@ -42,6 +42,7 @@ Start with `deploy/terraform/aws-ecs`. The example maps the stack to these AWS s
 - Compute: ECS Fargate services for `mc-api`, `frontend`, and `agent-worker`; `wc-sync` can be a scheduled or one-off Fargate task.
 - Database: RDS PostgreSQL 16 or Aurora PostgreSQL with pgvector support where available.
 - Cache: ElastiCache Redis with TLS and auth token support.
+- Media storage: S3 bucket placeholder from the shared `objectstore` module; add IAM, encryption, lifecycle, and CloudFront in the cloud-hardening slice.
 - Logs and metrics: CloudWatch Logs for container logs, plus Prometheus/Grafana or managed Prometheus later.
 - Secrets: AWS Secrets Manager injected into ECS task definitions by ARN or name.
 
@@ -63,6 +64,7 @@ Start with `deploy/terraform/gcp-cloudrun`. The example maps the stack to these 
 - Compute: Cloud Run services for `mc-api`, `frontend`, and `agent-worker`; `wc-sync` can be a Cloud Run job.
 - Database: Cloud SQL PostgreSQL 16 with private IP and pgvector support where available.
 - Cache: Memorystore for Redis on the same private network.
+- Media storage: GCS bucket placeholder from the shared `objectstore` module; add IAM, encryption, lifecycle, and Cloud CDN in the cloud-hardening slice.
 - Logs and metrics: Cloud Logging and Cloud Monitoring, with Prometheus-compatible export added later if needed.
 - Secrets: Secret Manager references mounted or injected into Cloud Run revisions.
 
@@ -95,7 +97,13 @@ Frontend secrets:
 
 - `FLEET_AI_BRIDGE_URL`: only if the frontend BFF route needs to call the approved fleet bridge.
 
-Non-secret environment variables can stay in Terraform state, including `ECOMMERCE_ALLOWED_ORIGIN`, `ECOMMERCE_JWT_ISSUER`, `ECOMMERCE_JWT_AUDIENCE`, `ECOMMERCE_JWT_ACCESS_TTL`, `ECOMMERCE_REFRESH_TTL`, `ECOMMERCE_RATE_LIMIT_CAPACITY`, `ECOMMERCE_RATE_LIMIT_REFILL`, `ECOMMERCE_CSP_CONNECT_SRC`, `ECOMMERCE_CSP_REPORT_URI`, `ECOMMERCE_EVENTBUS_DRIVER`, `ECOMMERCE_EVENTBUS_CHANNEL_SYNC`, `ECOMMERCE_EVENTBUS_CHANNEL_DLQ`, `ECOMMERCE_EMBEDDING_MODEL`, `ECOMMERCE_EMBEDDING_DIMENSIONS`, `ECOMMERCE_RAG_CHUNK_SIZE`, and worker scheduling flags.
+Non-secret environment variables can stay in Terraform state, including `ECOMMERCE_ALLOWED_ORIGIN`, `ECOMMERCE_JWT_ISSUER`, `ECOMMERCE_JWT_AUDIENCE`, `ECOMMERCE_JWT_ACCESS_TTL`, `ECOMMERCE_REFRESH_TTL`, `ECOMMERCE_RATE_LIMIT_CAPACITY`, `ECOMMERCE_RATE_LIMIT_REFILL`, `ECOMMERCE_CSP_CONNECT_SRC`, `ECOMMERCE_CSP_REPORT_URI`, `ECOMMERCE_EVENTBUS_DRIVER`, `ECOMMERCE_EVENTBUS_CHANNEL_SYNC`, `ECOMMERCE_EVENTBUS_CHANNEL_DLQ`, `ECOMMERCE_EMBEDDING_MODEL`, `ECOMMERCE_EMBEDDING_DIMENSIONS`, `ECOMMERCE_RAG_CHUNK_SIZE`, `ECOMMERCE_MEDIA_STORAGE_DRIVER`, `ECOMMERCE_MEDIA_BUCKET`, `ECOMMERCE_MEDIA_BASE_PATH`, `ECOMMERCE_MEDIA_PUBLIC_BASE_URL`, `ECOMMERCE_MEDIA_REGION`, `ECOMMERCE_MEDIA_MAX_SIZE_BYTES`, `ECOMMERCE_MEDIA_ALLOWED_MIME_TYPES`, and worker scheduling flags.
+
+For cloud media storage, prefer IAM over static credentials:
+
+- AWS ECS: set `ECOMMERCE_MEDIA_STORAGE_DRIVER=s3` and grant the task role least-privilege S3 access to the media bucket.
+- GCP Cloud Run: set `ECOMMERCE_MEDIA_STORAGE_DRIVER=gcs` and grant the runtime service account least-privilege GCS access to the media bucket.
+- CDN hosts should become `ECOMMERCE_MEDIA_PUBLIC_BASE_URL` only after cache, CORS, and access-control decisions are reviewed.
 
 ## Browser Boundary Headers
 
@@ -138,6 +146,7 @@ Carry these alert thresholds into cloud monitoring:
 - API 5xx error rate above 1% for 5 minutes.
 - WooCommerce sync lag above 5 minutes.
 - `mc-api` scrape or health failure for 1 minute.
+- Media validation failure spikes above 5 failures in 15 minutes.
 
 CloudWatch or Cloud Logging should receive structured JSON logs. Use request IDs and service labels so API, worker, sync, and frontend events can be correlated.
 
