@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed compose-config compose-wc-config redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run
+.PHONY: test build vet coverage lint docker-build docker-push compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed compose-config compose-wc-config compose-workers-config redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -7,6 +7,7 @@ COMPOSE      := docker compose -f $(COMPOSE_FILE)
 PROD_COMPOSE := docker compose -f $(COMPOSE_PROD_FILE)
 WC_PROFILES  := --profile woocommerce --profile tools
 SYNC_PROFILE := --profile sync
+WORKERS_PROFILE := --profile workers
 IMAGE        ?= ghcr.io/nfsarch33/agentic-ecommerce
 TAG          ?= dev
 
@@ -21,6 +22,7 @@ build:
 	go build -o bin/mc-api ./cmd/mc-api
 	go build -o bin/wc-sync ./cmd/wc-sync
 	go build -o bin/content-worker ./cmd/content-worker
+	go build -o bin/agent-worker ./cmd/agent-worker
 
 coverage:
 	go test -race -coverprofile=coverage.out ./...
@@ -33,11 +35,13 @@ docker-build:
 	docker build --build-arg TARGET=mc-api -t $(IMAGE):$(TAG) .
 	docker build --build-arg TARGET=wc-sync -t $(IMAGE):$(TAG)-wc-sync .
 	docker build --build-arg TARGET=content-worker -t $(IMAGE):$(TAG)-content-worker .
+	docker build --build-arg TARGET=agent-worker -t $(IMAGE):$(TAG)-agent-worker .
 
 docker-push:
 	docker push $(IMAGE):$(TAG)
 	docker push $(IMAGE):$(TAG)-wc-sync
 	docker push $(IMAGE):$(TAG)-content-worker
+	docker push $(IMAGE):$(TAG)-agent-worker
 
 compose-up:
 	$(PROD_COMPOSE) up -d --build
@@ -81,6 +85,13 @@ sync-once:
 
 sync-run: sync-once
 
+agent-worker:
+	mkdir -p bin
+	go build -o bin/agent-worker ./cmd/agent-worker
+
+agent-run-once:
+	ECOMMERCE_AGENT_WORKER_ENABLED=true ECOMMERCE_AGENT_WORKER_RUN_ONCE=true go run ./cmd/agent-worker
+
 migrate-up:
 	@echo "==> Running migrations UP against $(DB_URL)"
 	$(COMPOSE) exec -T postgres \
@@ -105,3 +116,7 @@ compose-config:
 
 compose-wc-config:
 	$(COMPOSE) $(WC_PROFILES) $(SYNC_PROFILE) config --quiet
+
+compose-workers-config:
+	$(PROD_COMPOSE) $(WORKERS_PROFILE) config --quiet
+	$(COMPOSE) $(WORKERS_PROFILE) config --quiet
