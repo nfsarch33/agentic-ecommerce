@@ -114,6 +114,65 @@ func TestSchedulerRunsHigherPriorityQueuedTasksFirstWithConcurrencyLimit(t *test
 	}
 }
 
+func TestSchedulerEnforcesMaxConcurrency(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{}, 3)
+	release := make(chan struct{})
+	var (
+		mu        sync.Mutex
+		active    int
+		maxActive int
+	)
+	agent := stubAgent{id: "worker", name: "Worker", run: func(ctx context.Context, _ Task) (RunResult, error) {
+		mu.Lock()
+		active++
+		if active > maxActive {
+			maxActive = active
+		}
+		mu.Unlock()
+		started <- struct{}{}
+		select {
+		case <-release:
+		case <-ctx.Done():
+			return RunResult{}, ctx.Err()
+		}
+		mu.Lock()
+		active--
+		mu.Unlock()
+		return RunResult{Payload: map[string]any{"ok": true}}, nil
+	}}
+
+	scheduler := newTestScheduler(t, agent, SchedulerOptions{MaxConcurrent: 2})
+	runs := make([]Run, 0, 3)
+	for range 3 {
+		run, err := scheduler.Submit(context.Background(), SubmitRequest{AgentID: "worker"})
+		if err != nil {
+			t.Fatalf("submit: %v", err)
+		}
+		runs = append(runs, run)
+	}
+	<-started
+	<-started
+	select {
+	case <-started:
+		t.Fatal("third run started before a concurrency slot was released")
+	default:
+	}
+
+	close(release)
+	for _, run := range runs {
+		if _, err := scheduler.Wait(context.Background(), run.ID); err != nil {
+			t.Fatalf("wait %s: %v", run.ID, err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if maxActive != 2 {
+		t.Fatalf("max active = %d, want 2", maxActive)
+	}
+}
+
 func TestSchedulerRecordsLifecycleTransitionsAndStructuredEvents(t *testing.T) {
 	t.Parallel()
 
@@ -160,6 +219,66 @@ func TestSchedulerRecordsLifecycleTransitionsAndStructuredEvents(t *testing.T) {
 	wantTypes := []EventType{EventRunQueued, EventRunStarted, EventRunSucceeded}
 	if !reflect.DeepEqual(gotTypes, wantTypes) {
 		t.Fatalf("event types = %v, want %v", gotTypes, wantTypes)
+	}
+}
+
+func TestSchedulerCancelsQueuedRunAndEmitsStructuredEvent(t *testing.T) {
+	t.Parallel()
+
+	blocked := make(chan struct{})
+	release := make(chan struct{})
+	events := NewEventRecorder()
+	store := NewInMemoryStore()
+	registry := NewRegistry()
+	agent := stubAgent{id: "worker", name: "Worker", run: func(ctx context.Context, task Task) (RunResult, error) {
+		if task.Payload["name"] == "blocking" {
+			close(blocked)
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return RunResult{}, ctx.Err()
+			}
+		}
+		return RunResult{Payload: map[string]any{"ok": true}}, nil
+	}}
+	if err := registry.Register(agent); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	scheduler := NewScheduler(registry, store, events, nil, SchedulerOptions{MaxConcurrent: 1})
+
+	blocking, err := scheduler.Submit(context.Background(), SubmitRequest{AgentID: "worker", Payload: map[string]any{"name": "blocking"}})
+	if err != nil {
+		t.Fatalf("submit blocking: %v", err)
+	}
+	<-blocked
+	queued, err := scheduler.Submit(context.Background(), SubmitRequest{AgentID: "worker", Payload: map[string]any{"name": "queued"}})
+	if err != nil {
+		t.Fatalf("submit queued: %v", err)
+	}
+	if err := scheduler.Cancel(context.Background(), queued.ID); err != nil {
+		t.Fatalf("cancel queued: %v", err)
+	}
+
+	cancelled, err := scheduler.Wait(context.Background(), queued.ID)
+	if err != nil {
+		t.Fatalf("wait queued: %v", err)
+	}
+	if cancelled.State != RunCancelled {
+		t.Fatalf("queued state = %s, want %s", cancelled.State, RunCancelled)
+	}
+	close(release)
+	if _, err := scheduler.Wait(context.Background(), blocking.ID); err != nil {
+		t.Fatalf("wait blocking: %v", err)
+	}
+
+	gotTypes := make([]EventType, 0)
+	for _, event := range events.Events() {
+		if event.AgentID == "worker" {
+			gotTypes = append(gotTypes, event.Type)
+		}
+	}
+	if !containsEventType(gotTypes, EventRunCancelled) {
+		t.Fatalf("events = %v, want cancelled event", gotTypes)
 	}
 }
 
@@ -219,4 +338,13 @@ func newTestScheduler(t *testing.T, a Agent, opts SchedulerOptions) *Scheduler {
 		t.Fatalf("register: %v", err)
 	}
 	return NewScheduler(registry, NewInMemoryStore(), NewEventRecorder(), realClock{}, opts)
+}
+
+func containsEventType(events []EventType, want EventType) bool {
+	for _, event := range events {
+		if event == want {
+			return true
+		}
+	}
+	return false
 }
