@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage coverage-check lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate
+.PHONY: test build vet coverage coverage-check lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -235,6 +235,21 @@ seed:
 	@echo "==> Seeding test data"
 	$(COMPOSE) exec -T postgres \
 		psql "$(DB_URL)" -f /dev/stdin < seed/products.sql
+
+tenant-isolation-seed:
+	@echo "==> Seeding v1.9.0 tenant isolation fixtures"
+	$(COMPOSE) exec -T postgres \
+		psql "$(DB_URL)" -f /dev/stdin < seed/tenant_isolation.sql
+
+tenant-isolation-smoke: tenant-isolation-seed
+	@echo "==> Running v1.9.0 tenant isolation smoke assertions"
+	$(COMPOSE) exec -T postgres \
+		psql "$(DB_URL)" -f /dev/stdin < seed/tenant_isolation_smoke.sql
+
+tenant-isolation-test:
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test -count=1 ./internal/tenant ./internal/adapter/postgres ./monitoring
+
+qa-v190-infra: tenant-isolation-test monitoring-validate compose-config compose-config-prod shell-leak sentrux-gate
 
 media-store-seed:
 	@echo "==> Seeding local media directory at $(MEDIA_DIR)"

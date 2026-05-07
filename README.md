@@ -81,6 +81,15 @@ containers directly at MiniMax.
 
 Protected backend operations use JWT bearer tokens with RBAC roles `admin`, `operator`, and `viewer`. Configure `ECOMMERCE_JWT_SECRET`, `ECOMMERCE_ADMIN_USERNAME`, and `ECOMMERCE_ADMIN_PASSWORD` locally, then call `/api/v1/auth/login` for a short-lived access token. Health, readiness, metrics, storefront product reads, cart operations, and checkout order creation remain public.
 
+Tenant-aware admin work is supported by deterministic v1.9.0 fixtures and smoke checks:
+
+```bash
+make tenant-isolation-test
+make tenant-isolation-smoke
+```
+
+See `docs/tenant-isolation.md` for the current data model, fixture tenant IDs, migration coverage, and monitoring-cardinality guardrails. Tenant provisioning UI and tenant-scoped uniqueness are not implemented in this infra slice.
+
 For the storefront checkout flow, run `agentic-ecommerce-web` separately with `bun run dev` and point it at `http://127.0.0.1:8080`. See `docs/local-development.md` for the backend compose, frontend dev, and Redis readiness plan.
 
 ## API Documentation
