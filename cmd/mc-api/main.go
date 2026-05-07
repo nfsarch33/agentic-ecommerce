@@ -103,21 +103,22 @@ type serverConfig struct {
 }
 
 type server struct {
-	cfg            serverConfig
-	repo           port.ProductRepository
-	orderRepo      port.OrderRepository
-	cartRepo       port.CartRepository
-	syncEngine     *enginesync.Engine
-	contentAgent   contentGenerator
-	agentRegistry  *orchestrator.Registry
-	agentScheduler *orchestrator.Scheduler
-	webhookSecret  string
-	tokenManager   *security.TokenManager
-	sessions       security.RefreshSessionStore
-	rateLimiter    security.RateLimiter
-	readiness      []readinessProbe
-	cleanup        []func()
-	log            *slog.Logger
+	cfg               serverConfig
+	repo              port.ProductRepository
+	orderRepo         port.OrderRepository
+	cartRepo          port.CartRepository
+	syncEngine        *enginesync.Engine
+	contentAgent      contentGenerator
+	agentRegistry     *orchestrator.Registry
+	agentScheduler    *orchestrator.Scheduler
+	webhookSecret     string
+	tokenManager      *security.TokenManager
+	sessions          security.RefreshSessionStore
+	rateLimiter       security.RateLimiter
+	rateLimitFallback security.RateLimiter
+	readiness         []readinessProbe
+	cleanup           []func()
+	log               *slog.Logger
 }
 
 type contentGenerator interface {
