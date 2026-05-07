@@ -34,6 +34,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	"github.com/nfsarch33/agentic-ecommerce/internal/security"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
+	"github.com/nfsarch33/agentic-ecommerce/internal/webhook/outbound"
 )
 
 var (
@@ -124,6 +125,7 @@ type server struct {
 	agentRegistry     *orchestrator.Registry
 	agentScheduler    *orchestrator.Scheduler
 	schedulerMu       sync.Mutex
+	webhookService    *outbound.Service
 	webhookSecret     string
 	tokenManager      *security.TokenManager
 	sessions          security.RefreshSessionStore
@@ -347,6 +349,11 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		logger.Warn("media object store disabled", "error", err)
 	}
 	registry := defaultAgentRegistry()
+	bus := eventbus.NewInMemoryBus()
+	webhookService := outbound.NewService(outbound.ServiceConfig{Logger: logger})
+	if err := webhookService.Subscribe(context.Background(), bus, "webhook-bridge"); err != nil {
+		logger.Warn("webhook bridge disabled", "error", err)
+	}
 	srv := &server{
 		cfg: serverConfig{
 			allowedOrigin:     getenv("ECOMMERCE_ALLOWED_ORIGIN", ""),
@@ -369,7 +376,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		repo:           repo,
 		orderRepo:      orderRepo,
 		cartRepo:       cartRepo,
-		eventBus:       eventbus.NewInMemoryBus(),
+		eventBus:       bus,
 		syncEngine:     enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
 		contentAgent:   generator,
 		rag:            ragService,
@@ -378,6 +385,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		workflowClient: workflowClient,
 		agentRegistry:  registry,
 		agentScheduler: orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), orchestrator.NewEventRecorder(), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
+		webhookService: webhookService,
 		webhookSecret:  webhookSecret,
 		readiness:      readinessChecks,
 		cleanup:        cleanup,
@@ -448,6 +456,9 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/sync/products/", syncAPI)
 	mux.HandleFunc("/api/v1/webhooks/woocommerce/orders", s.withAudit(webhookAuditAction("webhook.woocommerce.orders"), s.woocommerceOrderWebhookHandler))
 	mux.HandleFunc("/api/v1/webhooks/woocommerce/products", s.withAudit(webhookAuditAction("webhook.woocommerce.products"), s.woocommerceProductWebhookHandler))
+	webhooksAPI := s.withCORS(s.withRateLimit(s.withRBAC(webhooksRole, s.withAudit(webhooksAuditAction, s.webhooksHandler))))
+	mux.HandleFunc("/api/v1/webhooks", webhooksAPI)
+	mux.HandleFunc("/api/v1/webhooks/", webhooksAPI)
 	complianceAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.complianceRulesHandler)))
 	mux.HandleFunc("/api/v1/compliance/rules", complianceAPI)
 	agentsAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.withAudit(agentAuditAction, s.agentsHandler))))

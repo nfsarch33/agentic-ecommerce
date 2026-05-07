@@ -264,6 +264,13 @@ func agentsRole(r *http.Request) security.Role {
 	return security.RoleViewer
 }
 
+func webhooksRole(r *http.Request) security.Role {
+	if r.Method == http.MethodGet {
+		return security.RoleViewer
+	}
+	return security.RoleOperator
+}
+
 func viewerRole(*http.Request) security.Role {
 	return security.RoleViewer
 }
@@ -340,6 +347,20 @@ func workflowAuditAction(r *http.Request) auditAction {
 		return auditAction{Action: "workflow.media_processing.start", Resource: "media-processing", Mutates: true}
 	case strings.HasSuffix(path, "/signals/review") && r.Method == http.MethodPost:
 		return auditAction{Action: "workflow.product_publish.review_signal", Resource: strings.TrimSuffix(path, "/signals/review"), Mutates: true}
+	default:
+		return auditAction{}
+	}
+}
+
+func webhooksAuditAction(r *http.Request) auditAction {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/webhooks"), "/")
+	switch {
+	case path == "" && r.Method == http.MethodPost:
+		return auditAction{Action: "webhook.create", Resource: "webhook", Mutates: true}
+	case path != "" && strings.HasSuffix(path, "/test") && r.Method == http.MethodPost:
+		return auditAction{Action: "webhook.test", Resource: strings.TrimSuffix(path, "/test"), Mutates: true}
+	case path != "" && r.Method == http.MethodDelete:
+		return auditAction{Action: "webhook.delete", Resource: path, Mutates: true}
 	default:
 		return auditAction{}
 	}
