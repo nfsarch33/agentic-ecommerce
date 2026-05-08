@@ -49,6 +49,10 @@ var migrationFiles = []string{
 	"0005_enable_pgvector_rag.up.sql",
 	"0006_tenant_settings_compliance_reporting.up.sql",
 	"0007_membership.up.sql",
+	"0008_digital.up.sql",
+	"0009_marketplace.up.sql",
+	"0010_billing.up.sql",
+	"0011_rls.up.sql",
 }
 
 func startContainerPool(t *testing.T) *pgxpool.Pool {

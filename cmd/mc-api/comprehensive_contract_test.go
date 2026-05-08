@@ -135,6 +135,19 @@ func TestOpenAPIOperationsHaveComprehensiveContractCoverage(t *testing.T) {
 		"suspendTenant":                         true,
 		"activateTenant":                        true,
 		"archiveTenant":                         true,
+		// v2.5.0 Tenant self-service registration + billing.
+		"submitRegistration":             true,
+		"verifyRegistration":             true,
+		"completeRegistrationOnboarding": true,
+		"listBillingSubscriptions":       true,
+		"getBillingSubscription":         true,
+		"cancelBillingSubscription":      true,
+		"pauseBillingSubscription":       true,
+		"resumeBillingSubscription":      true,
+		"listBillingInvoices":            true,
+		"getBillingInvoice":              true,
+		"getBillingUsage":                true,
+		"stripeWebhook":                  true,
 	}
 
 	var seen []string
