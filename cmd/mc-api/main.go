@@ -20,7 +20,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/minimax"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/notification"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/objectstore"
+	stripeadapter "github.com/nfsarch33/agentic-ecommerce/internal/adapter/stripe"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
 	complianceagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/compliance"
@@ -112,35 +114,38 @@ type serverConfig struct {
 }
 
 type server struct {
-	cfg               serverConfig
-	repo              port.ProductRepository
-	orderRepo         port.OrderRepository
-	cartRepo          port.CartRepository
-	eventBus          eventHistory
-	syncEngine        *enginesync.Engine
-	contentAgent      contentGenerator
-	rag               *rag.Service
-	factChecker       *contentagent.FactChecker
-	factChecksMu      sync.RWMutex
-	factChecks        map[string]contentagent.FactCheckResult
-	mediaService      *intelligence.Service
-	workflowClient    temporalWorkflowClient
-	agentRegistry     *orchestrator.Registry
-	agentScheduler    *orchestrator.Scheduler
-	agentSchedules    *orchestrator.ScheduleManager
-	schedulerMu       sync.Mutex
-	webhookService    *outbound.Service
-	webhookSecret     string
-	tenantService     *tenant.Service
-	customRuleStore   compliancedomain.CustomRuleStore
-	complianceHistory compliancedomain.HistoryStore
-	tokenManager      *security.TokenManager
-	sessions          security.RefreshSessionStore
-	rateLimiter       security.RateLimiter
-	rateLimitFallback security.RateLimiter
-	readiness         []readinessProbe
-	cleanup           []func()
-	log               *slog.Logger
+	cfg                serverConfig
+	repo               port.ProductRepository
+	orderRepo          port.OrderRepository
+	cartRepo           port.CartRepository
+	membershipRepo     port.MembershipRepository
+	membershipGateway  port.MembershipPaymentGateway
+	membershipNotifier port.MembershipNotificationSender
+	eventBus           eventHistory
+	syncEngine         *enginesync.Engine
+	contentAgent       contentGenerator
+	rag                *rag.Service
+	factChecker        *contentagent.FactChecker
+	factChecksMu       sync.RWMutex
+	factChecks         map[string]contentagent.FactCheckResult
+	mediaService       *intelligence.Service
+	workflowClient     temporalWorkflowClient
+	agentRegistry      *orchestrator.Registry
+	agentScheduler     *orchestrator.Scheduler
+	agentSchedules     *orchestrator.ScheduleManager
+	schedulerMu        sync.Mutex
+	webhookService     *outbound.Service
+	webhookSecret      string
+	tenantService      *tenant.Service
+	customRuleStore    compliancedomain.CustomRuleStore
+	complianceHistory  compliancedomain.HistoryStore
+	tokenManager       *security.TokenManager
+	sessions           security.RefreshSessionStore
+	rateLimiter        security.RateLimiter
+	rateLimitFallback  security.RateLimiter
+	readiness          []readinessProbe
+	cleanup            []func()
+	log                *slog.Logger
 }
 
 type contentGenerator interface {
@@ -363,6 +368,11 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	if err := webhookService.Subscribe(context.Background(), bus, "webhook-bridge"); err != nil {
 		logger.Warn("webhook bridge disabled", "error", err)
 	}
+	membershipRepo := inmemory.NewMembershipRepository()
+	membershipGateway := stripeadapter.NewPaymentGateway(stripeadapter.Config{})
+	membershipRecorder := notification.NewMembershipNotificationRecorder()
+	membershipBusSender := notification.NewBusSender(bus, "workflow.membership.notifier")
+	membershipNotifier := notification.NewMultiSender(membershipRecorder, membershipBusSender)
 	srv := &server{
 		cfg: serverConfig{
 			allowedOrigin:     getenv("ECOMMERCE_ALLOWED_ORIGIN", ""),
@@ -383,27 +393,30 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 			shutdownTimeout:   shutdownTimeout,
 			otelEnabled:       otelEnabled,
 		},
-		repo:              repo,
-		orderRepo:         orderRepo,
-		cartRepo:          cartRepo,
-		eventBus:          bus,
-		syncEngine:        enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
-		contentAgent:      generator,
-		rag:               ragService,
-		factChecks:        map[string]contentagent.FactCheckResult{},
-		mediaService:      intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
-		workflowClient:    workflowClient,
-		agentRegistry:     registry,
-		agentScheduler:    orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), eventbus.NewEventBusAdapter(bus, "mc-api.agent"), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
-		agentSchedules:    defaultAgentScheduleManager(),
-		webhookService:    webhookService,
-		webhookSecret:     webhookSecret,
-		tenantService:     tenant.NewService(tenant.NewInMemoryRepository()),
-		customRuleStore:   compliancedomain.NewInMemoryCustomRuleStore(),
-		complianceHistory: compliancedomain.NewInMemoryHistoryStore(),
-		readiness:         readinessChecks,
-		cleanup:           cleanup,
-		log:               logger,
+		repo:               repo,
+		orderRepo:          orderRepo,
+		cartRepo:           cartRepo,
+		membershipRepo:     membershipRepo,
+		membershipGateway:  membershipGateway,
+		membershipNotifier: membershipNotifier,
+		eventBus:           bus,
+		syncEngine:         enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
+		contentAgent:       generator,
+		rag:                ragService,
+		factChecks:         map[string]contentagent.FactCheckResult{},
+		mediaService:       intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
+		workflowClient:     workflowClient,
+		agentRegistry:      registry,
+		agentScheduler:     orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), eventbus.NewEventBusAdapter(bus, "mc-api.agent"), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
+		agentSchedules:     defaultAgentScheduleManager(),
+		webhookService:     webhookService,
+		webhookSecret:      webhookSecret,
+		tenantService:      tenant.NewService(tenant.NewInMemoryRepository()),
+		customRuleStore:    compliancedomain.NewInMemoryCustomRuleStore(),
+		complianceHistory:  compliancedomain.NewInMemoryHistoryStore(),
+		readiness:          readinessChecks,
+		cleanup:            cleanup,
+		log:                logger,
 	}
 	srv.configureSecurity()
 	return srv
@@ -519,6 +532,13 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/media/source", mediaAPI)
 	mux.HandleFunc("/api/v1/media/process", mediaAPI)
 	mux.HandleFunc("/api/v1/media/", mediaAPI)
+
+	membershipPlansAPI := s.withCORS(s.withRateLimit(s.withRBAC(membershipPlansRole, s.withTenantRequired(s.withAudit(membershipPlansAuditAction, s.membershipPlansHandler)))))
+	mux.HandleFunc("/api/v1/membership-plans", membershipPlansAPI)
+	mux.HandleFunc("/api/v1/membership-plans/", membershipPlansAPI)
+	membershipsAPI := s.withCORS(s.withRateLimit(s.withRBAC(membershipsRole, s.withTenantRequired(s.withAudit(membershipsAuditAction, s.membershipsHandler)))))
+	mux.HandleFunc("/api/v1/memberships", membershipsAPI)
+	mux.HandleFunc("/api/v1/memberships/", membershipsAPI)
 
 	return s.withSecurityHeaders(s.withTelemetry(s.withRequestLogging(mux)))
 }

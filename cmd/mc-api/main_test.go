@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/notification"
+	stripeadapter "github.com/nfsarch33/agentic-ecommerce/internal/adapter/stripe"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 	"github.com/nfsarch33/agentic-ecommerce/internal/security"
@@ -23,11 +25,15 @@ func testServer(t *testing.T) (*server, *inmemory.ProductRepository) {
 	repo := inmemory.NewProductRepository()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	srv := &server{
-		cfg:       serverConfig{allowedOrigin: "", apiToken: ""},
-		repo:      repo,
-		orderRepo: inmemory.NewOrderRepository(),
-		cartRepo:  inmemory.NewCartRepository(),
-		log:       logger,
+		cfg:                serverConfig{allowedOrigin: "", apiToken: ""},
+		repo:               repo,
+		orderRepo:          inmemory.NewOrderRepository(),
+		cartRepo:           inmemory.NewCartRepository(),
+		membershipRepo:     inmemory.NewMembershipRepository(),
+		membershipGateway:  stripeadapter.NewPaymentGateway(stripeadapter.Config{}),
+		membershipNotifier: notification.NewMembershipNotificationRecorder(),
+		eventBus:           eventbus.NewInMemoryBus(),
+		log:                logger,
 	}
 	return srv, repo
 }
@@ -36,7 +42,16 @@ func testServerWithCfg(t *testing.T, cfg serverConfig) (*server, *inmemory.Produ
 	t.Helper()
 	repo := inmemory.NewProductRepository()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	return &server{cfg: cfg, repo: repo, orderRepo: inmemory.NewOrderRepository(), cartRepo: inmemory.NewCartRepository(), log: logger}, repo
+	return &server{
+		cfg:                cfg,
+		repo:               repo,
+		orderRepo:          inmemory.NewOrderRepository(),
+		cartRepo:           inmemory.NewCartRepository(),
+		membershipRepo:     inmemory.NewMembershipRepository(),
+		membershipGateway:  stripeadapter.NewPaymentGateway(stripeadapter.Config{}),
+		membershipNotifier: notification.NewMembershipNotificationRecorder(),
+		log:                logger,
+	}, repo
 }
 
 func addProduct(t *testing.T, repo *inmemory.ProductRepository, sku, title string, amount int) catalog.Product {

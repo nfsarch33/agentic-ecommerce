@@ -20,9 +20,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/notification"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/objectstore"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
+	stripeadapter "github.com/nfsarch33/agentic-ecommerce/internal/adapter/stripe"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	"github.com/nfsarch33/agentic-ecommerce/internal/domain/membership"
 	orderdomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/order"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 )
@@ -47,6 +50,11 @@ var (
 
 	_ port.MediaStore = (*objectstore.LocalStore)(nil)
 	_ port.MediaStore = (*objectstore.CloudStub)(nil)
+
+	_ port.MembershipRepository         = (*inmemory.MembershipRepository)(nil)
+	_ port.MembershipRepository         = (*postgres.MembershipRepository)(nil)
+	_ port.MembershipPaymentGateway     = (*stripeadapter.PaymentGateway)(nil)
+	_ port.MembershipNotificationSender = (*notification.MembershipNotificationRecorder)(nil)
 )
 
 func TestPortListResultZeroValueIsEmpty(t *testing.T) {
@@ -175,6 +183,101 @@ func TestPortFakeRepositoryStaysAssignableToProductRepository(t *testing.T) {
 	var _ port.ShippingProvider = (*portContractFakeShippingProvider)(nil)
 	var _ port.AITextGenerator = (*portContractFakeAITextGenerator)(nil)
 	var _ port.ProductChannel = (*portContractFakeProductChannel)(nil)
+	var _ port.MembershipRepository = (*portContractFakeMembershipRepo)(nil)
+	var _ port.MembershipPaymentGateway = (*portContractFakeMembershipPaymentGateway)(nil)
+	var _ port.MembershipNotificationSender = (*portContractFakeMembershipNotifier)(nil)
+}
+
+// TestPortMembershipNotificationEventCarriesTenant ensures the value type
+// stays useful for downstream adapters even at zero value.
+func TestPortMembershipNotificationEventCarriesTenant(t *testing.T) {
+	t.Parallel()
+	evt := port.MembershipNotificationEvent{
+		TenantID:   "tenant-a",
+		State:      membership.StateActive,
+		Transition: membership.TransitionActivate,
+		OccurredAt: time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC),
+	}
+	if evt.TenantID != "tenant-a" {
+		t.Fatalf("tenant = %q, want tenant-a", evt.TenantID)
+	}
+	if evt.State != membership.StateActive {
+		t.Fatalf("state = %q, want active", evt.State)
+	}
+}
+
+type portContractFakeMembershipRepo struct{}
+
+func (portContractFakeMembershipRepo) CreatePlan(context.Context, string, membership.MembershipPlan) error {
+	return nil
+}
+
+func (portContractFakeMembershipRepo) UpdatePlan(context.Context, string, membership.MembershipPlan) error {
+	return nil
+}
+
+func (portContractFakeMembershipRepo) GetPlan(context.Context, string, uuid.UUID) (membership.MembershipPlan, error) {
+	return membership.MembershipPlan{}, nil
+}
+
+func (portContractFakeMembershipRepo) ListPlans(context.Context, string, int, int) (port.MembershipPlanList, error) {
+	return port.MembershipPlanList{}, nil
+}
+
+func (portContractFakeMembershipRepo) DeletePlan(context.Context, string, uuid.UUID) error {
+	return nil
+}
+
+func (portContractFakeMembershipRepo) CreateMember(context.Context, string, membership.Member) error {
+	return nil
+}
+
+func (portContractFakeMembershipRepo) GetMember(context.Context, string, uuid.UUID) (membership.Member, error) {
+	return membership.Member{}, nil
+}
+
+func (portContractFakeMembershipRepo) ListMembers(context.Context, string, int, int) (port.MembershipMemberList, error) {
+	return port.MembershipMemberList{}, nil
+}
+
+func (portContractFakeMembershipRepo) CreateSubscription(context.Context, string, membership.Subscription) error {
+	return nil
+}
+
+func (portContractFakeMembershipRepo) SaveSubscription(context.Context, string, membership.Subscription) error {
+	return nil
+}
+
+func (portContractFakeMembershipRepo) GetSubscription(context.Context, string, uuid.UUID) (membership.Subscription, error) {
+	return membership.Subscription{}, nil
+}
+
+func (portContractFakeMembershipRepo) GetSubscriptionByMember(context.Context, string, uuid.UUID) (membership.Subscription, error) {
+	return membership.Subscription{}, nil
+}
+
+func (portContractFakeMembershipRepo) ListSubscriptions(context.Context, string, int, int) (port.MembershipSubscriptionList, error) {
+	return port.MembershipSubscriptionList{}, nil
+}
+
+type portContractFakeMembershipPaymentGateway struct{}
+
+func (portContractFakeMembershipPaymentGateway) CreateSubscription(context.Context, port.CreateSubscriptionRequest) (port.CreateSubscriptionResponse, error) {
+	return port.CreateSubscriptionResponse{}, nil
+}
+
+func (portContractFakeMembershipPaymentGateway) CancelSubscription(context.Context, port.CancelSubscriptionRequest) error {
+	return nil
+}
+
+func (portContractFakeMembershipPaymentGateway) GetSubscription(context.Context, port.GetSubscriptionRequest) (port.PaymentSubscriptionStatus, error) {
+	return port.PaymentSubscriptionStatus{}, nil
+}
+
+type portContractFakeMembershipNotifier struct{}
+
+func (portContractFakeMembershipNotifier) SendMembershipEvent(context.Context, port.MembershipNotificationEvent) error {
+	return nil
 }
 
 type portContractFakeProductRepo struct{}
