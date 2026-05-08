@@ -35,6 +35,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	digitaldomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/digital"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
@@ -144,6 +145,8 @@ type server struct {
 	webhookService     *outbound.Service
 	webhookSecret      string
 	tenantService      *tenant.Service
+	tenantAggregateSvc *tenant.AggregateService
+	marketplace        *marketplace.Service
 	customRuleStore    compliancedomain.CustomRuleStore
 	complianceHistory  compliancedomain.HistoryStore
 	tokenManager       *security.TokenManager
@@ -389,6 +392,12 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		logger.Warn("digital service disabled", "error", digitalSvcErr)
 	}
 
+	marketplaceSvc, marketplaceErr := buildMarketplaceService()
+	if marketplaceErr != nil {
+		logger.Warn("marketplace disabled", "error", marketplaceErr)
+	}
+	tenantAggregateSvc := tenant.NewAggregateService(tenant.NewInMemoryAggregateRepository())
+
 	srv := &server{
 		cfg: serverConfig{
 			allowedOrigin:     getenv("ECOMMERCE_ALLOWED_ORIGIN", ""),
@@ -432,6 +441,8 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		webhookService:     webhookService,
 		webhookSecret:      webhookSecret,
 		tenantService:      tenant.NewService(tenant.NewInMemoryRepository()),
+		tenantAggregateSvc: tenantAggregateSvc,
+		marketplace:        marketplaceSvc,
 		customRuleStore:    compliancedomain.NewInMemoryCustomRuleStore(),
 		complianceHistory:  compliancedomain.NewInMemoryHistoryStore(),
 		readiness:          readinessChecks,
@@ -571,7 +582,75 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/me/licenses", meDigitalAPI)
 	mux.HandleFunc("/api/v1/me/licenses/", meDigitalAPI)
 
+	// v2.4.0 Marketplace plugin framework + tenant aggregate routes.
+	marketplaceAPI := s.withCORS(s.withRateLimit(s.withRBAC(marketplaceRole, s.withAudit(marketplaceAuditAction, s.marketplaceHandler))))
+	mux.HandleFunc("/api/v1/marketplace/", marketplaceAPI)
+	tenantAdminAPI := s.withCORS(s.withRateLimit(s.withRBAC(tenantAdminRole, s.withAudit(tenantAdminAuditAction, s.tenantAdminHandler))))
+	mux.HandleFunc("/api/v1/tenants", tenantAdminAPI)
+	mux.HandleFunc("/api/v1/tenants/", tenantAdminAPI)
+
 	return s.withSecurityHeaders(s.withTelemetry(s.withRequestLogging(mux)))
+}
+
+// buildMarketplaceService wires the v2.4.0 marketplace registry with
+// the in-memory catalogue + installations + subscriptions. Production
+// wiring (postgres-backed) lives in the deploy package; the mc-api
+// process boots with the in-memory variant so unit tests do not need
+// docker.
+func buildMarketplaceService() (*marketplace.Service, error) {
+	cat := inmemory.NewMarketplaceCatalog()
+	ins := inmemory.NewMarketplaceInstallations()
+	subs := inmemory.NewMarketplaceSubscriptions()
+	svc, err := marketplace.NewService(marketplace.ServiceConfig{
+		Catalog:       cat,
+		Installations: ins,
+		Subscriptions: subs,
+	})
+	if err != nil {
+		return nil, err
+	}
+	seedMarketplaceManifests(svc)
+	return svc, nil
+}
+
+// seedMarketplaceManifests registers the v2.4.0 demo manifests so the
+// /api/v1/marketplace/plugins listing has data the frontend can
+// render in dev. Production deployments load from postgres.
+func seedMarketplaceManifests(svc *marketplace.Service) {
+	manifests := []marketplace.Manifest{
+		{
+			Slug:        "stripe-payments",
+			Name:        "Stripe Payments",
+			Version:     "1.2.0",
+			Vendor:      "Agentic Labs",
+			Description: "Stripe checkout + webhook bridge.",
+			Category:    "payments",
+			Permissions: []marketplace.Permission{marketplace.PermissionReadOrders, marketplace.PermissionWriteOrders},
+		},
+		{
+			Slug:        "ses-email",
+			Name:        "SES Email",
+			Version:     "1.0.0",
+			Vendor:      "Agentic Labs",
+			Description: "Transactional email via Amazon SES.",
+			Category:    "notifications",
+			Permissions: []marketplace.Permission{marketplace.PermissionEmitEvents},
+		},
+		{
+			Slug:        "klaviyo-marketing",
+			Name:        "Klaviyo Marketing",
+			Version:     "0.4.1",
+			Vendor:      "Klaviyo",
+			Description: "Sync segments + campaigns to Klaviyo.",
+			Category:    "marketing",
+			Dependencies: []marketplace.DependencyRef{
+				{Slug: "ses-email", Constraint: "^1.0.0"},
+			},
+		},
+	}
+	for _, m := range manifests {
+		_ = svc.Catalog().RegisterManifest(nil, m)
+	}
 }
 
 // buildDigitalService wires the digital service for v2.3.0. The HMAC

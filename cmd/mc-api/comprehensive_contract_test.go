@@ -119,6 +119,22 @@ func TestOpenAPIOperationsHaveComprehensiveContractCoverage(t *testing.T) {
 		"listMyLicenses":              true,
 		"revokeLicense":               true,
 		"updateDigitalProduct":        true,
+		// v2.4.0 Marketplace plugin framework + tenant aggregate.
+		"listMarketplacePlugins":                true,
+		"getMarketplacePlugin":                  true,
+		"installMarketplacePlugin":              true,
+		"activateMarketplacePlugin":             true,
+		"deactivateMarketplacePlugin":           true,
+		"uninstallMarketplacePlugin":            true,
+		"getMarketplaceInstallationSettings":    true,
+		"updateMarketplaceInstallationSettings": true,
+		"listTenants":                           true,
+		"createTenant":                          true,
+		"getTenant":                             true,
+		"updateTenant":                          true,
+		"suspendTenant":                         true,
+		"activateTenant":                        true,
+		"archiveTenant":                         true,
 	}
 
 	var seen []string

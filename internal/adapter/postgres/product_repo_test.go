@@ -242,6 +242,21 @@ func assignScanValue(dest, value any) {
 		default:
 			panic("unsupported *time.Time scan value")
 		}
+	case *[]byte:
+		if value == nil {
+			*d = nil
+			return
+		}
+		switch v := value.(type) {
+		case []byte:
+			out := make([]byte, len(v))
+			copy(out, v)
+			*d = out
+		case string:
+			*d = []byte(v)
+		default:
+			panic("unsupported []byte scan value")
+		}
 	default:
 		panic("unsupported scan destination")
 	}
