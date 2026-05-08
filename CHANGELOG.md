@@ -2,6 +2,97 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## Unreleased (v2.6.0 MVP)
+
+### Added — Coverage push + security fuzz harness + benchmark guardrails
+
+- **Fuzz harnesses for security-critical parsers** (per `go-security-review`):
+  the contract is "must NEVER panic on attacker-controlled bytes; must
+  return error not crash". Each harness ships with a structurally valid
+  seed plus a curated negative corpus (empty input, missing segments,
+  embedded control bytes, oversized strings, percent-encoded garbage).
+  All four harnesses pass `go test -fuzz=. -fuzztime=10s` cleanly with
+  no panics observed. New files:
+  - `internal/security/fuzz_test.go` — `FuzzVerifyAccessToken` over the
+    HS256 JWT verifier (segment splitter + base64 decoder + JSON
+    unmarshal + claims validator).
+  - `internal/billing/fuzz_test.go` — `FuzzWebhookVerify` over the
+    Stripe `t=, v1=` signature header parser + payload bytes.
+  - `internal/adapter/signedurl/fuzz_test.go` — `FuzzVerifySignedURL`
+    over the `tid/lid/pid/exp/uses/sig` URL parser.
+  - `internal/domain/digital/fuzz_test.go` — `FuzzValidateLicenseKey`
+    over the HMAC-SHA256 base32 license-key checksum validator.
+
+- **Benchmarks for hot paths** (per `go-performance-optimization`).
+  `b.ReportAllocs()` is enabled on every benchmark so reviewers can
+  spot allocation regressions:
+  - `internal/security/bench_test.go` — `BenchmarkVerifyAccessToken`,
+    `BenchmarkMintAccessToken`. Every authenticated mc-api request
+    transits these.
+  - `internal/billing/bench_test.go` — `BenchmarkWebhookVerify`. The
+    public Stripe webhook entry point.
+  - `internal/adapter/signedurl/bench_test.go` —
+    `BenchmarkIssueSignedURL`, `BenchmarkVerifySignedURL`. Every
+    digital download issue + verify path.
+  - `internal/domain/digital/bench_test.go` —
+    `BenchmarkLicenseKeyGenerate`, `BenchmarkLicenseKeyValidate`.
+
+- **Shared testcontainers postgres helper**: extracted the
+  per-test postgres bootstrap that previously lived inline in
+  `internal/adapter/postgres/integration_testcontainers_test.go` into a
+  reusable helper at `internal/testsupport/postgres/`:
+  - `paths.go` (always-built) — `ResolveMigrationDir` runtime.Caller
+    based path lookup.
+  - `migration_files.go` (always-built) — `CanonicalMigrationFiles`
+    ledger with the ordered DDL list mirroring the migrate-up Make
+    target.
+  - `container.go` (`//go:build integration_pg`) — `StartPool(t,
+    Options)` returns a per-test `*pgxpool.Pool` with auto-skip when
+    `DISABLE_DOCKER_TESTCONTAINERS=1` or Docker is unreachable, and
+    auto-teardown via `t.Cleanup`.
+  - `container_test.go` (always-built) — checks the migration ledger
+    is ordered + unique and that ResolveMigrationDir lands on a
+    directory that contains every canonical migration file. The
+    Docker-dependent tests live behind the same build tag as the
+    helper so default `go test ./...` stays hermetic.
+
+- **`cmd/content-worker/main_test.go`**: added `TestMainEmitsReadySignal`
+  using an `os.Pipe` swap so the entrypoint is exercised without
+  cluttering test output. cmd/content-worker coverage went from 33.3%
+  to 100%.
+
+- **`cmd/wc-sync/main_test.go`**: added `TestMainSucceedsInDryRun`
+  using the same os.Pipe trick so the env-var glue + run wiring is
+  covered. cmd/wc-sync coverage went from 70.4% to 81.5%.
+
+### Coverage delta
+
+- Total `go tool cover -func | tail -1`: 83.0% → 83.1%
+  (the systematic audit table is in the PR body).
+- Per-package wins: cmd/content-worker (33.3% → 100%), cmd/wc-sync
+  (70.4% → 81.5%), internal/security (84.8% → 85.6%),
+  internal/adapter/signedurl (83.1% → 84.4%), internal/domain/digital
+  (81.5% → 82.3%).
+- The systematic audit revealed the largest remaining gaps live in
+  `cmd/temporal-worker` (58.1%, mostly main() temporal SDK init),
+  `cmd/uiauto-compare` (64.4%), and `cmd/agent-worker` (74.3%, main()
+  is 0%). Lifting those to ≥90% requires either dependency injection
+  refactors of main() or extensive Temporal SDK mocking; both were
+  scoped out of v2.6.0 to keep the sentrux complex_fn budget intact.
+  The coverage gate stays at 83% to match the achieved floor; v2.7.0
+  or v2.8.0 can revisit the gate raise once the cmd/* main() tests
+  land.
+
+### Notes on scope
+
+- Live integration tests against real Redis Streams + Temporal dev
+  server containers (Steps 3 of the v2.6.0 plan) were prepared via
+  the new `internal/testsupport/postgres/` helper pattern but not
+  driven through the full Redis/Temporal containers in this PR; the
+  helper makes that follow-on work a small extension. Frontend
+  coverage + uiauto comparison live in the sibling
+  `agentic-ecommerce-web` v2.6.0 PR.
+
 ## Unreleased (v2.5.0 MVP)
 
 ### Added — Tenant self-service registration + billing hooks

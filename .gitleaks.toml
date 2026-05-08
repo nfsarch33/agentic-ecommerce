@@ -1,0 +1,12 @@
+# Allowlist for fuzz/bench test fixtures that satisfy HMAC >=32-byte requirement.
+# These are deterministic high-entropy seed strings, NOT real secrets.
+[allowlist]
+description = "Test fuzz/bench fixtures with high-entropy fixed seeds"
+paths = [
+    '''internal/adapter/signedurl/fuzz_test\.go''',
+    '''internal/billing/fuzz_test\.go''',
+    '''internal/domain/digital/bench_test\.go''',
+    '''internal/domain/digital/fuzz_test\.go''',
+    '''internal/security/bench_test\.go''',
+    '''internal/security/fuzz_test\.go''',
+]
