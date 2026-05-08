@@ -192,6 +192,7 @@ func assertReleaseN8NWebhookDelivery(t *testing.T, productID string) {
 			HTTPClient:  receiver.Client(),
 			MaxAttempts: 1,
 			Backoff:     func(int) time.Duration { return 0 },
+			SSRFGuard:   outbound.NewPermissiveSSRFGuard(),
 		}),
 	})
 

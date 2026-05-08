@@ -249,7 +249,7 @@ func testWebhookServer(t *testing.T) *server {
 		orderRepo:      inmemory.NewOrderRepository(),
 		cartRepo:       inmemory.NewCartRepository(),
 		eventBus:       eventbus.NewInMemoryBus(),
-		webhookService: outbound.NewService(outbound.ServiceConfig{Store: store, Client: outbound.NewClient(outbound.ClientConfig{MaxAttempts: 1})}),
+		webhookService: outbound.NewService(outbound.ServiceConfig{Store: store, Client: outbound.NewClient(outbound.ClientConfig{MaxAttempts: 1, SSRFGuard: outbound.NewPermissiveSSRFGuard()})}),
 		log:            slog.New(slog.NewJSONHandler(os.Stdout, nil)),
 	}
 }

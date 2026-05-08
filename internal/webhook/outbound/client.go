@@ -21,6 +21,11 @@ type ClientConfig struct {
 	Timeout     time.Duration
 	Backoff     func(attempt int) time.Duration
 	Now         func() time.Time
+	// SSRFGuard, when non-nil, gates every outbound request through
+	// the v2.9.0 OWASP A10 mitigation. Defaults to a strict guard
+	// (https-only, blocks RFC 1918 + loopback + cloud metadata) so
+	// production callers get the safe behaviour without configuring it.
+	SSRFGuard *SSRFGuard
 }
 
 type Client struct {
@@ -29,6 +34,7 @@ type Client struct {
 	timeout     time.Duration
 	backoff     func(attempt int) time.Duration
 	now         func() time.Time
+	guard       *SSRFGuard
 }
 
 type DeliveryRequest struct {
@@ -60,12 +66,17 @@ func NewClient(cfg ClientConfig) *Client {
 	if now == nil {
 		now = time.Now
 	}
+	guard := cfg.SSRFGuard
+	if guard == nil {
+		guard = NewSSRFGuard(nil)
+	}
 	return &Client{
 		httpClient:  httpClient,
 		maxAttempts: maxAttempts,
 		timeout:     timeout,
 		backoff:     backoff,
 		now:         now,
+		guard:       guard,
 	}
 }
 
@@ -120,6 +131,12 @@ func (c *Client) Deliver(ctx context.Context, req DeliveryRequest) DeliveryResul
 func (c *Client) deliverOnce(ctx context.Context, req DeliveryRequest, body []byte) (int, error) {
 	requestCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
+
+	if c.guard != nil {
+		if err := c.guard.CheckURL(requestCtx, req.Registration.URL); err != nil {
+			return 0, err
+		}
+	}
 
 	httpReq, err := http.NewRequestWithContext(requestCtx, http.MethodPost, req.Registration.URL, bytes.NewReader(body))
 	if err != nil {

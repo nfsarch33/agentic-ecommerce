@@ -37,10 +37,10 @@ func (f *fakeRegistry) RegisterActivityWithOptions(a any, opts activity.Register
 	f.activities = append(f.activities, registeredActivity{name: opts.Name, fn: a})
 }
 
-// TestRegisterWorkflowsAndActivities pins the wiring contract: 4
-// workflows + 17 activities covering compliance, content, media, and
-// sourcing surfaces. Regression alarm if a future refactor drops any
-// activity from the registry.
+// TestRegisterWorkflowsAndActivities pins the wiring contract: 5
+// workflows + 24 activities covering compliance, content, media,
+// sourcing, and tenant-onboarding surfaces. Regression alarm if a
+// future refactor drops any activity from the registry.
 func TestRegisterWorkflowsAndActivities(t *testing.T) {
 	t.Setenv("ECOMMERCE_DB_URL", "")
 	t.Setenv("ECOMMERCE_AI_BRIDGE_URL", "")
@@ -55,10 +55,10 @@ func TestRegisterWorkflowsAndActivities(t *testing.T) {
 	reg := &fakeRegistry{}
 	registerWorkflowsAndActivities(reg, deps)
 
-	if got, want := len(reg.workflows), 4; got != want {
+	if got, want := len(reg.workflows), 5; got != want {
 		t.Fatalf("workflows registered = %d, want %d", got, want)
 	}
-	if got, want := len(reg.activities), 18; got != want {
+	if got, want := len(reg.activities), 24; got != want {
 		t.Fatalf("activities registered = %d, want %d", got, want)
 	}
 
@@ -70,6 +70,12 @@ func TestRegisterWorkflowsAndActivities(t *testing.T) {
 		"content_generation.fact_check":          false,
 		"media_processing.source":                false,
 		"sourcing.search_suppliers":              false,
+		"tenant.validate_registration":           false,
+		"tenant.provision_record":                false,
+		"tenant.seed_default_plan":               false,
+		"tenant.issue_welcome_notification":      false,
+		"tenant.register_default_plugins":        false,
+		"tenant.rollback_record":                 false,
 	}
 	for _, a := range reg.activities {
 		if _, ok := wantNames[a.name]; ok {
@@ -110,7 +116,8 @@ func TestBuildWorkerDeps_FillsTaskQueueFromEnv(t *testing.T) {
 	}
 	if deps.Logger == nil || deps.Repo == nil || deps.PublishActivities == nil ||
 		deps.ContentActivities == nil || deps.MediaActivities == nil ||
-		deps.SourcingActivities == nil || deps.RepoCleanup == nil {
+		deps.SourcingActivities == nil || deps.OnboardingActivities == nil ||
+		deps.RepoCleanup == nil {
 		t.Errorf("deps fields must be wired: %+v", deps)
 	}
 }

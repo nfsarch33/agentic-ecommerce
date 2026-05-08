@@ -2,6 +2,122 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## Unreleased (v2.9.0 Developer Experience + Documentation)
+
+### Added — Plugin Developer SDK (public package)
+
+- **`pkg/marketplace/sdk`**: new public Go package consumable by
+  third-party Go modules. Re-exports the safe lifecycle surface from
+  `internal/marketplace/` so plugin authors never depend on internal
+  packages. Symbols re-exported as type aliases (`Plugin`, `Manifest`,
+  `EventName`, `Permission`, `Installation`, `State`,
+  `EventSubscriber`, `RouteExtender`, `Route`, `DependencyRef`),
+  helpers (`IsValidSlug`, `IsValidSemver`, `EventNames`), permission
+  + state constants, and typed sentinel errors (`ErrManifestInvalid`,
+  `ErrPluginAlreadyInstalled`, `ErrSandboxBudgetExceeded`, ...).
+- **`pkg/marketplace/sdk/testing.go`**: `NewTestSandbox(tb, manifest)`
+  and the `*TestSandbox` type. Drives plugins through the real
+  `marketplace.Service` against in-memory adapters with a
+  deterministic clock; calls `tb.Helper()` and `tb.Cleanup`. Exposes
+  `Install`, `Activate`, `Deactivate`, `Uninstall`, `SmokeCheck`,
+  `Settings`, `SetSettings`, `HookTimeout`, `HooksRecorded`,
+  `TenantID`, `Manifest` and `WithTenant`/`WithClock` options.
+- **`pkg/marketplace/sdk/example/hello/`**: heavily commented example
+  plugin demonstrating manifest + Install/Activate/Deactivate/Uninstall
+  hooks, one event subscription, settings round-trip. `hello_test.go`
+  passes `go test ./pkg/marketplace/sdk/example/hello/...` cleanly.
+- **`pkg/marketplace/sdk/README.md`**: 10-minute path getting-started
+  guide, lifecycle hook reference, sandboxing notes, settings shape,
+  versioning policy.
+
+### Added — API versioning (v1 stability + v2 preview)
+
+- **v1 stability guarantee**: `api/openapi.yaml` is the canonical v1
+  spec. Bumped to `2.9.0` with explicit `x-api-version-policy` header
+  documenting "v1 endpoints are stable through v3.x; v2 preview
+  endpoints are subject to change without notice."
+- **v2 preview namespace**: new `api/openapi-v2-preview.yaml` carrying
+  the first preview endpoint
+  (`POST /api/v2/marketplace/plugins/{slug}/install`). Response shape
+  evolves the v1 InstallationResponse into a richer envelope
+  (`MarketplaceInstallV2Response`) carrying `installation`, `sandbox`
+  snapshot, settings schema, and dependency tree.
+- **`internal/api/version.go`**: version-routing middleware. Path-based
+  v2 opt-in (`/api/v2/...`) wins; the Accept header
+  (`application/vnd.ec.v2+json`) upgrades a v1 path when both
+  surfaces exist. `WithVersionHeaders` middleware stamps `X-API-Version`
+  on every response and `X-API-Deprecation: preview; semantics may
+  change without notice` on v2 responses.
+- **`docs/api-versioning.md`**: full negotiation policy, deprecation
+  timeline, header semantics, CI snippet for client drift detection.
+
+### Added — Tenant onboarding Temporal workflow
+
+- **`internal/workflow/tenant_onboarding.go`**:
+  `TenantOnboardingWorkflow` driving the v2.5.0 RegistrationRequest
+  aggregate through `email_verified -> onboarding -> active`.
+  Activities: `tenant.validate_registration`, `tenant.provision_record`,
+  `tenant.seed_default_plan`, `tenant.issue_welcome_notification`,
+  `tenant.register_default_plugins`, `tenant.rollback_record`.
+- **Compensation**: if SeedDefaultPlan or RegisterDefaultPlugins fails
+  after the tenant row was created, the workflow runs the rollback
+  activity. Welcome-notification failure is best-effort (logged in
+  the result envelope, does not abort activation).
+- **Determinism-tested**: `internal/workflow/tenant_onboarding_test.go`
+  drives the workflow against `testsuite.WorkflowTestSuite` with a
+  fixed start time and in-memory ports. Covers happy path,
+  plan-seed-failure rollback, welcome-failure tolerance, and
+  unknown-registration rejection.
+- **Worker registration**: wired into `cmd/temporal-worker/main.go`
+  via `newTenantOnboardingActivitiesFromEnv()`. Worker registers all
+  6 activities + the workflow.
+
+### Added — `ec-cli` developer command-line tool
+
+- **New 7th binary `cmd/ec-cli/`** built into `bin/ec-cli` via the
+  Makefile `build` target. Subcommands:
+  - `ec-cli doctor` — environment diagnostics. Validates Postgres,
+    Redis, Temporal reachability + required env vars. `--json`
+    machine-readable output. Exit 0 when healthy.
+  - `ec-cli tenant create --slug --name --plan --email` — provisions
+    a tenant via the v1 admin API at `/api/v1/tenants`. Honours
+    `EC_ADMIN_TOKEN` env. `--json` output supported.
+  - `ec-cli plugin validate --path <plugin-dir>` — offline validation
+    of a plugin's manifest.json + sandbox smoke. Reports issues +
+    suggestions (no go.mod, no _test.go files).
+  - `ec-cli version` — prints binary metadata.
+- **Test coverage**: 86.4% (target ≥85%, gate ≥83%). DI-friendly
+  mainImpl/AppDeps pattern matches the v2.6.1 cmd/* refactor.
+- **No new module dependencies**: subcommand routing uses stdlib
+  `flag`. Matches the no-cobra convention of the existing 6 binaries.
+
+### Added — A10 SSRF guard (carryover from v2.8.0 OWASP audit)
+
+- **`internal/webhook/outbound/ssrf_guard.go`**: `SSRFGuard` blocks
+  outbound webhook URLs that resolve to private (RFC 1918), loopback,
+  link-local, IPv6 unique-local (fc00::/7, fd00::/8), or cloud
+  metadata IPs (169.254.169.254 IMDS, 169.254.170.2 ECS task
+  metadata, 100.100.100.200 Alibaba, fd00:ec2::254 v6 IMDS). Scheme
+  allowlist: `https://` only by default; `http://` requires
+  explicit `AllowInsecureHTTP` flag.
+- **DNS rebinding mitigation**: re-resolves hostname right before the
+  request is dispatched and rejects when *any* resolved IP falls in
+  a blocked range.
+- **Wired into `internal/webhook/outbound/client.go`**: every
+  outbound webhook delivery now runs `guard.CheckURL(ctx, url)`
+  before `http.NewRequestWithContext`. `NewClient(ClientConfig{})`
+  defaults to a strict guard; tests inject `NewPermissiveSSRFGuard()`
+  to keep httptest-server flows working.
+- **`HTTPDoerWithGuard`**: drop-in `http.Client` wrapper for any
+  outbound HTTP call that wants the same SSRF mitigation without
+  opening the webhook client surface.
+
+### Changed
+
+- **`api/openapi.yaml`** version bumped from 2.0.0 to 2.9.0.
+- **`Makefile`** `build` target now produces 7 binaries (was 6;
+  added `ec-cli`).
+
 ## Unreleased (v2.6.0 MVP)
 
 ### Added — Coverage push + security fuzz harness + benchmark guardrails
