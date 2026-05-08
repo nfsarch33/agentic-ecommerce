@@ -2,6 +2,42 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## Unreleased (v2.1.0 MVP)
+
+### Added
+
+- `uiauto`-profile docker compose services in `docker-compose.dev.yml`:
+  `uiauto-chrome` (chromedp/headless-shell on host port 9333 -> container 9222),
+  `uiauto-omniparser-stub` (wiremock OmniParser stub on host port 8001),
+  and `uiauto-runner` that builds the `ui-agent` binary from the host
+  `UIAUTO_FRAMEWORK_PATH` checkout and mounts the frontend's
+  `test/uiauto/scenarios/` read-only.
+- Documented build harness override at `test/uiauto/Dockerfile.runner`
+  tracking upstream issue `nfsarch33/uiauto-framework#8` (Dockerfile pins
+  Go 1.24 while go.mod requires Go 1.26). The framework source is pulled
+  via a docker compose `additional_contexts` named context so this is a
+  build-time override, not a vendor fork.
+- Bundled smoke scenario at `test/uiauto/example/scenario.json` so
+  `make uiauto-smoke` works without the frontend repo on disk.
+- `make` targets `uiauto-smoke`, `uiauto-compare`, `uiauto-up`,
+  `uiauto-down`, and `compose-uiauto-config`.
+- New `cmd/uiauto-compare` binary plus
+  `internal/uiauto/compare/{types,parser,diff,report,runner}.go` that
+  parse Playwright JSON reporter output and uiauto-framework
+  `demo-metrics.json` and emit a structured diff.json + summary.md to
+  `reports/uiauto-comparison/<date>/`. All parser/diff/report functions
+  are covered by table-driven tests.
+- Default fixtures at `test/uiauto/fixtures/{playwright,uiauto,mapping.json}`
+  for the five v2.1.0 prioritised scenarios (home, products, checkout,
+  admin-login, admin-agents) so `make uiauto-compare` is hermetic.
+
+### Operational notes
+
+- v2.1.0 is research-mode: uiauto runs are advisory. The plan defers the
+  gate-vs-advisory decision for v4 to the v2.8.0 sprint.
+- Coverage holds at 83.2% (v2.0.0 baseline); the comparison package
+  contributes its own coverage above the gate.
+
 ## v2.0.0 - 2026-05-08
 
 ### Release Summary

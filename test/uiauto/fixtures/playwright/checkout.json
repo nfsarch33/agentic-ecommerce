@@ -1,0 +1,62 @@
+{
+  "suites": [
+    {
+      "file": "e2e/checkout.spec.ts",
+      "specs": [
+        {
+          "file": "e2e/checkout.spec.ts",
+          "tests": [
+            {
+              "results": [
+                {
+                  "duration": 4318,
+                  "status": "passed",
+                  "steps": [
+                    {
+                      "selector": "/",
+                      "title": "page.goto('/')"
+                    },
+                    {
+                      "selector": "role=link[name=/browse products/i]",
+                      "title": "click"
+                    },
+                    {
+                      "selector": "role=heading[name=Products]",
+                      "title": "expect(heading)"
+                    },
+                    {
+                      "selector": "role=button[name=/add to cart/i]",
+                      "title": "click"
+                    },
+                    {
+                      "selector": "role=link[name=/view cart/i]",
+                      "title": "click"
+                    },
+                    {
+                      "selector": "role=link[name=/checkout/i]",
+                      "title": "click"
+                    },
+                    {
+                      "selector": "label=/email/i",
+                      "title": "fill"
+                    },
+                    {
+                      "selector": "role=button[name=/place order/i]",
+                      "title": "click"
+                    },
+                    {
+                      "selector": "role=heading[name=/order confirmed/i]",
+                      "title": "expect(heading)"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "title": "shopper checks out from product browse to order confirmation"
+        }
+      ]
+    }
+  ]
+}
+

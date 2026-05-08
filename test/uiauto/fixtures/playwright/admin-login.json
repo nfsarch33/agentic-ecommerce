@@ -1,0 +1,46 @@
+{
+  "suites": [
+    {
+      "file": "e2e/auth-admin.spec.ts",
+      "specs": [
+        {
+          "file": "e2e/auth-admin.spec.ts",
+          "tests": [
+            {
+              "results": [
+                {
+                  "duration": 1875,
+                  "status": "passed",
+                  "steps": [
+                    {
+                      "selector": "/login",
+                      "title": "page.goto('/login')"
+                    },
+                    {
+                      "selector": "label=/email/i",
+                      "title": "fill email"
+                    },
+                    {
+                      "selector": "label=/password/i",
+                      "title": "fill password"
+                    },
+                    {
+                      "selector": "role=button[name=/sign in/i]",
+                      "title": "click sign in"
+                    },
+                    {
+                      "selector": "role=heading[name=/admin dashboard/i]",
+                      "title": "expect(admin dashboard)"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "title": "login opens the admin dashboard and applies role-limited navigation"
+        }
+      ]
+    }
+  ]
+}
+

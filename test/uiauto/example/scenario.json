@@ -1,0 +1,33 @@
+[
+  {
+    "action_types": [
+      "verify",
+      "click"
+    ],
+    "action_values": [
+      "",
+      ""
+    ],
+    "id": "ec-smoke-example",
+    "name": "Agentic Ecommerce uiauto smoke (example.com)",
+    "natural_language": [
+      "Verify the example.com landing heading is present",
+      "Click the More information link in the body"
+    ],
+    "page_objects": [
+      "page.heading",
+      "page.more_link"
+    ],
+    "selectors_used": [
+      "h1",
+      "a[href*=\"iana.org\"]"
+    ],
+    "source": "agentic-ecommerce/test/uiauto/example",
+    "tags": [
+      "smoke",
+      "v2.1.0",
+      "make-uiauto-smoke"
+    ]
+  }
+]
+

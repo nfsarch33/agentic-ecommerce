@@ -1,0 +1,49 @@
+{
+  "suites": [
+    {
+      "file": "e2e/admin-agents.spec.ts",
+      "specs": [
+        {
+          "file": "e2e/admin-agents.spec.ts",
+          "tests": [
+            {
+              "results": [
+                {
+                  "duration": 2942,
+                  "status": "passed",
+                  "steps": [
+                    {
+                      "title": "signInAs operator"
+                    },
+                    {
+                      "selector": "/admin/agents",
+                      "title": "page.goto('/admin/agents')"
+                    },
+                    {
+                      "selector": "role=heading[name=Agent Dashboard]",
+                      "title": "expect(heading)"
+                    },
+                    {
+                      "selector": "role=heading[name=Sourcing Agent]",
+                      "title": "expect(sourcing heading)"
+                    },
+                    {
+                      "selector": "role=button[name=/show history for sourcing agent/i]",
+                      "title": "click history"
+                    },
+                    {
+                      "selector": "role=button[name=/run sourcing agent now/i]",
+                      "title": "click run"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "title": "admin agents dashboard renders current-contract history and triggers a manual run"
+        }
+      ]
+    }
+  ]
+}
+

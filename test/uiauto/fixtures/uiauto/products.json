@@ -1,0 +1,45 @@
+{
+  "failed_steps": 0,
+  "finished_at": "2026-05-08T04:00:01Z",
+  "heal_path_summary": {},
+  "passed_steps": 4,
+  "scenario_id": "products",
+  "scenario_name": "Products list browse",
+  "started_at": "2026-05-08T04:00:01Z",
+  "steps": [
+    {
+      "instruction": "Navigate to /products",
+      "selector": "h1",
+      "status": "passed",
+      "step_index": 0,
+      "tier": "light"
+    },
+    {
+      "instruction": "Verify Products heading",
+      "selector": "h1[role=heading][name=Products]",
+      "status": "passed",
+      "step_index": 1,
+      "tier": "light"
+    },
+    {
+      "instruction": "Verify Resistance Band Set product card",
+      "selector": "h2[role=heading][name~=Resistance Band Set]",
+      "status": "passed",
+      "step_index": 2,
+      "tier": "light"
+    },
+    {
+      "instruction": "Click Add to cart",
+      "selector": "button[name~=Add to cart]",
+      "status": "passed",
+      "step_index": 3,
+      "tier": "light"
+    }
+  ],
+  "tier_breakdown": {
+    "light": 4
+  },
+  "total_latency_ms": 798,
+  "total_steps": 4
+}
+

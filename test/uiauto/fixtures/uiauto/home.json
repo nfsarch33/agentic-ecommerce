@@ -1,0 +1,38 @@
+{
+  "failed_steps": 0,
+  "finished_at": "2026-05-08T04:00:00Z",
+  "heal_path_summary": {},
+  "passed_steps": 3,
+  "scenario_id": "home",
+  "scenario_name": "Home page renders the hero",
+  "started_at": "2026-05-08T04:00:00Z",
+  "steps": [
+    {
+      "instruction": "Navigate to landing page",
+      "selector": "h1",
+      "status": "passed",
+      "step_index": 0,
+      "tier": "light"
+    },
+    {
+      "instruction": "Verify hero heading is visible",
+      "selector": "h1[role=heading]",
+      "status": "passed",
+      "step_index": 1,
+      "tier": "light"
+    },
+    {
+      "instruction": "Verify Browse products link is visible",
+      "selector": "a[href='/products']",
+      "status": "passed",
+      "step_index": 2,
+      "tier": "light"
+    }
+  ],
+  "tier_breakdown": {
+    "light": 3
+  },
+  "total_latency_ms": 612,
+  "total_steps": 3
+}
+
