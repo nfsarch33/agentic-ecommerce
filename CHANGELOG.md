@@ -2,7 +2,133 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
-## Unreleased (v2.3.0 MVP)
+## Unreleased (v2.4.0 MVP)
+
+### Added — Marketplace plugin framework + tenant aggregate
+
+- New top-level package `internal/marketplace/` implementing the
+  v2.4.0 plugin lifecycle:
+  - `plugin.go` — `Plugin` interface with `Install`, `Activate`,
+    `Deactivate`, `Uninstall` hooks plus optional `EventSubscriber`
+    and `RouteExtender` seams.
+  - `manifest.go` — typed `Manifest` (slug, name, version, vendor,
+    description, category, event subscriptions, permissions,
+    dependencies, homepage URL) with regex-validated kebab-case
+    slugs and strict `MAJOR.MINOR.PATCH` semver via stdlib
+    `regexp`. Caret/exact/bare constraint helpers (`^X.Y.Z`,
+    `=X.Y.Z`, bare `X.Y.Z` treated as caret) keep dependency
+    resolution narrow and idiomatic without a new external
+    dependency on `golang.org/x/mod/semver`.
+  - `state.go` — explicit lifecycle transition table mirroring
+    `internal/domain/membership/state.go` and
+    `internal/domain/digital/state.go`:
+    `installed -> active`, `active -> deactivated`,
+    `deactivated -> active | uninstalled`,
+    `installed | active -> uninstalled`. Every legal triple is
+    asserted in `state_test.go`; illegal pairs surface the typed
+    `marketplace.ErrInvalidTransition`.
+  - `dependency.go` — semver dependency graph with Kahn-style
+    topological sort, alphabetical tie-breaking for determinism,
+    and explicit cycle detection (`ErrDependencyCycle`).
+    `VerifyDependencySemver` rejects unsatisfied constraints with
+    `ErrSemverConflict` before mutating state.
+  - `registry.go` — `Registry` interface and concrete `Service`
+    that drive `Install`, `Activate`, `Deactivate`, `Uninstall`,
+    `List`, `Get` against `CatalogRepository`,
+    `InstallationRepository`, and `SubscriptionRepository` ports.
+  - `sandbox.go` — per-`(tenant, slug)` token-bucket sandbox
+    enforcing hook-rate limits (default 60 invocations/min) and a
+    30 s default hook timeout. Mirrors the bucket pattern in
+    `internal/security/ratelimit.go` so reviewers familiar with
+    that file can audit it at a glance. Exhaustion surfaces
+    `ErrSandboxBudgetExceeded`.
+  - `settings.go` — in-memory per-installation settings store with
+    defensive copy on read and write. v2.5.0 will swap this for a
+    postgres-backed implementation when billing requires
+    durability.
+  - `errors.go` — typed sentinels for every reportable failure:
+    `ErrPluginAlreadyInstalled`, `ErrPluginNotFound`,
+    `ErrInvalidTransition`, `ErrSemverConflict`,
+    `ErrSandboxBudgetExceeded`, `ErrSlugInvalid`,
+    `ErrSlugAlreadyExists`, `ErrUnknownEvent`,
+    `ErrManifestInvalid`, `ErrDependencyCycle`,
+    `ErrCrossTenantAccess`.
+- New top-level package surface in `internal/tenant/aggregate.go`
+  carrying the `Tenant` aggregate root: id, slug, name, plan,
+  status (`provisioning -> active | suspended | archived`), and
+  RFC3339 timestamps. State machine is data-driven with the same
+  transition-table pattern used by membership/digital. The
+  aggregate is intentionally a separate `AggregateRepository` port
+  from the existing `tenant.Repository` (settings) because
+  lifecycle and settings have different audit characteristics.
+  `AggregateService` wraps the repo with a quota check
+  (`ErrTenantQuotaExceeded`) and a unique-slug check
+  (`ErrTenantSlugAlreadyExists`).
+- New adapters:
+  - `internal/adapter/postgres/marketplace_repo.go` — tenant-aware
+    CRUD for `marketplace_plugins`, `marketplace_installations`,
+    and `marketplace_event_subscriptions`. Catalogue is global;
+    installations and subscriptions are per `(tenant_id, slug)`.
+  - `internal/adapter/postgres/tenant_aggregate_repo.go` — CRUD
+    for the `tenants` aggregate. SQL is hand-written and explicit
+    so query plans stay reviewable.
+  - `internal/adapter/inmemory/marketplace_repo.go` — drop-in
+    catalogue/installation/subscription stores used by unit
+    tests, dev compose, and the Playwright E2E mock.
+- New API endpoints under `/api/v1/`:
+  - **Marketplace listing** (`viewer` reads; `operator` writes):
+    `GET /marketplace/plugins`, `GET /marketplace/plugins/{slug}`,
+    `POST /marketplace/plugins/{slug}/install`,
+    `POST /marketplace/plugins/{slug}/activate`,
+    `POST /marketplace/plugins/{slug}/deactivate`,
+    `DELETE /marketplace/plugins/{slug}`.
+  - **Plugin settings**:
+    `GET /marketplace/installations/{slug}/settings`,
+    `PATCH /marketplace/installations/{slug}/settings`.
+  - **Tenant provisioning** (`operator` reads; `admin` writes):
+    `POST /tenants`, `GET /tenants`, `GET /tenants/{id}`,
+    `PATCH /tenants/{id}`, `POST /tenants/{id}/suspend`,
+    `POST /tenants/{id}/activate`,
+    `POST /tenants/{id}/archive`.
+- Event contract versioning in `internal/eventbus/schema.go`
+  (Go 1.25 generic `EventEnvelope[T]`):
+  - `RegisterSchema(name, version, decoder)` populates a versioned
+    decoder registry.
+  - `DecodeEnvelope` dispatches on `(schema, version)` and
+    returns `ErrSchemaNotRegistered` / `ErrSchemaVersionUnsupported`.
+  - Backward-compat smoke test verifies v1 envelopes still decode
+    after v2 schemas register, mirroring the v2.2.0 membership
+    payload-version pattern.
+- Migration `migrations/0009_marketplace.up.sql` (forward-only,
+  idempotent) introduces the `tenants`, `marketplace_plugins`,
+  `marketplace_installations`, and
+  `marketplace_event_subscriptions` tables. Slug regex is enforced
+  at the DB level via a CHECK constraint, mirroring the Go
+  validation layer for defence in depth.
+- `cmd/mc-api` wires:
+  - `marketplaceHandler` — routes `/api/v1/marketplace/*` with
+    audit-action emission for every mutating call.
+  - `tenantAdminHandler` — routes `/api/v1/tenants/*` with
+    super-admin RBAC for mutations.
+  - Boot-time `seedMarketplaceManifests` registers three demo
+    manifests (`stripe-payments`, `ses-email`,
+    `klaviyo-marketing`) so the storefront catalogue listing has
+    data in dev mode.
+- OpenAPI 3.1 spec extended with marketplace + tenant schemas and
+  full path coverage for the new endpoints.
+
+### Sentrux discipline
+
+- v2.4.0 explicitly preserves the v2.3.0 post-merge sentrux
+  baseline:
+  `complex_functions = 3` and `coupling = 0.39` are unchanged.
+  The package keeps every public function under the 75-LOC,
+  cyclomatic-<10 limit and decomposes orchestration helpers
+  (`Service.transition`, `dispatchMarketplacePlugin`,
+  `dispatchTenant`) into small named helpers so the structural
+  metrics do not regress.
+
+## v2.3.0 MVP
 
 ### Added — Digital goods bounded context
 

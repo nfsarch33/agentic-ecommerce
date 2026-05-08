@@ -2595,6 +2595,304 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
+  # v2.4.0 -- Marketplace plugin framework + tenant aggregate.
+  /api/v1/marketplace/plugins:
+    parameters:
+      - $ref: '#/components/parameters/TenantIDHeader'
+    get:
+      summary: List marketplace plugin manifests
+      operationId: listMarketplacePlugins
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '200':
+          description: Page of marketplace plugin manifests.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplacePluginsListResponse' }
+  /api/v1/marketplace/plugins/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/TenantIDHeader'
+    get:
+      summary: Read a marketplace plugin manifest
+      operationId: getMarketplacePlugin
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Manifest for the requested slug.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplacePluginManifest' }
+        '404':
+          description: Plugin not in catalogue.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+    delete:
+      summary: Uninstall the per-tenant installation
+      operationId: uninstallMarketplacePlugin
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Installation removed.
+        '404':
+          description: Installation not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/marketplace/plugins/{slug}/install:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/TenantIDHeader'
+    post:
+      summary: Install a marketplace plugin for the current tenant
+      operationId: installMarketplacePlugin
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201':
+          description: Installation row in state=installed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceInstallation' }
+        '404':
+          description: Plugin not found in catalogue.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '409':
+          description: Plugin is already installed for this tenant.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/marketplace/plugins/{slug}/activate:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/TenantIDHeader'
+    post:
+      summary: Activate an installed plugin
+      operationId: activateMarketplacePlugin
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Installation row in state=active.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceInstallation' }
+        '404':
+          description: Installation not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: Invalid state transition.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '429':
+          description: Sandbox budget exceeded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/marketplace/plugins/{slug}/deactivate:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/TenantIDHeader'
+    post:
+      summary: Deactivate an active plugin
+      operationId: deactivateMarketplacePlugin
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Installation row in state=deactivated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceInstallation' }
+        '422':
+          description: Invalid state transition.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/marketplace/installations/{slug}/settings:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/TenantIDHeader'
+    get:
+      summary: Read per-tenant per-plugin settings
+      operationId: getMarketplaceInstallationSettings
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Settings blob.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceSettingsResponse' }
+    patch:
+      summary: Update per-tenant per-plugin settings
+      operationId: updateMarketplaceInstallationSettings
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Settings updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceSettingsResponse' }
+  /api/v1/tenants:
+    get:
+      summary: List tenants (super-admin)
+      operationId: listTenants
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '200':
+          description: Page of tenants.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantsListResponse' }
+    post:
+      summary: Provision a tenant
+      operationId: createTenant
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTenantRequest' }
+      responses:
+        '201':
+          description: Tenant created in status=provisioning.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantResponse' }
+        '400':
+          description: Invalid slug or name.
+        '409':
+          description: Slug already exists.
+        '422':
+          description: Quota exceeded.
+  /api/v1/tenants/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: Read a tenant
+      operationId: getTenant
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Tenant aggregate.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantResponse' }
+        '404':
+          description: Tenant not found.
+    patch:
+      summary: Update name or plan
+      operationId: updateTenant
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTenantRequest' }
+      responses:
+        '200':
+          description: Tenant updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantResponse' }
+        '404':
+          description: Tenant not found.
+  /api/v1/tenants/{id}/suspend:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      summary: Suspend an active tenant
+      operationId: suspendTenant
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Tenant transitioned to status=suspended.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantResponse' }
+        '422':
+          description: Invalid status transition.
+  /api/v1/tenants/{id}/activate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      summary: Activate a tenant (provisioning|suspended -> active)
+      operationId: activateTenant
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Tenant transitioned to status=active.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantResponse' }
+        '422':
+          description: Invalid status transition.
+  /api/v1/tenants/{id}/archive:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      summary: Archive a tenant (terminal)
+      operationId: archiveTenant
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Tenant transitioned to status=archived.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantResponse' }
+        '422':
+          description: Invalid status transition.
 components:
   parameters:
     TenantIDHeader:
@@ -4533,3 +4831,107 @@ components:
         url: { type: string }
         expires_at: { type: string, format: date-time }
         uses_allowed: { type: integer, minimum: 1 }
+    # v2.4.0 -- Marketplace plugin framework + tenant aggregate.
+    MarketplacePluginManifest:
+      type: object
+      required: [slug, name, version, vendor]
+      properties:
+        slug:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*[a-z0-9]$'
+          description: Kebab-case unique identifier.
+        name: { type: string }
+        version:
+          type: string
+          pattern: '^[0-9]+\\.[0-9]+\\.[0-9]+$'
+        vendor: { type: string }
+        description: { type: string }
+        category: { type: string }
+        homepage_url: { type: string }
+        event_subscriptions:
+          type: array
+          items: { type: string }
+        permissions:
+          type: array
+          items: { type: string }
+        dependencies:
+          type: array
+          items: { $ref: '#/components/schemas/MarketplacePluginDependency' }
+    MarketplacePluginDependency:
+      type: object
+      required: [slug]
+      properties:
+        slug: { type: string }
+        constraint:
+          type: string
+          description: 'Semver constraint: ^X.Y.Z, =X.Y.Z, or empty (treated as caret).'
+    MarketplacePluginsListResponse:
+      type: object
+      required: [plugins, total, page, per_page]
+      properties:
+        plugins:
+          type: array
+          items: { $ref: '#/components/schemas/MarketplacePluginManifest' }
+        total: { type: integer }
+        page: { type: integer }
+        per_page: { type: integer }
+    MarketplaceInstallation:
+      type: object
+      required: [tenant_id, slug, installed_version, state, installed_at, updated_at]
+      properties:
+        tenant_id: { type: string }
+        slug: { type: string }
+        installed_version: { type: string }
+        state:
+          type: string
+          enum: [installed, active, deactivated]
+        installed_at: { type: string }
+        activated_at: { type: string }
+        updated_at: { type: string }
+    MarketplaceSettingsResponse:
+      type: object
+      required: [settings]
+      properties:
+        settings:
+          type: object
+          additionalProperties: true
+    TenantResponse:
+      type: object
+      required: [id, slug, name, plan, status, created_at, updated_at]
+      properties:
+        id: { type: string }
+        slug:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*[a-z0-9]$'
+        name: { type: string }
+        plan: { type: string }
+        status:
+          type: string
+          enum: [provisioning, active, suspended, archived]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TenantsListResponse:
+      type: object
+      required: [tenants, total, page, per_page]
+      properties:
+        tenants:
+          type: array
+          items: { $ref: '#/components/schemas/TenantResponse' }
+        total: { type: integer }
+        page: { type: integer }
+        per_page: { type: integer }
+    CreateTenantRequest:
+      type: object
+      required: [slug, name]
+      properties:
+        id: { type: string }
+        slug:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*[a-z0-9]$'
+        name: { type: string }
+        plan: { type: string }
+    UpdateTenantRequest:
+      type: object
+      properties:
+        name: { type: string }
+        plan: { type: string }
