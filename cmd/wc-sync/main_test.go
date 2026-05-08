@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
-	"io"
+	"errors"
 	"log/slog"
-	"os"
 	"testing"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
+	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 )
 
 func TestRunDryRun(t *testing.T) {
@@ -67,39 +67,76 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
 }
 
-// TestMainSucceedsInDryRun exercises the entrypoint that wires
-// os.Stdout, os.Getenv, and run together. Without WooCommerce
-// credentials in the test environment, channelFromEnv falls back to the
-// dry-run noop channel and run completes successfully -- so main()
-// returns without calling os.Exit. We swap os.Stdout for a pipe to keep
-// test output clean.
-func TestMainSucceedsInDryRun(t *testing.T) {
-	t.Setenv("ECOMMERCE_WC_BASE_URL", "")
-	t.Setenv("ECOMMERCE_WC_CONSUMER_KEY", "")
-	t.Setenv("ECOMMERCE_WC_CONSUMER_SECRET", "")
-	t.Setenv("ECOMMERCE_SYNC_DRY_RUN", "true")
+// TestMainImplDryRunReturnsZero exercises the testable entry point
+// directly. With no WooCommerce credentials, channelFromEnv falls back
+// to the noop channel and run completes successfully.
+func TestMainImplDryRunReturnsZero(t *testing.T) {
+	t.Parallel()
 
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
+	var buf bytes.Buffer
+	getenv := func(key string) string {
+		if key == "ECOMMERCE_SYNC_DRY_RUN" {
+			return "true"
+		}
+		return ""
 	}
-	originalStdout := os.Stdout
-	os.Stdout = w
-	t.Cleanup(func() {
-		os.Stdout = originalStdout
-		_ = r.Close()
-	})
+	if got := mainImpl(&buf, getenv); got != 0 {
+		t.Fatalf("mainImpl exit=%d log=%s", got, buf.String())
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("wc-sync.product_synced")) {
+		t.Fatalf("log output = %s", buf.String())
+	}
+}
 
-	main()
+// failingChannel forces engine.PublishToWooCommerce to return an
+// error so we can exercise the run() failure branch.
+type failingChannel struct{}
 
-	if err := w.Close(); err != nil {
-		t.Fatalf("close pipe writer: %v", err)
+func (failingChannel) UpsertProduct(context.Context, catalog.Product) error {
+	return errors.New("upstream wc fault")
+}
+
+func (failingChannel) ListProducts(context.Context, woocommerce.ListOptions) ([]woocommerce.Product, error) {
+	return nil, nil
+}
+
+// TestRunPropagatesPublishFailure ensures engine errors bubble through
+// run() rather than being swallowed.
+func TestRunPropagatesPublishFailure(t *testing.T) {
+	t.Parallel()
+
+	logger := discardLogger()
+	if err := run(context.Background(), logger, failingChannel{}); err == nil {
+		t.Fatal("expected error when channel.UpsertProduct fails")
 	}
-	captured, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("read pipe: %v", err)
+}
+
+// TestMainImplReturnsOneOnRunError exercises the failure branch of
+// mainImpl. We point the real woocommerce client at a closed loopback
+// port so the channel returns a connection-refused error and
+// run() propagates it.
+func TestMainImplReturnsOneOnRunError(t *testing.T) {
+	t.Parallel()
+
+	getenv := func(key string) string {
+		switch key {
+		case "ECOMMERCE_WC_BASE_URL":
+			return "http://127.0.0.1:1" // closed port; connection refused
+		case "ECOMMERCE_WC_CONSUMER_KEY":
+			return "ck_test"
+		case "ECOMMERCE_WC_CONSUMER_SECRET":
+			return "cs_test"
+		case "ECOMMERCE_SYNC_DRY_RUN":
+			return ""
+		default:
+			return ""
+		}
 	}
-	if !bytes.Contains(captured, []byte("wc-sync.product_synced")) {
-		t.Fatalf("main stdout = %s", string(captured))
+	var buf bytes.Buffer
+	if got := mainImpl(&buf, getenv); got != 1 {
+		t.Fatalf("mainImpl exit=%d log=%s", got, buf.String())
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("wc-sync.failed")) {
+		t.Fatalf("expected wc-sync.failed log, got %s", buf.String())
 	}
 }

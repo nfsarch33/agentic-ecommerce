@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -51,28 +52,37 @@ type Config struct {
 }
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if isHealthcheckArgs(os.Args) {
-		if err := runHealthcheck(getenv("ECOMMERCE_AGENT_WORKER_METRICS_ADDR", "127.0.0.1:8081")); err != nil {
-			logger.Error("agent-worker.healthcheck_failed", "error", err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	cfg, err := loadConfig(os.Getenv)
-	if err != nil {
-		logger.Error("agent-worker.invalid_config", "error", err)
-		os.Exit(1)
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	os.Exit(mainImpl(ctx, os.Args, os.Stdout, os.Getenv))
+}
+
+// mainImpl is the testable entry point: argv + getenv + writer in,
+// process exit code out. Avoids os.Exit so unit tests can drive
+// happy-path, healthcheck, invalid-config, and run-error branches
+// without subprocesses.
+func mainImpl(ctx context.Context, args []string, stdout io.Writer, getenv func(string) string) int {
+	logger := slog.New(slog.NewJSONHandler(stdout, nil))
+	if isHealthcheckArgs(args) {
+		addr := getenvDefault(getenv, "ECOMMERCE_AGENT_WORKER_METRICS_ADDR", "127.0.0.1:8081")
+		if err := runHealthcheck(addr); err != nil {
+			logger.Error("agent-worker.healthcheck_failed", "error", err)
+			return 1
+		}
+		return 0
+	}
+
+	cfg, err := loadConfig(getenv)
+	if err != nil {
+		logger.Error("agent-worker.invalid_config", "error", err)
+		return 1
+	}
 
 	if err := run(ctx, logger, cfg); err != nil {
 		logger.Error("agent-worker.failed", "error", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func loadConfig(getenv func(string) string) (Config, error) {
