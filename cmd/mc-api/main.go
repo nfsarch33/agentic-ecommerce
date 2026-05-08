@@ -22,6 +22,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/minimax"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/notification"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/objectstore"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl"
 	stripeadapter "github.com/nfsarch33/agentic-ecommerce/internal/adapter/stripe"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
@@ -30,7 +31,9 @@ import (
 	pricingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/pricing"
 	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
 	compliancedomain "github.com/nfsarch33/agentic-ecommerce/internal/compliance"
+	"github.com/nfsarch33/agentic-ecommerce/internal/digital"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	digitaldomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/digital"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
@@ -121,6 +124,10 @@ type server struct {
 	membershipRepo     port.MembershipRepository
 	membershipGateway  port.MembershipPaymentGateway
 	membershipNotifier port.MembershipNotificationSender
+	digitalProductRepo port.DigitalProductRepository
+	licenseRepo        port.LicenseRepository
+	accessGrantRepo    port.AccessGrantRepository
+	digitalSvc         *digital.Service
 	eventBus           eventHistory
 	syncEngine         *enginesync.Engine
 	contentAgent       contentGenerator
@@ -373,6 +380,15 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	membershipRecorder := notification.NewMembershipNotificationRecorder()
 	membershipBusSender := notification.NewBusSender(bus, "workflow.membership.notifier")
 	membershipNotifier := notification.NewMultiSender(membershipRecorder, membershipBusSender)
+
+	digitalProductRepo := inmemory.NewDigitalProductRepository()
+	licenseRepo := inmemory.NewLicenseRepository()
+	accessGrantRepo := inmemory.NewAccessGrantRepository()
+	digitalSvc, digitalSvcErr := buildDigitalService(logger, digitalProductRepo, licenseRepo, accessGrantRepo, bus)
+	if digitalSvcErr != nil {
+		logger.Warn("digital service disabled", "error", digitalSvcErr)
+	}
+
 	srv := &server{
 		cfg: serverConfig{
 			allowedOrigin:     getenv("ECOMMERCE_ALLOWED_ORIGIN", ""),
@@ -399,6 +415,10 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		membershipRepo:     membershipRepo,
 		membershipGateway:  membershipGateway,
 		membershipNotifier: membershipNotifier,
+		digitalProductRepo: digitalProductRepo,
+		licenseRepo:        licenseRepo,
+		accessGrantRepo:    accessGrantRepo,
+		digitalSvc:         digitalSvc,
 		eventBus:           bus,
 		syncEngine:         enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
 		contentAgent:       generator,
@@ -540,7 +560,53 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/memberships", membershipsAPI)
 	mux.HandleFunc("/api/v1/memberships/", membershipsAPI)
 
+	// v2.3.0 Digital goods bounded context.
+	digitalProductsAPI := s.withCORS(s.withRateLimit(s.withRBAC(digitalProductsRole, s.withTenantRequired(s.withAudit(digitalProductsAuditAction, s.digitalProductsHandler)))))
+	mux.HandleFunc("/api/v1/digital-products", digitalProductsAPI)
+	mux.HandleFunc("/api/v1/digital-products/", digitalProductsAPI)
+	licensesAPI := s.withCORS(s.withRateLimit(s.withRBAC(licensesRole, s.withTenantRequired(s.withAudit(licensesAuditAction, s.licensesHandler)))))
+	mux.HandleFunc("/api/v1/licenses", licensesAPI)
+	mux.HandleFunc("/api/v1/licenses/", licensesAPI)
+	meDigitalAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.withTenantRequired(s.withAudit(meDigitalAuditAction, s.meDigitalLibraryHandler)))))
+	mux.HandleFunc("/api/v1/me/licenses", meDigitalAPI)
+	mux.HandleFunc("/api/v1/me/licenses/", meDigitalAPI)
+
 	return s.withSecurityHeaders(s.withTelemetry(s.withRequestLogging(mux)))
+}
+
+// buildDigitalService wires the digital service for v2.3.0. The HMAC
+// secret defaults to a deterministic dev value so local runs work
+// out of the box; production deployments MUST override
+// ECOMMERCE_DIGITAL_HMAC_SECRET (32+ bytes) and
+// ECOMMERCE_DIGITAL_DOWNLOAD_BASE_URL.
+func buildDigitalService(logger *slog.Logger, products port.DigitalProductRepository, licenses port.LicenseRepository, grants port.AccessGrantRepository, bus *eventbus.InMemoryBus) (*digital.Service, error) {
+	licenseSecret := []byte(getenv("ECOMMERCE_DIGITAL_HMAC_SECRET", "dev-only-license-key-secret-32b!"))
+	urlSecret := []byte(getenv("ECOMMERCE_DIGITAL_URL_SECRET", "dev-only-signed-url-secret-32by!"))
+	keys, err := digitaldomain.NewHMACLicenseKeyGenerator(licenseSecret)
+	if err != nil {
+		return nil, fmt.Errorf("license key generator: %w", err)
+	}
+	issuer, err := signedurl.New(signedurl.Config{
+		BaseURL: getenv("ECOMMERCE_DIGITAL_DOWNLOAD_BASE_URL", "https://cdn.example.com/api/v1/digital-downloads"),
+		Secret:  urlSecret,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("signed url issuer: %w", err)
+	}
+	svc, err := digital.New(digital.Config{
+		Products:  products,
+		Licenses:  licenses,
+		Grants:    grants,
+		Keys:      keys,
+		Issuer:    issuer,
+		Publisher: bus,
+		Source:    "mc-api.digital",
+	})
+	if err != nil {
+		return nil, err
+	}
+	logger.Info("digital service ready")
+	return svc, nil
 }
 
 func healthzHandler(w http.ResponseWriter, r *http.Request) {

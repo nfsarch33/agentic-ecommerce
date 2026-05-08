@@ -23,8 +23,10 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/notification"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/objectstore"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl"
 	stripeadapter "github.com/nfsarch33/agentic-ecommerce/internal/adapter/stripe"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/membership"
 	orderdomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/order"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
@@ -55,6 +57,15 @@ var (
 	_ port.MembershipRepository         = (*postgres.MembershipRepository)(nil)
 	_ port.MembershipPaymentGateway     = (*stripeadapter.PaymentGateway)(nil)
 	_ port.MembershipNotificationSender = (*notification.MembershipNotificationRecorder)(nil)
+
+	// v2.3.0 Digital goods bounded context.
+	_ port.DigitalProductRepository = (*inmemory.DigitalProductRepository)(nil)
+	_ port.DigitalProductRepository = (*postgres.DigitalProductRepository)(nil)
+	_ port.LicenseRepository        = (*inmemory.LicenseRepository)(nil)
+	_ port.LicenseRepository        = (*postgres.LicenseRepository)(nil)
+	_ port.AccessGrantRepository    = (*inmemory.AccessGrantRepository)(nil)
+	_ port.AccessGrantRepository    = (*postgres.AccessGrantRepository)(nil)
+	_ port.DownloadTokenIssuer      = (*signedurl.HMACIssuer)(nil)
 )
 
 func TestPortListResultZeroValueIsEmpty(t *testing.T) {
@@ -186,6 +197,70 @@ func TestPortFakeRepositoryStaysAssignableToProductRepository(t *testing.T) {
 	var _ port.MembershipRepository = (*portContractFakeMembershipRepo)(nil)
 	var _ port.MembershipPaymentGateway = (*portContractFakeMembershipPaymentGateway)(nil)
 	var _ port.MembershipNotificationSender = (*portContractFakeMembershipNotifier)(nil)
+	var _ port.DigitalProductRepository = (*portContractFakeDigitalProductRepo)(nil)
+	var _ port.LicenseRepository = (*portContractFakeLicenseRepo)(nil)
+	var _ port.AccessGrantRepository = (*portContractFakeAccessGrantRepo)(nil)
+	var _ port.DownloadTokenIssuer = (*portContractFakeDownloadIssuer)(nil)
+}
+
+type portContractFakeDigitalProductRepo struct{}
+
+func (portContractFakeDigitalProductRepo) Create(context.Context, string, digital.DigitalProduct) error {
+	return nil
+}
+func (portContractFakeDigitalProductRepo) Update(context.Context, string, digital.DigitalProduct) error {
+	return nil
+}
+func (portContractFakeDigitalProductRepo) Get(context.Context, string, uuid.UUID) (digital.DigitalProduct, error) {
+	return digital.DigitalProduct{}, nil
+}
+func (portContractFakeDigitalProductRepo) List(context.Context, string, int, int) (port.DigitalProductList, error) {
+	return port.DigitalProductList{}, nil
+}
+func (portContractFakeDigitalProductRepo) Delete(context.Context, string, uuid.UUID) error {
+	return nil
+}
+
+type portContractFakeLicenseRepo struct{}
+
+func (portContractFakeLicenseRepo) Create(context.Context, string, digital.License) error {
+	return nil
+}
+func (portContractFakeLicenseRepo) Get(context.Context, string, uuid.UUID) (digital.License, error) {
+	return digital.License{}, nil
+}
+func (portContractFakeLicenseRepo) List(context.Context, string, int, int) (port.LicenseList, error) {
+	return port.LicenseList{}, nil
+}
+func (portContractFakeLicenseRepo) ListByCustomer(context.Context, string, uuid.UUID, int, int) (port.LicenseList, error) {
+	return port.LicenseList{}, nil
+}
+func (portContractFakeLicenseRepo) SaveState(context.Context, string, digital.License) error {
+	return nil
+}
+
+type portContractFakeAccessGrantRepo struct{}
+
+func (portContractFakeAccessGrantRepo) Upsert(context.Context, string, digital.AccessGrant) error {
+	return nil
+}
+func (portContractFakeAccessGrantRepo) Get(context.Context, string, uuid.UUID) (digital.AccessGrant, error) {
+	return digital.AccessGrant{}, nil
+}
+func (portContractFakeAccessGrantRepo) ListByCustomer(context.Context, string, uuid.UUID, int, int) (port.AccessGrantList, error) {
+	return port.AccessGrantList{}, nil
+}
+func (portContractFakeAccessGrantRepo) GetByCustomerProduct(context.Context, string, uuid.UUID, uuid.UUID) (digital.AccessGrant, error) {
+	return digital.AccessGrant{}, nil
+}
+
+type portContractFakeDownloadIssuer struct{}
+
+func (portContractFakeDownloadIssuer) Issue(port.IssueDownloadRequest) (port.IssueDownloadResponse, error) {
+	return port.IssueDownloadResponse{}, nil
+}
+func (portContractFakeDownloadIssuer) Verify(string, time.Time) (port.DownloadClaims, error) {
+	return port.DownloadClaims{}, nil
 }
 
 // TestPortMembershipNotificationEventCarriesTenant ensures the value type
