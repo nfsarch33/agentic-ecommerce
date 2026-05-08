@@ -48,6 +48,7 @@ func TestDeliveryClientRetriesServerFailuresAndSignsRequest(t *testing.T) {
 		MaxAttempts: 3,
 		Backoff:     func(int) time.Duration { return 0 },
 		Now:         func() time.Time { return time.Unix(1_779_000_000, 0).UTC() },
+		SSRFGuard:   NewPermissiveSSRFGuard(),
 	})
 	result := client.Deliver(context.Background(), DeliveryRequest{
 		Registration: Registration{ID: "webhook-1", URL: server.URL, EventTypes: []eventbus.EventType{eventbus.ProductCreated}, Enabled: true},
@@ -95,6 +96,7 @@ func TestDeliveryClientSignsExactRequestBody(t *testing.T) {
 		HTTPClient:  server.Client(),
 		MaxAttempts: 1,
 		Now:         func() time.Time { return time.Date(2026, 5, 8, 3, 4, 5, 0, time.FixedZone("AEST", 10*60*60)) },
+		SSRFGuard:   NewPermissiveSSRFGuard(),
 	})
 	result := client.Deliver(context.Background(), DeliveryRequest{
 		Registration: Registration{ID: "webhook-1", URL: server.URL, EventTypes: []eventbus.EventType{eventbus.ProductCreated}, Enabled: true},
@@ -143,6 +145,7 @@ func TestDeliveryClientRetriesRateLimitWithBackoff(t *testing.T) {
 			backoffAttempts = append(backoffAttempts, attempt)
 			return 0
 		},
+		SSRFGuard: NewPermissiveSSRFGuard(),
 	})
 	result := client.Deliver(context.Background(), DeliveryRequest{
 		Registration: Registration{ID: "webhook-1", URL: server.URL, EventTypes: []eventbus.EventType{eventbus.ProductCreated}, Enabled: true},
@@ -166,6 +169,7 @@ func TestDeliveryClientUsesPerAttemptTimeout(t *testing.T) {
 		MaxAttempts: 1,
 		Timeout:     time.Millisecond,
 		Backoff:     func(int) time.Duration { return 0 },
+		SSRFGuard:   NewPermissiveSSRFGuard(),
 	})
 	result := client.Deliver(context.Background(), DeliveryRequest{
 		Registration: Registration{ID: "webhook-timeout", URL: "https://hooks.example.test/timeout", EventTypes: []eventbus.EventType{eventbus.ProductCreated}, Enabled: true},
@@ -192,6 +196,7 @@ func TestDeliveryClientDoesNotRetryClientFailures(t *testing.T) {
 		HTTPClient:  server.Client(),
 		MaxAttempts: 3,
 		Backoff:     func(int) time.Duration { return 0 },
+		SSRFGuard:   NewPermissiveSSRFGuard(),
 	})
 	result := client.Deliver(context.Background(), DeliveryRequest{
 		Registration: Registration{ID: "webhook-1", URL: server.URL, EventTypes: []eventbus.EventType{eventbus.ProductCreated}, Enabled: true},

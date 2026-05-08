@@ -1,0 +1,127 @@
+openapi: 3.1.0
+info:
+  title: Agentic Ecommerce Mission Control API (v2 preview)
+  version: 2.9.0-preview
+  description: |
+    Preview surface for the next-generation Agentic Ecommerce HTTP
+    API. Endpoints under /api/v2/ are subject to change without
+    notice while clients pilot the new response shapes.
+
+    Every v2 response carries the X-API-Version: 2-preview and
+    X-API-Deprecation headers documented in
+    docs/api-versioning.md. The canonical stable surface lives in
+    api/openapi.yaml.
+  x-api-version-policy: |
+    v1 endpoints (api/openapi.yaml) are stable through host v3.x.
+    v2 preview endpoints (this file) are subject to change without
+    notice. See docs/api-versioning.md for negotiation, headers,
+    and deprecation timeline.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+paths:
+  /api/v2/marketplace/plugins/{slug}/install:
+    post:
+      summary: Install a marketplace plugin (v2 preview)
+      operationId: installMarketplacePluginV2
+      description: |
+        Preview replacement for POST /api/v1/marketplace/tenants/{tenant}/plugins/{slug}/install.
+        The response shape evolves the v1 InstallationResponse to
+        carry richer metadata (settings schema, dependency tree,
+        sandbox budget snapshot). The v1 endpoint remains stable
+        and unchanged.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Tenant-ID
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Installation row plus the v2-shaped metadata envelope.
+          headers:
+            X-API-Version:
+              schema:
+                type: string
+                example: 2-preview
+            X-API-Deprecation:
+              schema:
+                type: string
+                example: 'preview; semantics may change without notice'
+          content:
+            application/vnd.ec.v2+json:
+              schema:
+                $ref: '#/components/schemas/MarketplaceInstallV2Response'
+        '400':
+          description: Invalid input.
+        '404':
+          description: Plugin slug not found.
+components:
+  schemas:
+    MarketplaceInstallV2Response:
+      type: object
+      required: [installation, sandbox]
+      properties:
+        installation:
+          $ref: '#/components/schemas/MarketplaceInstallationV2'
+        sandbox:
+          $ref: '#/components/schemas/SandboxSnapshotV2'
+        settings_schema:
+          type: object
+          description: |
+            Tenant-overridable settings exposed by the plugin. Empty
+            when the plugin manifest declares none.
+          additionalProperties: true
+        dependency_tree:
+          type: array
+          items:
+            $ref: '#/components/schemas/DependencyNodeV2'
+    MarketplaceInstallationV2:
+      type: object
+      required: [tenant_id, slug, version, state, installed_at]
+      properties:
+        tenant_id:
+          type: string
+        slug:
+          type: string
+        version:
+          type: string
+        state:
+          type: string
+          enum: [installed, active, deactivated, uninstalled]
+        installed_at:
+          type: string
+          format: date-time
+        activated_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+    SandboxSnapshotV2:
+      type: object
+      properties:
+        hook_budget_remaining:
+          type: integer
+        hook_timeout_seconds:
+          type: integer
+        hooks_recorded_total:
+          type: integer
+    DependencyNodeV2:
+      type: object
+      required: [slug, constraint, satisfied]
+      properties:
+        slug:
+          type: string
+        constraint:
+          type: string
+        installed_version:
+          type: string
+        satisfied:
+          type: boolean

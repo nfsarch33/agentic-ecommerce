@@ -50,6 +50,7 @@ func TestServiceDeliversEventToMatchingRegistrationsAndRecordsResults(t *testing
 			HTTPClient:  server.Client(),
 			MaxAttempts: 1,
 			Backoff:     func(int) time.Duration { return 0 },
+			SSRFGuard:   NewPermissiveSSRFGuard(),
 		}),
 	})
 	results, err := service.DeliverEvent(context.Background(), eventbus.Event{
@@ -104,6 +105,7 @@ func TestServiceSkipsDisabledRegistrations(t *testing.T) {
 			HTTPClient:  server.Client(),
 			MaxAttempts: 1,
 			Backoff:     func(int) time.Duration { return 0 },
+			SSRFGuard:   NewPermissiveSSRFGuard(),
 		}),
 	})
 
@@ -147,6 +149,7 @@ func TestServiceRecordsFailedDeliveriesWithoutLeakingSecrets(t *testing.T) {
 			HTTPClient:  server.Client(),
 			MaxAttempts: 2,
 			Backoff:     func(int) time.Duration { return 0 },
+			SSRFGuard:   NewPermissiveSSRFGuard(),
 		}),
 		Logger: slog.New(slog.NewTextHandler(&logs, nil)),
 	})
@@ -223,6 +226,7 @@ func TestServiceTenantRegistrationLifecycle(t *testing.T) {
 			HTTPClient:  server.Client(),
 			MaxAttempts: 1,
 			Backoff:     func(int) time.Duration { return 0 },
+			SSRFGuard:   NewPermissiveSSRFGuard(),
 		}),
 	})
 	tenantA := mustRegisterTenantWebhook(t, service, "tenant-a", server.URL)
@@ -312,6 +316,7 @@ func TestServiceTestDeliversSubscribedEvent(t *testing.T) {
 			HTTPClient:  server.Client(),
 			MaxAttempts: 1,
 			Backoff:     func(int) time.Duration { return 0 },
+			SSRFGuard:   NewPermissiveSSRFGuard(),
 		}),
 	})
 	reg, err := service.Register(context.Background(), CreateRegistrationInput{
@@ -366,6 +371,7 @@ func TestServiceSubscribesToEventBus(t *testing.T) {
 			HTTPClient:  server.Client(),
 			MaxAttempts: 1,
 			Backoff:     func(int) time.Duration { return 0 },
+			SSRFGuard:   NewPermissiveSSRFGuard(),
 		}),
 	})
 
@@ -421,6 +427,7 @@ func TestServiceEventBridgeRetriesAtLeastOnceAndPersistsResult(t *testing.T) {
 			HTTPClient:  server.Client(),
 			MaxAttempts: 2,
 			Backoff:     func(int) time.Duration { return 0 },
+			SSRFGuard:   NewPermissiveSSRFGuard(),
 		}),
 	})
 
@@ -466,6 +473,7 @@ func TestServiceEventBridgeDedupesSameConsumerGroup(t *testing.T) {
 			HTTPClient:  server.Client(),
 			MaxAttempts: 1,
 			Backoff:     func(int) time.Duration { return 0 },
+			SSRFGuard:   NewPermissiveSSRFGuard(),
 		}),
 	})
 
