@@ -54,18 +54,28 @@ locals {
     ECOMMERCE_WC_WEBHOOK_SECRET    = "gcp-secret-manager:${var.wc_webhook_secret_name}"
   }
 
+  # v2.7.0: target 70% CPU on mc-api, queue-depth on workers, with
+  # the marketplace-tuned min/max replica bounds.
   mc_api_autoscaling_policy = {
     enabled                    = true
-    metric                     = "cloud-run-request-concurrency"
-    target_value               = 80
+    metric                     = "cloud-run-cpu-utilization"
+    target_value               = 70
     scale_in_cooldown_seconds  = 300
-    scale_out_cooldown_seconds = 30
+    scale_out_cooldown_seconds = 60
   }
 
   temporal_worker_autoscaling_policy = {
     enabled                    = true
-    metric                     = "cloud-run-cpu-utilization"
-    target_value               = 70
+    metric                     = "temporal_queue_depth"
+    target_value               = 50
+    scale_in_cooldown_seconds  = 300
+    scale_out_cooldown_seconds = 60
+  }
+
+  agent_worker_autoscaling_policy = {
+    enabled                    = true
+    metric                     = "agent_runs_pending"
+    target_value               = 25
     scale_in_cooldown_seconds  = 300
     scale_out_cooldown_seconds = 60
   }
@@ -184,8 +194,8 @@ module "agent_worker_service" {
   container_port          = 8081
   cpu                     = 1
   memory_mb               = 1024
-  min_instances           = 1
-  max_instances           = 3
+  min_instances           = var.agent_worker_min_instances
+  max_instances           = var.agent_worker_max_instances
   health_check_path       = "/healthz"
   allow_public_ingress    = false
   network_id              = module.network.network_id
@@ -202,7 +212,37 @@ module "agent_worker_service" {
     ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS = "1"
     ECOMMERCE_AGENT_SCHEDULES_TASK_QUEUE          = "ec-workflows"
   })
-  secret_env_vars = local.common_backend_secrets
+  secret_env_vars    = local.common_backend_secrets
+  autoscaling_policy = local.agent_worker_autoscaling_policy
+}
+
+# v2.7.0 marketplace + cloud-scale: per-tenant fan-out contract.
+module "tenant_fanout" {
+  source = "../modules/tenant_provisioning"
+
+  provider_name      = local.provider_name
+  name_prefix        = var.project_name
+  environment        = var.environment
+  tenants            = var.tenants
+  secret_path_prefix = var.tenant_secret_path_prefix
+
+  auto_scaling_targets = {
+    mc_api = {
+      target_cpu_percent = 70
+      min_replicas       = var.mc_api_min_instances
+      max_replicas       = var.mc_api_max_instances
+    }
+    temporal_worker = {
+      queue_metric = "temporal_queue_depth"
+      min_replicas = var.temporal_worker_min_instances
+      max_replicas = var.temporal_worker_max_instances
+    }
+    agent_worker = {
+      queue_metric = "agent_runs_pending"
+      min_replicas = var.agent_worker_min_instances
+      max_replicas = var.agent_worker_max_instances
+    }
+  }
 }
 
 module "temporal_server_service" {

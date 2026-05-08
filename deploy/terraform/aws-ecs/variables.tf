@@ -89,9 +89,9 @@ variable "mc_api_min_instances" {
 }
 
 variable "mc_api_max_instances" {
-  description = "Maximum ECS task count for mc-api."
+  description = "Maximum ECS task count for mc-api. v2.7.0 raises the marketplace ceiling to 20 to accommodate multi-tenant load."
   type        = number
-  default     = 6
+  default     = 20
 }
 
 variable "temporal_worker_min_instances" {
@@ -101,9 +101,44 @@ variable "temporal_worker_min_instances" {
 }
 
 variable "temporal_worker_max_instances" {
-  description = "Maximum ECS task count for temporal-worker."
+  description = "Maximum ECS task count for temporal-worker. v2.7.0 raises to 10 to absorb queue spikes from marketplace plugin events."
   type        = number
-  default     = 5
+  default     = 10
+}
+
+variable "agent_worker_min_instances" {
+  description = "Minimum ECS task count for agent-worker."
+  type        = number
+  default     = 1
+}
+
+variable "agent_worker_max_instances" {
+  description = "Maximum ECS task count for agent-worker. v2.7.0 raises to 15 for multi-tenant agent run queue absorption."
+  type        = number
+  default     = 15
+}
+
+variable "tenants" {
+  description = <<-EOT
+    Map of tenant_id -> per-tenant configuration consumed by the
+    tenant_fanout module (billing webhook path, CDN preferences,
+    secret keys, region, plan).
+  EOT
+  type = map(object({
+    plan                 = optional(string, "free")
+    region               = optional(string, "us-east-1")
+    billing_webhook_path = optional(string, "/webhooks/stripe")
+    cdn_enabled          = optional(bool, true)
+    cdn_hostname_suffix  = optional(string, "")
+    secret_keys          = optional(list(string), [])
+  }))
+  default = {}
+}
+
+variable "tenant_secret_path_prefix" {
+  description = "Prefix for AWS Secrets Manager paths the application TenantSecretStore adapter uses."
+  type        = string
+  default     = "agentic-ecommerce"
 }
 
 variable "allowed_origin" {
