@@ -106,6 +106,19 @@ func TestOpenAPIOperationsHaveComprehensiveContractCoverage(t *testing.T) {
 		"resumeMembership":                 true,
 		"updateMembership":                 true,
 		"updateMembershipPlan":             true,
+		// v2.3.0 Digital goods bounded context.
+		"adminDigitalProductDownload": true,
+		"createDigitalProduct":        true,
+		"createLicense":               true,
+		"customerDigitalDownload":     true,
+		"deleteDigitalProduct":        true,
+		"getDigitalProduct":           true,
+		"getLicense":                  true,
+		"listDigitalProducts":         true,
+		"listLicenses":                true,
+		"listMyLicenses":              true,
+		"revokeLicense":               true,
+		"updateDigitalProduct":        true,
 	}
 
 	var seen []string

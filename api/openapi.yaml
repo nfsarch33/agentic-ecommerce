@@ -2352,6 +2352,249 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/digital-products:
+    parameters:
+      - $ref: '#/components/parameters/TenantIDHeader'
+    get:
+      summary: List digital products
+      operationId: listDigitalProducts
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '200':
+          description: Page of digital products.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DigitalProductsListResponse' }
+    post:
+      summary: Create a digital product
+      operationId: createDigitalProduct
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DigitalProductRequest' }
+      responses:
+        '201':
+          description: Digital product created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DigitalProductResponse' }
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/digital-products/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '#/components/parameters/TenantIDHeader'
+    get:
+      summary: Read a digital product
+      operationId: getDigitalProduct
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Digital product.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DigitalProductResponse' }
+        '404':
+          description: Not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+    patch:
+      summary: Update a digital product
+      operationId: updateDigitalProduct
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DigitalProductRequest' }
+      responses:
+        '200':
+          description: Digital product updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DigitalProductResponse' }
+        '404':
+          description: Not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+    delete:
+      summary: Delete a digital product
+      operationId: deleteDigitalProduct
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Deleted.
+        '404':
+          description: Not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/digital-products/{id}/download:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '#/components/parameters/TenantIDHeader'
+    get:
+      summary: Mint a download URL for a granted product (admin)
+      operationId: adminDigitalProductDownload
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Signed URL.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DigitalDownloadResponse' }
+        '404':
+          description: No grant for this customer/product.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/licenses:
+    parameters:
+      - $ref: '#/components/parameters/TenantIDHeader'
+    get:
+      summary: List licences
+      operationId: listLicenses
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Page of licences.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LicensesListResponse' }
+    post:
+      summary: Issue a licence
+      operationId: createLicense
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LicenseRequest' }
+      responses:
+        '201':
+          description: Licence issued.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LicenseResponse' }
+        '422':
+          description: Validation error.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/licenses/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '#/components/parameters/TenantIDHeader'
+    get:
+      summary: Read a licence
+      operationId: getLicense
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Licence.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LicenseResponse' }
+        '404':
+          description: Not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/licenses/{id}/revoke:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '#/components/parameters/TenantIDHeader'
+    post:
+      summary: Revoke a licence
+      operationId: revokeLicense
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Licence revoked.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LicenseResponse' }
+        '422':
+          description: Already terminal.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/me/licenses:
+    parameters:
+      - $ref: '#/components/parameters/TenantIDHeader'
+    get:
+      summary: List the authenticated customer's licences
+      operationId: listMyLicenses
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Page of licences scoped to the actor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LicensesListResponse' }
+  /api/v1/me/licenses/{id}/download:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '#/components/parameters/TenantIDHeader'
+    get:
+      summary: Mint a download URL for the authenticated customer
+      operationId: customerDigitalDownload
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Signed URL.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DigitalDownloadResponse' }
+        '403':
+          description: Licence belongs to another customer.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '410':
+          description: Licence revoked or expired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 components:
   parameters:
     TenantIDHeader:
@@ -4208,3 +4451,85 @@ components:
       properties:
         error:
           type: string
+    DigitalProductRequest:
+      type: object
+      required: [sku, name, file_path, file_size, version]
+      properties:
+        sku: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        file_path: { type: string, minLength: 1 }
+        file_size: { type: integer, format: int64, minimum: 1 }
+        content_type: { type: string }
+        checksum: { type: string }
+        version: { type: string, minLength: 1 }
+    DigitalProductResponse:
+      type: object
+      required: [id, tenant_id, sku, name, file_path, file_size, version, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string }
+        sku: { type: string }
+        name: { type: string }
+        description: { type: string }
+        file_path: { type: string }
+        file_size: { type: integer, format: int64 }
+        content_type: { type: string }
+        checksum: { type: string }
+        version: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    DigitalProductsListResponse:
+      type: object
+      required: [products, total, page, per_page]
+      properties:
+        products:
+          type: array
+          items: { $ref: '#/components/schemas/DigitalProductResponse' }
+        total: { type: integer }
+        page: { type: integer }
+        per_page: { type: integer }
+    LicenseRequest:
+      type: object
+      required: [product_id, customer_id]
+      properties:
+        product_id: { type: string, format: uuid }
+        customer_id: { type: string, format: uuid }
+        source:
+          type: string
+          enum: [purchase, gift, admin]
+        max_activations: { type: integer, minimum: 0 }
+        expires_at: { type: string, format: date-time, nullable: true }
+    LicenseResponse:
+      type: object
+      required: [id, tenant_id, product_id, customer_id, key, state, issued_at, max_activations, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string }
+        product_id: { type: string, format: uuid }
+        customer_id: { type: string, format: uuid }
+        key: { type: string }
+        state:
+          type: string
+          enum: [active, revoked, expired]
+        issued_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time, nullable: true }
+        max_activations: { type: integer }
+        updated_at: { type: string, format: date-time }
+    LicensesListResponse:
+      type: object
+      required: [licenses, total, page, per_page]
+      properties:
+        licenses:
+          type: array
+          items: { $ref: '#/components/schemas/LicenseResponse' }
+        total: { type: integer }
+        page: { type: integer }
+        per_page: { type: integer }
+    DigitalDownloadResponse:
+      type: object
+      required: [url, expires_at, uses_allowed]
+      properties:
+        url: { type: string }
+        expires_at: { type: string, format: date-time }
+        uses_allowed: { type: integer, minimum: 1 }
