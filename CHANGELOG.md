@@ -2,6 +2,91 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## Unreleased (v2.3.0 MVP)
+
+### Added — Digital goods bounded context
+
+- New domain package `internal/domain/digital/` with the
+  `DigitalProduct`, `License`, `DownloadToken`, and `AccessGrant`
+  aggregates plus an explicit licence state machine (`active` →
+  `revoked` | `expired`) driven by a transition table. Every legal
+  `(state, transition) → state` triple is exhaustively asserted by
+  table-driven tests; every illegal pair returns the typed
+  `digital.ErrInvalidTransition`. Mirrors the v2.2.0 membership
+  pattern in `internal/domain/membership/state.go`.
+- HMAC-SHA256 licence keys (`internal/domain/digital/license_key.go`)
+  built from stdlib `crypto/hmac` + `crypto/sha256`, with constant-
+  time verification via `crypto/subtle.ConstantTimeCompare`. The
+  generator rejects secrets shorter than 32 bytes and folds the
+  tenant id into the HMAC input so a leaked key cannot be replayed
+  across tenants.
+- New ports `port.DigitalProductRepository`, `port.LicenseRepository`,
+  `port.AccessGrantRepository`, `port.DownloadTokenIssuer`, and
+  `port.DigitalAccessGrantor`, with compile-time assertions added to
+  `internal/port/contract_test.go`.
+- New adapters:
+  - `internal/adapter/postgres/digital_repo.go` — tenant-keyed CRUD
+    plus optimistic `SaveState` for licences. Backed by tables
+    introduced in migration `0008_digital.sql`.
+  - `internal/adapter/inmemory/digital_repo.go` — drop-in store used
+    by tests, the dev compose stack, and the Playwright E2E mock.
+  - `internal/adapter/signedurl/issuer.go` — HMAC-SHA256 signed URL
+    builder/parser with explicit unit-separator framing
+    (`tenant 0x1f licence 0x1f product 0x1f exp 0x1f uses`) and a
+    base64url-no-padding signature so URLs survive query-string
+    round-trips. Verification rejects tampered signatures, missing
+    `sig`, expired tokens, and cross-tenant replay.
+- New service layer at `internal/digital/service.go` orchestrates
+  licence + access-grant + event-bus interactions. `IssueLicense`,
+  `RevokeLicense`, `IssueDownload`, and `GrantAccess` are the four
+  entry points; the latter satisfies `port.DigitalAccessGrantor` so
+  the v2.4.0 Temporal order-completion path can call exactly the
+  same code path without further refactoring.
+- New REST endpoints under `/api/v1/`, all gated by the existing
+  RBAC middleware (operator+ for mutations, viewer+ for reads):
+  - `GET /digital-products`, `POST /digital-products`,
+    `GET/PATCH/DELETE /digital-products/{id}`,
+    `GET /digital-products/{id}/download?customer_id=...` (admin
+    download URL minting).
+  - `GET /licenses`, `POST /licenses`, `GET /licenses/{id}`,
+    `POST /licenses/{id}/revoke`.
+  - `GET /me/licenses`, `GET /me/licenses/{id}/download` —
+    customer-scoped surfaces. The customer's UUID is derived
+    deterministically from `(tenant_id, subject)` via UUIDv5 so a
+    stable identity exists without a separate Member table.
+- Eight new event-bus types in `internal/eventbus/event.go`:
+  `digital.product.created`, `digital.product.updated`,
+  `digital.product.deleted`, `digital.purchased`, `digital.downloaded`,
+  `license.activated`, `license.revoked`, `license.expired`. All carry
+  the typed `eventbus.DigitalPayload{ Version, TenantID, ProductID,
+  ProductSKU, LicenseID, CustomerID, State, Source }`. Tenant id is
+  duplicated at the envelope level so webhook bridges that read only
+  the payload still see tenant scoping.
+- New migration `migrations/0008_digital.up.sql` (forward-only,
+  idempotent) creating `digital_products`, `digital_licenses`,
+  `digital_access_grants`, and `digital_download_tokens`. Every
+  table is `(tenant_id, id)` keyed and constrained so cross-tenant
+  reads are impossible at the database level. Re-purchases are
+  idempotent via the `(tenant_id, customer_id, product_id)` unique
+  constraint on `digital_access_grants`.
+- OpenAPI spec at `api/openapi.yaml` updated with all 11 new
+  operations and 8 new schemas (`DigitalProductRequest/Response`,
+  `LicenseRequest/Response`, `DigitalDownloadResponse`,
+  `LicensesListResponse`, `DigitalProductsListResponse`).
+
+### Notes
+
+- Order-flow integration: the `port.DigitalAccessGrantor` seam is in
+  place, but the production order-completion path is still HTTP-only
+  in v2.3.0. The v2.4.0 marketplace work introduces the Temporal
+  order-completion workflow; that workflow will call
+  `digitalSvc.GrantAccess` directly without further changes here.
+- HMAC secrets default to deterministic dev values
+  (`ECOMMERCE_DIGITAL_HMAC_SECRET`,
+  `ECOMMERCE_DIGITAL_URL_SECRET`,
+  `ECOMMERCE_DIGITAL_DOWNLOAD_BASE_URL`). Production deployments
+  MUST override all three to >= 32-byte values.
+
 ## Unreleased (v2.2.0 MVP)
 
 ### Added — Membership bounded context

@@ -204,6 +204,15 @@ func assignScanValue(dest, value any) {
 		*d = value.(string)
 	case *int:
 		*d = value.(int)
+	case *int64:
+		switch v := value.(type) {
+		case int64:
+			*d = v
+		case int:
+			*d = int64(v)
+		default:
+			panic("unsupported int64 scan value")
+		}
 	case *time.Time:
 		*d = value.(time.Time)
 	case *[]string:
