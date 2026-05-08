@@ -2,6 +2,105 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## Unreleased (v2.5.0 MVP)
+
+### Added — Tenant self-service registration + billing hooks
+
+- New top-level package `internal/billing/` implementing the v2.5.0
+  billing bounded context:
+  - `state.go` — `Subscription` state machine driven by the same
+    explicit transition-table pattern as
+    `internal/domain/membership/state.go`,
+    `internal/domain/digital/state.go`, and
+    `internal/marketplace/state.go`. Legal moves:
+    `trialing -> active | canceled`,
+    `active -> past_due | paused | canceled`,
+    `past_due -> active | canceled`,
+    `paused -> active | canceled`. `canceled` is terminal.
+  - `subscription.go` — typed `Subscription`, `Invoice`,
+    `UsageRecord`, and `Plan` value types. Money in minor units;
+    Stripe ids carried as plain strings.
+  - `service.go` — `Service` orchestrator + `Repository`, `PlanCatalog`,
+    `EventPublisher`, `UsageMeter` ports. Tenant-aware throughout;
+    `ErrTenantRequired` for any tenant-empty call.
+  - `webhook.go` — Stripe webhook signature verifier (HMAC-SHA256 over
+    `t.<timestamp>.<payload>`, `crypto/subtle.ConstantTimeCompare` for
+    constant-time match, 5-minute replay window, `>= 32 byte` secret
+    enforced at construction). Typed errors:
+    `ErrSecretTooShort`, `ErrMissingSignature`, `ErrSignatureMalformed`,
+    `ErrSignatureMismatch`, `ErrEventTooOld`.
+  - `dispatcher.go` — verified-then-parsed event dispatcher with
+    typed handlers for
+    `customer.subscription.created|updated|deleted` and
+    `invoice.payment_succeeded|failed`. Emits typed `BillingPayload`
+    bus events for marketplace plugin subscribers.
+  - `inmemory.go` — goroutine-safe in-process `Repository` and
+    `StaticPlanCatalog` (Free/Starter/Pro seed plans).
+  - `usage.go` — `UsageMeter` port + `InMemoryUsageMeter` and
+    `Snapshot` rollup helper for the admin dashboard.
+- New top-level package `internal/quota/` for per-tenant resource
+  enforcement: `Policy` value with API rate, agent-runs/day, storage
+  bytes, and plugin count limits; `Enforcer` interface; minute and
+  day-bucketed in-memory implementation.
+- New top-level package `internal/registration/` implementing the
+  `pending_email_verification -> email_verified -> onboarding -> active`
+  state machine. `Issuer` mints HMAC-signed verification tokens (same
+  HMAC pattern as the v2.3.0 license-key generator and signed-url
+  issuer; `>= 32 byte` secret enforced). `Service.CompleteOnboarding`
+  hands off to `internal/tenant.AggregateService.Create` to provision
+  the actual tenant.
+- New `internal/eventbus/billing.go` — typed `BillingPayload` and
+  `NewBillingEvent` constructor for the bus, mirroring
+  `MembershipPayload` and `DigitalPayload`.
+- New API endpoints in `cmd/mc-api/`:
+  - Public: `POST /register`, `POST /register/verify`,
+    `POST /register/onboarding` — rate-limited via the existing token
+    bucket; no JWT.
+  - Admin: `GET /api/v1/admin/billing/subscriptions[/{id}]`,
+    `POST .../cancel|pause|resume`,
+    `GET /api/v1/admin/billing/invoices[/{id}]`,
+    `GET /api/v1/admin/billing/usage` — RBAC: viewer for GETs,
+    admin for transitions.
+  - Webhook: `POST /webhooks/stripe` — signature-authenticated,
+    idempotent on Stripe `event.id` (recorded in
+    `stripe_webhook_events`).
+- Postgres adapters in `internal/adapter/postgres/`:
+  - `billing_repo.go` — subscriptions, invoices, and the Stripe
+    idempotency table; explicit SQL with `ON CONFLICT` upserts for
+    invoices.
+  - `registration_repo.go` — tenant_registrations CRUD.
+- Migrations:
+  - `0010_billing.{up,down}.sql` — `billing_plans`,
+    `billing_subscriptions`, `billing_invoices`, `usage_records`,
+    `stripe_webhook_events`, `tenant_registrations` (forward-only,
+    seeded plans for Free/Starter/Pro).
+  - `0011_rls.{up,down}.sql` — Postgres Row-Level Security for every
+    tenant-keyed table (tenants, tenant_settings, memberships,
+    subscriptions, billing_cycles, digital_*, marketplace_*,
+    billing_subscriptions, billing_invoices, usage_records). Policy
+    filters on the `app.current_tenant_id` GUC; admin contexts
+    (empty GUC) bypass the policy.
+- OpenAPI v3.1 spec extended with `/register*`, `/api/v1/admin/billing/*`,
+  `/webhooks/stripe`, plus matching component schemas.
+
+### Security
+
+- Stripe webhook signature verification uses stdlib `crypto/hmac` +
+  `crypto/sha256` + `crypto/subtle.ConstantTimeCompare`; never
+  `bytes.Equal`. Verify-then-parse order enforced by the handler so
+  malformed payloads cannot bypass the gate.
+- Replay protection: 5-minute default window (`DefaultWebhookTolerance`)
+  matching the Stripe SDK default; configurable via `WebhookConfig`.
+- Secret length floor: `>= 32 bytes` enforced at process boot for
+  both the Stripe webhook secret (`ECOMMERCE_STRIPE_WEBHOOK_SECRET`)
+  and the registration HMAC secret
+  (`ECOMMERCE_REGISTRATION_HMAC_SECRET`).
+- Idempotent webhook processing: every accepted Stripe event id is
+  recorded in `stripe_webhook_events`. Duplicate deliveries return
+  `200 OK` without side effects.
+- Postgres RLS on every tenant-keyed table provides defence-in-depth
+  even when application code forgets a `WHERE tenant_id=$1`.
+
 ## Unreleased (v2.4.0 MVP)
 
 ### Added — Marketplace plugin framework + tenant aggregate

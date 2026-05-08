@@ -2893,6 +2893,244 @@ paths:
               schema: { $ref: '#/components/schemas/TenantResponse' }
         '422':
           description: Invalid status transition.
+
+  # v2.5.0 Tenant self-service registration (public, rate-limited).
+  /register:
+    post:
+      summary: Submit tenant registration
+      operationId: submitRegistration
+      description: |
+        Public endpoint that creates a RegistrationRequest in
+        status=pending_email_verification and emails an HMAC-signed
+        verification token. No bearer auth; rate-limited via the
+        same token bucket as the rest of the API.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistrationSubmitRequest' }
+      responses:
+        '202':
+          description: Registration accepted; verification email sent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegistrationSubmitResponse' }
+        '400':
+          description: Invalid email or slug.
+        '409':
+          description: Slug already taken.
+  /register/verify:
+    post:
+      summary: Consume verification token
+      operationId: verifyRegistration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistrationVerifyRequest' }
+      responses:
+        '200':
+          description: Registration verified; ready for onboarding.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegistrationResponse' }
+        '401':
+          description: Token invalid or expired.
+        '404':
+          description: Registration not found.
+  /register/onboarding:
+    post:
+      summary: Complete onboarding and provision tenant
+      operationId: completeRegistrationOnboarding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistrationOnboardingRequest' }
+      responses:
+        '200':
+          description: Tenant provisioned and registration marked active.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegistrationOnboardingResponse' }
+        '409':
+          description: Slug taken or already active.
+        '422':
+          description: Registration not yet verified.
+
+  # v2.5.0 Admin billing surface (admin/super-admin only).
+  /api/v1/admin/billing/subscriptions:
+    get:
+      summary: List billing subscriptions for tenant
+      operationId: listBillingSubscriptions
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/TenantIDHeader' }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '200':
+          description: Paginated subscriptions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingSubscriptionListResponse' }
+  /api/v1/admin/billing/subscriptions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get a billing subscription
+      operationId: getBillingSubscription
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/TenantIDHeader' }
+      responses:
+        '200':
+          description: Subscription.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingSubscriptionResponse' }
+        '404':
+          description: Subscription not found.
+  /api/v1/admin/billing/subscriptions/{id}/cancel:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      summary: Cancel a billing subscription
+      operationId: cancelBillingSubscription
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/TenantIDHeader' }
+      responses:
+        '200':
+          description: Subscription transitioned to canceled.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingSubscriptionResponse' }
+        '422':
+          description: Invalid transition (already canceled, etc.).
+  /api/v1/admin/billing/subscriptions/{id}/pause:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      summary: Pause an active billing subscription
+      operationId: pauseBillingSubscription
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/TenantIDHeader' }
+      responses:
+        '200':
+          description: Subscription transitioned to paused.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingSubscriptionResponse' }
+        '422':
+          description: Invalid transition.
+  /api/v1/admin/billing/subscriptions/{id}/resume:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      summary: Resume a paused billing subscription
+      operationId: resumeBillingSubscription
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/TenantIDHeader' }
+      responses:
+        '200':
+          description: Subscription transitioned to active.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingSubscriptionResponse' }
+        '422':
+          description: Invalid transition.
+  /api/v1/admin/billing/invoices:
+    get:
+      summary: List invoices for tenant
+      operationId: listBillingInvoices
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/TenantIDHeader' }
+      responses:
+        '200':
+          description: Paginated invoices.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingInvoiceListResponse' }
+  /api/v1/admin/billing/invoices/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get an invoice
+      operationId: getBillingInvoice
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/TenantIDHeader' }
+      responses:
+        '200':
+          description: Invoice.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingInvoiceResponse' }
+        '404':
+          description: Invoice not found.
+  /api/v1/admin/billing/usage:
+    get:
+      summary: Current-period usage rollup
+      operationId: getBillingUsage
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/TenantIDHeader' }
+        - name: plan
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Per-metric usage rollup with plan limits.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingUsageResponse' }
+
+  # v2.5.0 Stripe webhook (signature-authenticated, no bearer).
+  /webhooks/stripe:
+    post:
+      summary: Stripe webhook receiver
+      operationId: stripeWebhook
+      description: |
+        Authenticated via Stripe-Signature header (HMAC-SHA256, 5-minute
+        replay window). Idempotent on Stripe event_id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Event processed (or duplicate, no-op).
+        '400':
+          description: Missing or malformed Stripe-Signature header.
+        '401':
+          description: Signature mismatch or replay window exceeded.
 components:
   parameters:
     TenantIDHeader:
@@ -4935,3 +5173,119 @@ components:
       properties:
         name: { type: string }
         plan: { type: string }
+
+    # v2.5.0 Tenant self-service registration schemas.
+    RegistrationSubmitRequest:
+      type: object
+      required: [email, slug_requested]
+      properties:
+        email: { type: string, format: email }
+        slug_requested:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*[a-z0-9]$'
+        plan_requested: { type: string }
+    RegistrationVerifyRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+    RegistrationOnboardingRequest:
+      type: object
+      required: [registration_id, company_name]
+      properties:
+        registration_id: { type: string }
+        company_name: { type: string }
+        plan: { type: string }
+    RegistrationResponse:
+      type: object
+      required: [id, email, slug_requested, plan_requested, status]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        slug_requested: { type: string }
+        plan_requested: { type: string }
+        status:
+          type: string
+          enum: [pending_email_verification, email_verified, onboarding, active]
+        tenant_id: { type: string }
+        company_name: { type: string }
+    RegistrationSubmitResponse:
+      type: object
+      required: [registration, message]
+      properties:
+        registration: { $ref: '#/components/schemas/RegistrationResponse' }
+        message: { type: string }
+    RegistrationOnboardingResponse:
+      type: object
+      required: [registration, tenant]
+      properties:
+        registration: { $ref: '#/components/schemas/RegistrationResponse' }
+        tenant: { $ref: '#/components/schemas/TenantResponse' }
+
+    # v2.5.0 Billing schemas.
+    BillingSubscriptionResponse:
+      type: object
+      required: [id, tenant_id, plan_id, state, current_period_start, current_period_end, created_at, updated_at]
+      properties:
+        id: { type: string }
+        tenant_id: { type: string }
+        plan_id: { type: string }
+        state:
+          type: string
+          enum: [trialing, active, past_due, paused, canceled]
+        stripe_subscription_id: { type: string }
+        stripe_customer_id: { type: string }
+        current_period_start: { type: string, format: date-time }
+        current_period_end: { type: string, format: date-time }
+        cancel_at_period_end: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    BillingSubscriptionListResponse:
+      type: object
+      required: [subscriptions, total]
+      properties:
+        subscriptions:
+          type: array
+          items: { $ref: '#/components/schemas/BillingSubscriptionResponse' }
+        total: { type: integer }
+    BillingInvoiceResponse:
+      type: object
+      required: [id, tenant_id, subscription_id, amount, currency, status]
+      properties:
+        id: { type: string }
+        tenant_id: { type: string }
+        subscription_id: { type: string }
+        amount: { type: integer }
+        currency: { type: string }
+        status:
+          type: string
+          enum: [open, paid, void, uncollectible]
+        period_start: { type: string, format: date-time }
+        period_end: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+    BillingInvoiceListResponse:
+      type: object
+      required: [invoices, total]
+      properties:
+        invoices:
+          type: array
+          items: { $ref: '#/components/schemas/BillingInvoiceResponse' }
+        total: { type: integer }
+    BillingUsageRollup:
+      type: object
+      required: [metric, value, limit]
+      properties:
+        metric: { type: string }
+        value: { type: integer }
+        limit: { type: integer }
+    BillingUsageResponse:
+      type: object
+      required: [tenant_id, plan, period_start, period_end, rollups]
+      properties:
+        tenant_id: { type: string }
+        plan: { type: string }
+        period_start: { type: string, format: date-time }
+        period_end: { type: string, format: date-time }
+        rollups:
+          type: array
+          items: { $ref: '#/components/schemas/BillingUsageRollup' }

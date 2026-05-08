@@ -30,6 +30,7 @@ import (
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	pricingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/pricing"
 	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
+	"github.com/nfsarch33/agentic-ecommerce/internal/billing"
 	compliancedomain "github.com/nfsarch33/agentic-ecommerce/internal/compliance"
 	"github.com/nfsarch33/agentic-ecommerce/internal/digital"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
@@ -39,6 +40,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
+	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
 	"github.com/nfsarch33/agentic-ecommerce/internal/security"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 	"github.com/nfsarch33/agentic-ecommerce/internal/tenant"
@@ -118,44 +120,52 @@ type serverConfig struct {
 }
 
 type server struct {
-	cfg                serverConfig
-	repo               port.ProductRepository
-	orderRepo          port.OrderRepository
-	cartRepo           port.CartRepository
-	membershipRepo     port.MembershipRepository
-	membershipGateway  port.MembershipPaymentGateway
-	membershipNotifier port.MembershipNotificationSender
-	digitalProductRepo port.DigitalProductRepository
-	licenseRepo        port.LicenseRepository
-	accessGrantRepo    port.AccessGrantRepository
-	digitalSvc         *digital.Service
-	eventBus           eventHistory
-	syncEngine         *enginesync.Engine
-	contentAgent       contentGenerator
-	rag                *rag.Service
-	factChecker        *contentagent.FactChecker
-	factChecksMu       sync.RWMutex
-	factChecks         map[string]contentagent.FactCheckResult
-	mediaService       *intelligence.Service
-	workflowClient     temporalWorkflowClient
-	agentRegistry      *orchestrator.Registry
-	agentScheduler     *orchestrator.Scheduler
-	agentSchedules     *orchestrator.ScheduleManager
-	schedulerMu        sync.Mutex
-	webhookService     *outbound.Service
-	webhookSecret      string
-	tenantService      *tenant.Service
-	tenantAggregateSvc *tenant.AggregateService
-	marketplace        *marketplace.Service
-	customRuleStore    compliancedomain.CustomRuleStore
-	complianceHistory  compliancedomain.HistoryStore
-	tokenManager       *security.TokenManager
-	sessions           security.RefreshSessionStore
-	rateLimiter        security.RateLimiter
-	rateLimitFallback  security.RateLimiter
-	readiness          []readinessProbe
-	cleanup            []func()
-	log                *slog.Logger
+	cfg                   serverConfig
+	repo                  port.ProductRepository
+	orderRepo             port.OrderRepository
+	cartRepo              port.CartRepository
+	membershipRepo        port.MembershipRepository
+	membershipGateway     port.MembershipPaymentGateway
+	membershipNotifier    port.MembershipNotificationSender
+	digitalProductRepo    port.DigitalProductRepository
+	licenseRepo           port.LicenseRepository
+	accessGrantRepo       port.AccessGrantRepository
+	digitalSvc            *digital.Service
+	eventBus              eventHistory
+	syncEngine            *enginesync.Engine
+	contentAgent          contentGenerator
+	rag                   *rag.Service
+	factChecker           *contentagent.FactChecker
+	factChecksMu          sync.RWMutex
+	factChecks            map[string]contentagent.FactCheckResult
+	mediaService          *intelligence.Service
+	workflowClient        temporalWorkflowClient
+	agentRegistry         *orchestrator.Registry
+	agentScheduler        *orchestrator.Scheduler
+	agentSchedules        *orchestrator.ScheduleManager
+	schedulerMu           sync.Mutex
+	webhookService        *outbound.Service
+	webhookSecret         string
+	tenantService         *tenant.Service
+	tenantAggregateSvc    *tenant.AggregateService
+	marketplace           *marketplace.Service
+	billingSvc            *billing.Service
+	billingRepo           billing.Repository
+	billingPlans          billing.PlanCatalog
+	billingDispatcher     *billing.Dispatcher
+	usageMeter            billing.UsageMeter
+	stripeWebhookVerifier *billing.WebhookVerifier
+	registrationSvc       *registration.Service
+	regRecorder           *registration.Recorder
+	customRuleStore       compliancedomain.CustomRuleStore
+	complianceHistory     compliancedomain.HistoryStore
+	tokenManager          *security.TokenManager
+	sessions              security.RefreshSessionStore
+	rateLimiter           security.RateLimiter
+	rateLimitFallback     security.RateLimiter
+	readiness             []readinessProbe
+	cleanup               []func()
+	log                   *slog.Logger
 }
 
 type contentGenerator interface {
@@ -398,6 +408,28 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	}
 	tenantAggregateSvc := tenant.NewAggregateService(tenant.NewInMemoryAggregateRepository())
 
+	billingRepo := billing.NewInMemoryRepository()
+	billingPlans := billing.NewStaticPlanCatalog()
+	billingPub := billing.NewBusEventPublisher(bus)
+	billingSvc, billingErr := billing.NewService(billing.ServiceConfig{
+		Repository: billingRepo,
+		Plans:      billingPlans,
+		Publisher:  billingPub,
+	})
+	if billingErr != nil {
+		logger.Warn("billing service disabled", "error", billingErr)
+	}
+	billingDispatcher := billing.NewDispatcher(billingSvc)
+	usageMeter := billing.NewInMemoryUsageMeter()
+	stripeVerifier, stripeVerifierErr := buildStripeWebhookVerifier()
+	if stripeVerifierErr != nil {
+		logger.Warn("stripe webhook verifier disabled", "error", stripeVerifierErr)
+	}
+	registrationSvc, registrationRec, registrationErr := buildRegistrationService(tenantAggregateSvc)
+	if registrationErr != nil {
+		logger.Warn("registration service disabled", "error", registrationErr)
+	}
+
 	srv := &server{
 		cfg: serverConfig{
 			allowedOrigin:     getenv("ECOMMERCE_ALLOWED_ORIGIN", ""),
@@ -418,36 +450,44 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 			shutdownTimeout:   shutdownTimeout,
 			otelEnabled:       otelEnabled,
 		},
-		repo:               repo,
-		orderRepo:          orderRepo,
-		cartRepo:           cartRepo,
-		membershipRepo:     membershipRepo,
-		membershipGateway:  membershipGateway,
-		membershipNotifier: membershipNotifier,
-		digitalProductRepo: digitalProductRepo,
-		licenseRepo:        licenseRepo,
-		accessGrantRepo:    accessGrantRepo,
-		digitalSvc:         digitalSvc,
-		eventBus:           bus,
-		syncEngine:         enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
-		contentAgent:       generator,
-		rag:                ragService,
-		factChecks:         map[string]contentagent.FactCheckResult{},
-		mediaService:       intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
-		workflowClient:     workflowClient,
-		agentRegistry:      registry,
-		agentScheduler:     orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), eventbus.NewEventBusAdapter(bus, "mc-api.agent"), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
-		agentSchedules:     defaultAgentScheduleManager(),
-		webhookService:     webhookService,
-		webhookSecret:      webhookSecret,
-		tenantService:      tenant.NewService(tenant.NewInMemoryRepository()),
-		tenantAggregateSvc: tenantAggregateSvc,
-		marketplace:        marketplaceSvc,
-		customRuleStore:    compliancedomain.NewInMemoryCustomRuleStore(),
-		complianceHistory:  compliancedomain.NewInMemoryHistoryStore(),
-		readiness:          readinessChecks,
-		cleanup:            cleanup,
-		log:                logger,
+		repo:                  repo,
+		orderRepo:             orderRepo,
+		cartRepo:              cartRepo,
+		membershipRepo:        membershipRepo,
+		membershipGateway:     membershipGateway,
+		membershipNotifier:    membershipNotifier,
+		digitalProductRepo:    digitalProductRepo,
+		licenseRepo:           licenseRepo,
+		accessGrantRepo:       accessGrantRepo,
+		digitalSvc:            digitalSvc,
+		eventBus:              bus,
+		syncEngine:            enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
+		contentAgent:          generator,
+		rag:                   ragService,
+		factChecks:            map[string]contentagent.FactCheckResult{},
+		mediaService:          intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
+		workflowClient:        workflowClient,
+		agentRegistry:         registry,
+		agentScheduler:        orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), eventbus.NewEventBusAdapter(bus, "mc-api.agent"), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
+		agentSchedules:        defaultAgentScheduleManager(),
+		webhookService:        webhookService,
+		webhookSecret:         webhookSecret,
+		tenantService:         tenant.NewService(tenant.NewInMemoryRepository()),
+		tenantAggregateSvc:    tenantAggregateSvc,
+		marketplace:           marketplaceSvc,
+		billingSvc:            billingSvc,
+		billingRepo:           billingRepo,
+		billingPlans:          billingPlans,
+		billingDispatcher:     billingDispatcher,
+		usageMeter:            usageMeter,
+		stripeWebhookVerifier: stripeVerifier,
+		registrationSvc:       registrationSvc,
+		regRecorder:           registrationRec,
+		customRuleStore:       compliancedomain.NewInMemoryCustomRuleStore(),
+		complianceHistory:     compliancedomain.NewInMemoryHistoryStore(),
+		readiness:             readinessChecks,
+		cleanup:               cleanup,
+		log:                   logger,
 	}
 	srv.configureSecurity()
 	return srv
@@ -589,6 +629,18 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/tenants", tenantAdminAPI)
 	mux.HandleFunc("/api/v1/tenants/", tenantAdminAPI)
 
+	// v2.5.0 Tenant self-service registration + billing.
+	registrationAPI := s.withCORS(s.withRateLimit(s.registrationHandler))
+	mux.HandleFunc("/register", registrationAPI)
+	mux.HandleFunc("/register/", registrationAPI)
+	billingAPI := s.withCORS(s.withRateLimit(s.withRBAC(adminBillingRole, s.withAudit(adminBillingAuditAction, s.adminBillingHandler))))
+	mux.HandleFunc("/api/v1/admin/billing", billingAPI)
+	mux.HandleFunc("/api/v1/admin/billing/", billingAPI)
+	// Stripe webhook authenticates via signature, not JWT/API token; we
+	// still rate-limit to bound zombie deliveries.
+	stripeWebhookAPI := s.withRateLimit(s.stripeWebhookHandler)
+	mux.HandleFunc("/webhooks/stripe", stripeWebhookAPI)
+
 	return s.withSecurityHeaders(s.withTelemetry(s.withRequestLogging(mux)))
 }
 
@@ -652,6 +704,43 @@ func seedMarketplaceManifests(svc *marketplace.Service) {
 		_ = svc.Catalog().RegisterManifest(nil, m)
 	}
 }
+
+// buildStripeWebhookVerifier returns the Stripe webhook signature
+// verifier. Dev mode allows a 32-byte placeholder secret so the route
+// is reachable; production deployments MUST override
+// ECOMMERCE_STRIPE_WEBHOOK_SECRET with a Stripe-issued whsec_...
+// value of >= 32 bytes.
+func buildStripeWebhookVerifier() (*billing.WebhookVerifier, error) {
+	secret := []byte(getenv("ECOMMERCE_STRIPE_WEBHOOK_SECRET", "dev-only-stripe-webhook-secret-32b"))
+	return billing.NewWebhookVerifier(billing.WebhookConfig{Secret: secret})
+}
+
+// buildRegistrationService wires the v2.5.0 self-service registration
+// pipeline. Dev mode uses a deterministic 32-byte HMAC; production
+// deployments MUST override ECOMMERCE_REGISTRATION_HMAC_SECRET.
+func buildRegistrationService(tenants *tenant.AggregateService) (*registration.Service, *registration.Recorder, error) {
+	secret := []byte(getenv("ECOMMERCE_REGISTRATION_HMAC_SECRET", "dev-only-registration-hmac-secret"))
+	issuer, err := registration.NewIssuer(secret)
+	if err != nil {
+		return nil, nil, err
+	}
+	repo := registration.NewInMemoryRepository()
+	rec := registration.NewRecorder()
+	svc, err := registration.NewService(registration.ServiceConfig{
+		Repository: repo,
+		Issuer:     issuer,
+		Tenants:    tenants,
+		Notifier:   rec,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return svc, rec, nil
+}
+
+// registrationNotifier returns the in-process notification recorder
+// used by tests. Production callers should not rely on this method.
+func (s *server) registrationNotifier() *registration.Recorder { return s.regRecorder }
 
 // buildDigitalService wires the digital service for v2.3.0. The HMAC
 // secret defaults to a deterministic dev value so local runs work
