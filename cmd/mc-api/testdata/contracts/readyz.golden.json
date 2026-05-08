@@ -6,6 +6,11 @@
   },
   "agents": 3,
   "checks": {
+    "cloud_secrets": {
+      "latency_ms": 0,
+      "optional": true,
+      "status": "skipped"
+    },
     "database": {
       "latency_ms": 0,
       "optional": true,
@@ -25,3 +30,4 @@
   "service": "agentic-ecommerce-mc-api",
   "status": "ready"
 }
+

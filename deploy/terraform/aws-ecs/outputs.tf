@@ -26,5 +26,11 @@ output "deployment_summary" {
       temporal_worker = module.temporal_worker_service.deployment_contract
       frontend        = module.frontend_service.deployment_contract
     }
+    tenant_fanout = module.tenant_fanout.deployment_contract
   }
+}
+
+output "tenant_contracts" {
+  description = "Per-tenant placeholder contracts (billing webhook, CDN, secrets, auto-scaling) keyed by tenant_id."
+  value       = module.tenant_fanout.tenant_contracts
 }

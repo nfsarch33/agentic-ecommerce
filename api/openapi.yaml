@@ -2765,6 +2765,131 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MarketplaceSettingsResponse' }
+  # v2.7.0 vendor-side plugin submission queue. Vendors POST a
+  # candidate manifest; super-admins approve or reject via the
+  # /api/v1/admin/marketplace/submissions endpoints below.
+  /api/v1/marketplace/plugins/submit:
+    parameters:
+      - $ref: '#/components/parameters/TenantIDHeader'
+    post:
+      summary: Submit a marketplace plugin manifest for review
+      operationId: submitMarketplacePlugin
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MarketplaceSubmissionRequest' }
+      responses:
+        '201':
+          description: Submission accepted into pending_review state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceSubmission' }
+        '400':
+          description: Invalid submission body.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '409':
+          description: Submission with this id already exists.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/admin/marketplace/submissions:
+    get:
+      summary: List pending plugin submissions (super-admin)
+      operationId: listMarketplaceSubmissions
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: tenant_id
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '200':
+          description: Page of submissions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceSubmissionsListResponse' }
+  /api/v1/admin/marketplace/submissions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: Read a submission
+      operationId: getMarketplaceSubmission
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Submission row.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceSubmission' }
+        '404':
+          description: Submission not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/admin/marketplace/submissions/{id}/approve:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      summary: Approve a pending submission and publish it to the catalogue
+      operationId: approveMarketplaceSubmission
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MarketplaceSubmissionReviewAction' }
+      responses:
+        '200':
+          description: Submission transitioned to approved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceSubmission' }
+        '422':
+          description: Submission is in a terminal state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/admin/marketplace/submissions/{id}/reject:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      summary: Reject a pending submission with review notes
+      operationId: rejectMarketplaceSubmission
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MarketplaceSubmissionReviewAction' }
+      responses:
+        '200':
+          description: Submission transitioned to rejected.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceSubmission' }
+        '422':
+          description: Submission is in a terminal state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
   /api/v1/tenants:
     get:
       summary: List tenants (super-admin)
@@ -5133,6 +5258,64 @@ components:
         settings:
           type: object
           additionalProperties: true
+    MarketplaceSubmissionRequest:
+      type: object
+      required: [submitter_email, slug, name, version, vendor]
+      properties:
+        submitter_email: { type: string, format: email }
+        slug:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*[a-z0-9]$'
+        name: { type: string }
+        version:
+          type: string
+          pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+        vendor: { type: string }
+        description: { type: string }
+        category: { type: string }
+        homepage_url: { type: string }
+        event_subscriptions:
+          type: array
+          items: { type: string }
+        permissions:
+          type: array
+          items: { type: string }
+        dependencies:
+          type: array
+          items:
+            type: object
+            properties:
+              slug: { type: string }
+              constraint: { type: string }
+    MarketplaceSubmissionReviewAction:
+      type: object
+      properties:
+        review_notes: { type: string }
+    MarketplaceSubmission:
+      type: object
+      required: [id, tenant_id, submitter_email, manifest, state, submitted_at]
+      properties:
+        id: { type: string }
+        tenant_id: { type: string }
+        submitter_email: { type: string }
+        manifest: { $ref: '#/components/schemas/MarketplacePluginManifest' }
+        state:
+          type: string
+          enum: [pending_review, approved, rejected]
+        review_notes: { type: string }
+        submitted_at: { type: string }
+        reviewed_at: { type: string }
+        reviewer: { type: string }
+    MarketplaceSubmissionsListResponse:
+      type: object
+      required: [submissions, total, page, per_page]
+      properties:
+        submissions:
+          type: array
+          items: { $ref: '#/components/schemas/MarketplaceSubmission' }
+        total: { type: integer }
+        page: { type: integer }
+        per_page: { type: integer }
     TenantResponse:
       type: object
       required: [id, slug, name, plan, status, created_at, updated_at]
