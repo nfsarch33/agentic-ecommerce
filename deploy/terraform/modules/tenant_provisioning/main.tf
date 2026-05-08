@@ -38,8 +38,9 @@ locals {
         path_prefix = var.secret_path_prefix
         keys        = t.secret_keys
         # Resource paths the application TenantSecretStore adapter
-        # constructs; see internal/adapter/awssecrets and
-        # internal/adapter/gcpsecrets.
+        # constructs; see internal/adapter/secrets (Backend=BackendAWS
+        # or Backend=BackendGCP). Consolidated in v2.8.0 from the
+        # previous awssecrets/gcpsecrets/stubsecrets packages.
         paths = [for k in t.secret_keys : "${var.secret_path_prefix}/${id}/${k}"]
       }
 

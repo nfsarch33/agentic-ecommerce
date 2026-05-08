@@ -9,9 +9,11 @@ import (
 // retrieval. The marketplace + cloud-scale slice introduces tenant-
 // scoped secrets (Stripe keys, license HMAC keys, registration HMAC
 // keys, URL-signing HMAC keys) so each tenant can swap credentials
-// independently. Concrete adapters live in
-// internal/adapter/awssecrets, internal/adapter/gcpsecrets, and
-// internal/adapter/stubsecrets for local boot.
+// independently. The v2.8.0 consolidation collapses the three
+// previous adapter packages (awssecrets, gcpsecrets, stubsecrets)
+// into a single backend-selectable Manager at
+// internal/adapter/secrets, mirroring the internal/adapter/notification
+// package layout (one package, multiple typed senders).
 //
 // Implementations MUST namespace lookups under
 // "agentic-ecommerce/<tenantID>/<key>" and MUST return ErrSecretNotFound
