@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,6 +97,81 @@ func TestRun_Runtime_NoMappingInfersFromDirs(t *testing.T) {
 		t.Fatalf("run: %v\nstderr=%s", err, stderr.String())
 	}
 	mustExist(t, filepath.Join(out, "diff.json"))
+}
+
+func TestMainImpl_HappyPathReturnsZero(t *testing.T) {
+	t.Parallel()
+	fixtures := writeFixtureTree(t)
+	out := filepath.Join(t.TempDir(), "report")
+	var stdout, stderr bytes.Buffer
+	args := []string{
+		"--mode=fixtures",
+		"--fixtures-dir=" + fixtures,
+		"--output-dir=" + out,
+	}
+	if got := mainImpl(args, &stdout, &stderr); got != 0 {
+		t.Fatalf("mainImpl exit=%d stderr=%s", got, stderr.String())
+	}
+}
+
+func TestMainImpl_FlagErrorReturnsCode3(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	args := []string{"--mode=runtime", "--output-dir=/tmp/x"}
+	got := mainImpl(args, &stdout, &stderr)
+	if got != 3 {
+		t.Fatalf("expected exit 3, got %d (stderr=%s)", got, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "uiauto-compare:") {
+		t.Errorf("stderr missing prefix: %q", stderr.String())
+	}
+}
+
+func TestCmdError_UnwrapPreservesCause(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("inner")
+	wrapped := &cmdError{code: 7, err: cause}
+	if !errors.Is(wrapped, cause) {
+		t.Fatalf("errors.Is should match wrapped cause")
+	}
+	if got := wrapped.Unwrap(); got != cause {
+		t.Fatalf("Unwrap() = %v want %v", got, cause)
+	}
+	if wrapped.Error() != "inner" {
+		t.Fatalf("Error() = %q want %q", wrapped.Error(), "inner")
+	}
+}
+
+func TestErrAs_WalksWrappedChains(t *testing.T) {
+	t.Parallel()
+	leaf := &cmdError{code: 9, err: errors.New("leaf")}
+	wrapped := fmt.Errorf("outer: %w", leaf)
+	var target *cmdError
+	if !errAs(wrapped, &target) {
+		t.Fatal("errAs should find wrapped *cmdError")
+	}
+	if target.code != 9 {
+		t.Errorf("got code %d want 9", target.code)
+	}
+}
+
+func TestErrAs_ReturnsFalseForUnrelatedError(t *testing.T) {
+	t.Parallel()
+	var target *cmdError
+	if errAs(errors.New("plain"), &target) {
+		t.Error("errAs returned true for plain error")
+	}
+}
+
+func TestLoadSources_UnsupportedModeReturnsError(t *testing.T) {
+	t.Parallel()
+	_, err := loadSources(options{mode: "garbage", outputDir: "/tmp/x"})
+	if err == nil {
+		t.Fatal("expected error for unsupported mode")
+	}
+	if !strings.Contains(err.Error(), "unsupported mode") {
+		t.Errorf("err = %v", err)
+	}
 }
 
 func mustExist(t *testing.T, path string) {

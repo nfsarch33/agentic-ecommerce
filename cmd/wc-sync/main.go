@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -25,12 +26,21 @@ func (noopChannel) ListProducts(context.Context, woocommerce.ListOptions) ([]woo
 }
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	channel := channelFromEnv(logger, os.Getenv)
+	os.Exit(mainImpl(os.Stdout, os.Getenv))
+}
+
+// mainImpl is the testable entry point. It returns the process exit
+// code so main() reduces to os.Exit(mainImpl(...)). Following the
+// go-clean-architecture pattern, all dependency-construction is here
+// and tests inject getenv + a writer instead of swapping globals.
+func mainImpl(stdout io.Writer, getenv func(string) string) int {
+	logger := slog.New(slog.NewJSONHandler(stdout, nil))
+	channel := channelFromEnv(logger, getenv)
 	if err := run(context.Background(), logger, channel); err != nil {
 		logger.Error("wc-sync.failed", "error", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func run(ctx context.Context, logger *slog.Logger, channel enginesync.WooCommerceClient) error {

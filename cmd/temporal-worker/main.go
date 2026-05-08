@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -28,6 +29,36 @@ import (
 	"go.temporal.io/sdk/worker"
 )
 
+// workerRegistry is the slice of temporal worker.Worker methods that
+// the v2.6.1 cmd/* DI refactor uses to register workflows and
+// activities. It exists only so registerWorkflowsAndActivities can be
+// driven by a fake in tests without dragging in a real Temporal
+// client. Concrete worker.Worker satisfies this implicitly.
+type workerRegistry interface {
+	RegisterWorkflow(w any)
+	RegisterActivityWithOptions(a any, options activity.RegisterOptions)
+}
+
+// temporalDialer is the constructor function for a Temporal client.
+// Production wires it to client.Dial; tests inject a stub that returns
+// a fake client and surfaces dial errors deterministically.
+type temporalDialer func(opts client.Options) (client.Client, error)
+
+// workerDeps groups the runtime adapters needed to register workflows
+// and activities. All fields are concrete pointers to keep the
+// dependency surface explicit (no interface{} bag-of-everything).
+type workerDeps struct {
+	Logger             *slog.Logger
+	TaskQueue          string
+	ScheduleCfg        agentScheduleConfig
+	Repo               port.ProductRepository
+	RepoCleanup        func()
+	PublishActivities  *ecworkflow.ProductPublishActivities
+	ContentActivities  *ecworkflow.ContentGenerationActivities
+	MediaActivities    *ecworkflow.MediaProcessingActivities
+	SourcingActivities *ecworkflow.SourcingActivities
+}
+
 type agentScheduleConfig struct {
 	Enabled           bool
 	DefaultInterval   time.Duration
@@ -36,35 +67,74 @@ type agentScheduleConfig struct {
 }
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	os.Exit(mainImpl(context.Background(), os.Stdout, os.Getenv, client.Dial))
+}
+
+// mainImpl is the testable entry point. The temporalDialer abstracts
+// client.Dial so tests can inject a stub that returns a fake client
+// (or a typed error) without standing up a real Temporal frontend.
+// Returns the process exit code so main() reduces to a single
+// os.Exit(...) call.
+func mainImpl(ctx context.Context, stdout io.Writer, getenv func(string) string, dial temporalDialer) int {
+	logger := slog.New(slog.NewJSONHandler(stdout, nil))
 	temporalAddr := temporalAddressFromEnv()
-	taskQueue := temporalTaskQueueFromEnv()
-	scheduleConfig, err := agentScheduleConfigFromEnv()
+	scheduleCfg, err := agentScheduleConfigFromEnv()
 	if err != nil {
 		logger.Error("temporal_worker.agent_schedules_config", "error", err)
-		os.Exit(1)
+		return 1
 	}
 
-	c, err := client.Dial(client.Options{HostPort: temporalAddr})
+	c, err := dial(client.Options{HostPort: temporalAddr})
 	if err != nil {
 		logger.Error("temporal_worker.client", "addr", temporalAddr, "error", err)
-		os.Exit(1)
+		return 1
 	}
 	defer c.Close()
 
-	repo, cleanupRepo, err := newProductRepositoryFromEnv(context.Background(), logger)
+	deps, err := buildWorkerDeps(ctx, logger, scheduleCfg)
 	if err != nil {
-		logger.Error("temporal_worker.repository", "error", err)
-		os.Exit(1)
+		logger.Error("temporal_worker.dependencies", "error", err)
+		return 1
 	}
-	defer cleanupRepo()
+	defer deps.RepoCleanup()
+
+	w := worker.New(c, deps.TaskQueue, worker.Options{})
+	registerWorkflowsAndActivities(w, deps)
+
+	logger.Info(
+		"temporal_worker.start",
+		"task_queue", deps.TaskQueue,
+		"addr", temporalAddr,
+		"agent_schedules_enabled", scheduleCfg.Enabled,
+		"agent_schedule_default_interval", scheduleCfg.DefaultInterval.String(),
+		"agent_schedule_max_concurrent_runs", scheduleCfg.MaxConcurrentRuns,
+		"agent_schedule_task_queue", scheduleCfg.TaskQueue,
+	)
+	if err := w.Run(worker.InterruptCh()); err != nil {
+		logger.Error("temporal_worker.run", "error", err)
+		return 1
+	}
+	return 0
+}
+
+// buildWorkerDeps wires the activity adapters used by the temporal
+// worker. Touches os.Getenv, http.Client, and the postgres pool.
+// Splitting this out from mainImpl gives tests a deterministic
+// surface to assert configuration without driving the real Temporal
+// SDK.
+func buildWorkerDeps(ctx context.Context, logger *slog.Logger, scheduleCfg agentScheduleConfig) (*workerDeps, error) {
+	repo, cleanupRepo, err := newProductRepositoryFromEnv(ctx, logger)
+	if err != nil {
+		return nil, fmt.Errorf("product repository: %w", err)
+	}
+
 	wcClient := woocommerce.NewClient(woocommerce.Config{
 		BaseURL:        getenv("ECOMMERCE_WC_BASE_URL", ""),
 		ConsumerKey:    getenv("ECOMMERCE_WC_CONSUMER_KEY", ""),
 		ConsumerSecret: getenv("ECOMMERCE_WC_CONSUMER_SECRET", ""),
 	}, &http.Client{Timeout: 10 * time.Second})
 	syncEngine := enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"})
-	activities := ecworkflow.NewProductPublishActivities(ecworkflow.ProductPublishActivityDeps{
+	publishActivities := ecworkflow.NewProductPublishActivities(ecworkflow.ProductPublishActivityDeps{
 		Products:  repo,
 		Publisher: syncPublisher{engine: syncEngine},
 		Recorder:  logRecorder{logger: logger},
@@ -73,43 +143,49 @@ func main() {
 	mediaActivities := newMediaProcessingActivitiesFromEnv(logger, repo)
 	sourcingActivities := ecworkflow.NewSourcingActivities(ecworkflow.SourcingActivityDeps{})
 
-	w := worker.New(c, taskQueue, worker.Options{})
+	return &workerDeps{
+		Logger:             logger,
+		TaskQueue:          temporalTaskQueueFromEnv(),
+		ScheduleCfg:        scheduleCfg,
+		Repo:               repo,
+		RepoCleanup:        cleanupRepo,
+		PublishActivities:  publishActivities,
+		ContentActivities:  contentActivities,
+		MediaActivities:    mediaActivities,
+		SourcingActivities: sourcingActivities,
+	}, nil
+}
+
+// registerWorkflowsAndActivities binds the workflow and activity
+// surface to a temporal worker.Worker. Pure function of (registry,
+// deps) so tests can drive every Register* call against a stub.
+func registerWorkflowsAndActivities(w workerRegistry, deps *workerDeps) {
 	w.RegisterWorkflow(ecworkflow.ProductPublishWorkflow)
 	w.RegisterWorkflow(ecworkflow.ContentGenerationWorkflow)
 	w.RegisterWorkflow(ecworkflow.MediaProcessingWorkflow)
 	w.RegisterWorkflow(ecworkflow.SourcingWorkflow)
-	w.RegisterActivityWithOptions(activities.CheckCompliance, activity.RegisterOptions{Name: ecworkflow.CheckComplianceActivity})
-	w.RegisterActivityWithOptions(activities.ValidateMedia, activity.RegisterOptions{Name: ecworkflow.ValidateMediaActivity})
-	w.RegisterActivityWithOptions(activities.PublishToWooCommerce, activity.RegisterOptions{Name: ecworkflow.PublishToWooCommerceActivity})
-	w.RegisterActivityWithOptions(activities.RecordWorkflowEvent, activity.RegisterOptions{Name: ecworkflow.RecordWorkflowEventActivity})
-	w.RegisterActivityWithOptions(contentActivities.GenerateContent, activity.RegisterOptions{Name: ecworkflow.ContentGenerateActivity})
-	w.RegisterActivityWithOptions(contentActivities.FactCheckContent, activity.RegisterOptions{Name: ecworkflow.ContentFactCheckActivity})
-	w.RegisterActivityWithOptions(contentActivities.EvaluateContent, activity.RegisterOptions{Name: ecworkflow.ContentEvaluateActivity})
-	w.RegisterActivityWithOptions(contentActivities.RecordContentFactCheck, activity.RegisterOptions{Name: ecworkflow.RecordContentFactCheckActivity})
-	w.RegisterActivityWithOptions(mediaActivities.SourceMedia, activity.RegisterOptions{Name: ecworkflow.MediaSourceActivity})
-	w.RegisterActivityWithOptions(mediaActivities.ProcessMedia, activity.RegisterOptions{Name: ecworkflow.MediaProcessActivity})
-	w.RegisterActivityWithOptions(mediaActivities.AssessMediaQuality, activity.RegisterOptions{Name: ecworkflow.MediaQualityActivity})
-	w.RegisterActivityWithOptions(mediaActivities.StoreMedia, activity.RegisterOptions{Name: ecworkflow.MediaStoreActivity})
-	w.RegisterActivityWithOptions(mediaActivities.LinkMediaToProduct, activity.RegisterOptions{Name: ecworkflow.MediaLinkProductActivity})
-	w.RegisterActivityWithOptions(sourcingActivities.SearchSuppliers, activity.RegisterOptions{Name: ecworkflow.SearchSuppliersActivity})
-	w.RegisterActivityWithOptions(sourcingActivities.ScoreCandidates, activity.RegisterOptions{Name: ecworkflow.ScoreSourcingCandidatesActivity})
-	w.RegisterActivityWithOptions(sourcingActivities.ComparePrices, activity.RegisterOptions{Name: ecworkflow.CompareSourcingPricesActivity})
-	w.RegisterActivityWithOptions(sourcingActivities.CheckMargin, activity.RegisterOptions{Name: ecworkflow.CheckSourcingMarginActivity})
-	w.RegisterActivityWithOptions(sourcingActivities.RecommendCandidate, activity.RegisterOptions{Name: ecworkflow.RecommendSourcingCandidateActivity})
 
-	logger.Info(
-		"temporal_worker.start",
-		"task_queue", taskQueue,
-		"addr", temporalAddr,
-		"agent_schedules_enabled", scheduleConfig.Enabled,
-		"agent_schedule_default_interval", scheduleConfig.DefaultInterval.String(),
-		"agent_schedule_max_concurrent_runs", scheduleConfig.MaxConcurrentRuns,
-		"agent_schedule_task_queue", scheduleConfig.TaskQueue,
-	)
-	if err := w.Run(worker.InterruptCh()); err != nil {
-		logger.Error("temporal_worker.run", "error", err)
-		os.Exit(1)
-	}
+	w.RegisterActivityWithOptions(deps.PublishActivities.CheckCompliance, activity.RegisterOptions{Name: ecworkflow.CheckComplianceActivity})
+	w.RegisterActivityWithOptions(deps.PublishActivities.ValidateMedia, activity.RegisterOptions{Name: ecworkflow.ValidateMediaActivity})
+	w.RegisterActivityWithOptions(deps.PublishActivities.PublishToWooCommerce, activity.RegisterOptions{Name: ecworkflow.PublishToWooCommerceActivity})
+	w.RegisterActivityWithOptions(deps.PublishActivities.RecordWorkflowEvent, activity.RegisterOptions{Name: ecworkflow.RecordWorkflowEventActivity})
+
+	w.RegisterActivityWithOptions(deps.ContentActivities.GenerateContent, activity.RegisterOptions{Name: ecworkflow.ContentGenerateActivity})
+	w.RegisterActivityWithOptions(deps.ContentActivities.FactCheckContent, activity.RegisterOptions{Name: ecworkflow.ContentFactCheckActivity})
+	w.RegisterActivityWithOptions(deps.ContentActivities.EvaluateContent, activity.RegisterOptions{Name: ecworkflow.ContentEvaluateActivity})
+	w.RegisterActivityWithOptions(deps.ContentActivities.RecordContentFactCheck, activity.RegisterOptions{Name: ecworkflow.RecordContentFactCheckActivity})
+
+	w.RegisterActivityWithOptions(deps.MediaActivities.SourceMedia, activity.RegisterOptions{Name: ecworkflow.MediaSourceActivity})
+	w.RegisterActivityWithOptions(deps.MediaActivities.ProcessMedia, activity.RegisterOptions{Name: ecworkflow.MediaProcessActivity})
+	w.RegisterActivityWithOptions(deps.MediaActivities.AssessMediaQuality, activity.RegisterOptions{Name: ecworkflow.MediaQualityActivity})
+	w.RegisterActivityWithOptions(deps.MediaActivities.StoreMedia, activity.RegisterOptions{Name: ecworkflow.MediaStoreActivity})
+	w.RegisterActivityWithOptions(deps.MediaActivities.LinkMediaToProduct, activity.RegisterOptions{Name: ecworkflow.MediaLinkProductActivity})
+
+	w.RegisterActivityWithOptions(deps.SourcingActivities.SearchSuppliers, activity.RegisterOptions{Name: ecworkflow.SearchSuppliersActivity})
+	w.RegisterActivityWithOptions(deps.SourcingActivities.ScoreCandidates, activity.RegisterOptions{Name: ecworkflow.ScoreSourcingCandidatesActivity})
+	w.RegisterActivityWithOptions(deps.SourcingActivities.ComparePrices, activity.RegisterOptions{Name: ecworkflow.CompareSourcingPricesActivity})
+	w.RegisterActivityWithOptions(deps.SourcingActivities.CheckMargin, activity.RegisterOptions{Name: ecworkflow.CheckSourcingMarginActivity})
+	w.RegisterActivityWithOptions(deps.SourcingActivities.RecommendCandidate, activity.RegisterOptions{Name: ecworkflow.RecommendSourcingCandidateActivity})
 }
 
 func newMediaProcessingActivitiesFromEnv(logger *slog.Logger, repo port.ProductRepository) *ecworkflow.MediaProcessingActivities {
