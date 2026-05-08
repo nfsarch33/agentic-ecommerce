@@ -54,15 +54,25 @@ type options struct {
 }
 
 func main() {
-	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
+	os.Exit(mainImpl(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+// mainImpl is the testable entry point. It returns the process exit
+// code so main() reduces to os.Exit(mainImpl(...)). Following the
+// go-clean-architecture pattern: cmd/* main reduces to dependency
+// build + delegate, with errors translated to exit codes by a single
+// pure function.
+func mainImpl(args []string, stdout, stderr io.Writer) int {
+	if err := run(args, stdout, stderr); err != nil {
 		exitCode := 2
 		var ce *cmdError
 		if errAs(err, &ce) {
 			exitCode = ce.code
 		}
-		fmt.Fprintf(os.Stderr, "uiauto-compare: %s\n", err)
-		os.Exit(exitCode)
+		fmt.Fprintf(stderr, "uiauto-compare: %s\n", err)
+		return exitCode
 	}
+	return 0
 }
 
 func run(args []string, stdout, stderr io.Writer) error {

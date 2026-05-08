@@ -178,57 +178,9 @@ type eventHistory interface {
 }
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if isHealthcheckArgs(os.Args) {
-		if err := runHealthcheck(getenv("ECOMMERCE_HTTP_ADDR", "127.0.0.1:8080")); err != nil {
-			logger.Error("mc-api.healthcheck_failed", "error", err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	repo := inmemory.NewProductRepository()
-	seedDefaultProducts(repo)
-	orderRepo := inmemory.NewOrderRepository()
-	cartRepo := inmemory.NewCartRepository()
-
-	addr := getenv("ECOMMERCE_HTTP_ADDR", "127.0.0.1:8080")
-	logger.Info("mc-api.start", "addr", addr)
-
-	srv := newServer(logger, repo, orderRepo, cartRepo)
-	defer srv.Close()
-	httpServer := &http.Server{
-		Addr:              addr,
-		Handler:           srv.mux(),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- httpServer.ListenAndServe()
-	}()
-
-	select {
-	case err := <-errCh:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("mc-api.stop", "error", err)
-			os.Exit(1)
-		}
-	case <-ctx.Done():
-		logger.Info("mc-api.shutdown")
-		shutdownTimeout := srv.cfg.shutdownTimeout
-		if shutdownTimeout <= 0 {
-			shutdownTimeout = 10 * time.Second
-		}
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-		if err := httpServer.Shutdown(shutdownCtx); err != nil {
-			logger.Error("mc-api.shutdown_failed", "error", err)
-			os.Exit(1)
-		}
-	}
+	os.Exit(mainImpl(ctx, os.Args, os.Stdout, os.Getenv))
 }
 
 func isHealthcheckArgs(args []string) bool {
