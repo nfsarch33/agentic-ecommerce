@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage coverage-check lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate
+.PHONY: test build vet coverage coverage-check integration-pg lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -46,7 +46,13 @@ coverage:
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go tool cover -func=coverage.out
 
 coverage-check: coverage
-	@GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go tool cover -func=coverage.out | awk '/^total:/ { sub(/%/,"",$$3); if ($$3 + 0 < 80) { printf("coverage %.1f%% is below 80%%\n", $$3); exit 1 } printf("coverage %.1f%% >= 80%%\n", $$3) }'
+	@GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go tool cover -func=coverage.out | awk '/^total:/ { sub(/%/,"",$$3); if ($$3 + 0 < 83) { printf("coverage %.1f%% is below 83%% (target 85%% with 2-point buffer)\n", $$3); exit 1 } printf("coverage %.1f%% >= 83%% (gate)\n", $$3) }'
+
+# integration-pg runs the testcontainers-driven postgres + pgvector
+# integration tests gated by the `integration_pg` build tag. Requires
+# Docker; tests self-skip when Docker is unreachable.
+integration-pg:
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test -count=1 -tags integration_pg ./internal/adapter/postgres/... ./internal/rag/...
 
 lint:
 	golangci-lint run ./...

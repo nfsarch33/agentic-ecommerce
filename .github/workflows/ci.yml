@@ -76,6 +76,12 @@ jobs:
       - name: Build content-worker image
         run: docker build --build-arg TARGET=content-worker --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }}-content-worker .
 
+      - name: Build agent-worker image
+        run: docker build --build-arg TARGET=agent-worker --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }}-agent-worker .
+
+      - name: Build temporal-worker image
+        run: docker build --build-arg TARGET=temporal-worker --build-arg COMMIT=${{ github.sha }} -t agentic-ecommerce:${{ github.sha }}-temporal-worker .
+
       - name: Scan mc-api image with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -100,6 +106,26 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: agentic-ecommerce:${{ github.sha }}-content-worker
+          format: table
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan agent-worker image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: agentic-ecommerce:${{ github.sha }}-agent-worker
+          format: table
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan temporal-worker image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: agentic-ecommerce:${{ github.sha }}-temporal-worker
           format: table
           vuln-type: os,library
           severity: CRITICAL,HIGH
