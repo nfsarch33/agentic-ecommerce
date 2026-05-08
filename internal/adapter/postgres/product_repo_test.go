@@ -257,6 +257,16 @@ func assignScanValue(dest, value any) {
 		default:
 			panic("unsupported []byte scan value")
 		}
+	case *bool:
+		if value == nil {
+			*d = false
+			return
+		}
+		b, ok := value.(bool)
+		if !ok {
+			panic("unsupported bool scan value")
+		}
+		*d = b
 	default:
 		panic("unsupported scan destination")
 	}
