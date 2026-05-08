@@ -10,6 +10,7 @@
 !.env.example
 !.env.compose.example
 secrets/
+!internal/adapter/secrets/
 credentials/
 *.pem
 *.key
