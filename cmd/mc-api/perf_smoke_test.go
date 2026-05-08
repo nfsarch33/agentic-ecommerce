@@ -19,6 +19,29 @@ import (
 )
 
 func TestReleasePerformanceSmoke(t *testing.T) {
+	fixture := newReleasePerformanceFixture(t)
+	for _, scenario := range releasePerfScenarios(fixture) {
+		assertReleasePerfScenario(t, scenario)
+	}
+}
+
+type releasePerfFixture struct {
+	client             *http.Client
+	baseURL            string
+	adminToken         string
+	productID          string
+	webhookReceiverURL string
+}
+
+type releasePerfScenario struct {
+	name   string
+	target time.Duration
+	run    func() error
+}
+
+func newReleasePerformanceFixture(t *testing.T) releasePerfFixture {
+	t.Helper()
+
 	srv, repo := testServerWithCfg(t, serverConfig{
 		jwtSecret:         "release-perf-smoke-secret-at-least-32-bytes",
 		jwtIssuer:         "agentic-ecommerce",
@@ -52,7 +75,7 @@ func TestReleasePerformanceSmoke(t *testing.T) {
 	webhookReceiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	defer webhookReceiver.Close()
+	t.Cleanup(webhookReceiver.Close)
 	srv.webhookService = outbound.NewService(outbound.ServiceConfig{
 		Client: outbound.NewClient(outbound.ClientConfig{
 			HTTPClient:  webhookReceiver.Client(),
@@ -63,150 +86,174 @@ func TestReleasePerformanceSmoke(t *testing.T) {
 	srv.configureSecurity()
 
 	httpServer := httptest.NewServer(srv.mux())
-	defer httpServer.Close()
+	t.Cleanup(httpServer.Close)
 	client := &http.Client{Timeout: 2 * time.Second}
-	adminToken := perfLogin(t, client, httpServer.URL)
+	return releasePerfFixture{
+		client:             client,
+		baseURL:            httpServer.URL,
+		adminToken:         perfLogin(t, client, httpServer.URL),
+		productID:          product.ID().String(),
+		webhookReceiverURL: webhookReceiver.URL,
+	}
+}
 
-	scenarios := []struct {
-		name   string
-		target time.Duration
-		run    func() error
-	}{
+func releasePerfScenarios(fixture releasePerfFixture) []releasePerfScenario {
+	return []releasePerfScenario{
 		{
 			name:   "GET /api/v1/products",
 			target: 100 * time.Millisecond,
 			run: func() error {
-				return perfRequest(client, http.MethodGet, httpServer.URL+"/api/v1/products", "", nil)
+				return fixture.listProducts()
 			},
 		},
 		{
 			name:   "POST /api/v1/orders",
 			target: 200 * time.Millisecond,
 			run: func() error {
-				body := []byte(`{"customer_email":"shopper@example.com","items":[{"product_id":"c1000000-0000-0000-0000-000000000001","sku":"BAND-001","title":"Resistance Band","quantity":1,"unit_price":{"amount":2495,"currency":"AUD"}}],"shipping_address":{"name":"Jane Shopper","line1":"1 Market Street","city":"Sydney","region":"NSW","postal_code":"2000","country":"AU"}}`)
-				return perfRequest(client, http.MethodPost, httpServer.URL+"/api/v1/orders", "", body)
+				return fixture.createOrder()
 			},
 		},
 		{
 			name:   "POST /api/v1/products/{id}/generate-description",
 			target: 2 * time.Second,
 			run: func() error {
-				body := []byte(`{"style":"professional","max_words":120,"keywords":["resistance band set","home workouts"]}`)
-				return perfRequest(
-					client,
-					http.MethodPost,
-					fmt.Sprintf("%s/api/v1/products/%s/generate-description", httpServer.URL, product.ID().String()),
-					adminToken,
-					body,
-				)
+				return fixture.generateDescription()
 			},
 		},
 		{
 			name:   "POST /api/v1/workflows/product-publish",
 			target: 500 * time.Millisecond,
 			run: func() error {
-				body := []byte(`{"product_id":"` + product.ID().String() + `","requested_by":"perf-smoke"}`)
-				return perfRequest(client, http.MethodPost, httpServer.URL+"/api/v1/workflows/product-publish", adminToken, body)
+				return fixture.startProductPublishWorkflow()
 			},
 		},
 		{
 			name:   "POST /api/v1/media/{id}/validate",
 			target: 500 * time.Millisecond,
 			run: func() error {
-				sourceBody, err := perfRequestBody(
-					client,
-					http.MethodPost,
-					httpServer.URL+"/api/v1/media/source",
-					adminToken,
-					[]byte(`{"url":"http://127.0.0.1:18081/fixtures/resistance-band.png","product_id":"`+product.ID().String()+`","alt_text":"Resistance band product image"}`),
-				)
-				if err != nil {
-					return err
-				}
-				var sourced struct {
-					ID string `json:"id"`
-				}
-				if err := json.Unmarshal(sourceBody, &sourced); err != nil {
-					return err
-				}
-				if sourced.ID == "" {
-					return fmt.Errorf("missing sourced media id")
-				}
-				processBody, err := perfRequestBody(
-					client,
-					http.MethodPost,
-					httpServer.URL+"/api/v1/media/process",
-					adminToken,
-					[]byte(`{"media_id":"`+sourced.ID+`","format":"image/webp"}`),
-				)
-				if err != nil {
-					return err
-				}
-				var processed struct {
-					ID string `json:"id"`
-				}
-				if err := json.Unmarshal(processBody, &processed); err != nil {
-					return err
-				}
-				if processed.ID == "" {
-					return fmt.Errorf("missing processed media id")
-				}
-				return perfRequest(client, http.MethodPost, httpServer.URL+"/api/v1/media/"+processed.ID+"/validate", adminToken, nil)
+				return fixture.validateMedia()
 			},
 		},
 		{
 			name:   "POST /api/v1/webhooks/{id}/test",
 			target: 500 * time.Millisecond,
 			run: func() error {
-				createBody, err := perfRequestBody(
-					client,
-					http.MethodPost,
-					httpServer.URL+"/api/v1/webhooks",
-					adminToken,
-					[]byte(`{"url":"`+webhookReceiver.URL+`","event_types":["order.placed"],"secret":"perf-local-secret"}`),
-				)
-				if err != nil {
-					return err
-				}
-				var created struct {
-					ID string `json:"id"`
-				}
-				if err := json.Unmarshal(createBody, &created); err != nil {
-					return err
-				}
-				if created.ID == "" {
-					return fmt.Errorf("missing webhook id")
-				}
-				if err := perfRequest(client, http.MethodPost, httpServer.URL+"/api/v1/webhooks/"+created.ID+"/test", adminToken, []byte(`{"event_type":"order.placed"}`)); err != nil {
-					return err
-				}
-				return perfRequest(client, http.MethodDelete, httpServer.URL+"/api/v1/webhooks/"+created.ID, adminToken, nil)
+				return fixture.testWebhookDelivery()
 			},
 		},
 	}
+}
 
-	for _, scenario := range scenarios {
-		t.Run(scenario.name, func(t *testing.T) {
-			for i := 0; i < 3; i++ {
-				if err := scenario.run(); err != nil {
-					t.Fatalf("warmup request failed: %v", err)
-				}
+func assertReleasePerfScenario(t *testing.T, scenario releasePerfScenario) {
+	t.Helper()
+	t.Run(scenario.name, func(t *testing.T) {
+		for i := 0; i < 3; i++ {
+			if err := scenario.run(); err != nil {
+				t.Fatalf("warmup request failed: %v", err)
 			}
-			samples := make([]time.Duration, 0, 40)
-			for i := 0; i < 40; i++ {
-				start := time.Now()
-				if err := scenario.run(); err != nil {
-					t.Fatalf("request %d failed: %v", i+1, err)
-				}
-				samples = append(samples, time.Since(start))
+		}
+		samples := make([]time.Duration, 0, 40)
+		for i := 0; i < 40; i++ {
+			start := time.Now()
+			if err := scenario.run(); err != nil {
+				t.Fatalf("request %d failed: %v", i+1, err)
 			}
-			p95 := percentile(samples, 95)
-			t.Logf("%s p95=%s target<%s samples=%d", scenario.name, p95, scenario.target, len(samples))
-			if p95 >= scenario.target {
-				t.Fatalf("%s p95=%s, want <%s", scenario.name, p95, scenario.target)
-			}
-		})
+			samples = append(samples, time.Since(start))
+		}
+		p95 := percentile(samples, 95)
+		t.Logf("%s p95=%s target<%s samples=%d", scenario.name, p95, scenario.target, len(samples))
+		if p95 >= scenario.target {
+			t.Fatalf("%s p95=%s, want <%s", scenario.name, p95, scenario.target)
+		}
+	})
+}
+
+func (f releasePerfFixture) listProducts() error {
+	return perfRequest(f.client, http.MethodGet, f.baseURL+"/api/v1/products", "", nil)
+}
+
+func (f releasePerfFixture) createOrder() error {
+	body := []byte(`{"customer_email":"shopper@example.com","items":[{"product_id":"c1000000-0000-0000-0000-000000000001","sku":"BAND-001","title":"Resistance Band","quantity":1,"unit_price":{"amount":2495,"currency":"AUD"}}],"shipping_address":{"name":"Jane Shopper","line1":"1 Market Street","city":"Sydney","region":"NSW","postal_code":"2000","country":"AU"}}`)
+	return perfRequest(f.client, http.MethodPost, f.baseURL+"/api/v1/orders", "", body)
+}
+
+func (f releasePerfFixture) generateDescription() error {
+	body := []byte(`{"style":"professional","max_words":120,"keywords":["resistance band set","home workouts"]}`)
+	return perfRequest(
+		f.client,
+		http.MethodPost,
+		fmt.Sprintf("%s/api/v1/products/%s/generate-description", f.baseURL, f.productID),
+		f.adminToken,
+		body,
+	)
+}
+
+func (f releasePerfFixture) startProductPublishWorkflow() error {
+	body := []byte(`{"product_id":"` + f.productID + `","requested_by":"perf-smoke"}`)
+	return perfRequest(f.client, http.MethodPost, f.baseURL+"/api/v1/workflows/product-publish", f.adminToken, body)
+}
+
+func (f releasePerfFixture) validateMedia() error {
+	sourcedID, err := f.sourceMedia()
+	if err != nil {
+		return err
 	}
+	processedID, err := f.processMedia(sourcedID)
+	if err != nil {
+		return err
+	}
+	return perfRequest(f.client, http.MethodPost, f.baseURL+"/api/v1/media/"+processedID+"/validate", f.adminToken, nil)
+}
+
+func (f releasePerfFixture) sourceMedia() (string, error) {
+	body := []byte(`{"url":"http://127.0.0.1:18081/fixtures/resistance-band.png","product_id":"` + f.productID + `","alt_text":"Resistance band product image"}`)
+	payload, err := perfRequestBody(f.client, http.MethodPost, f.baseURL+"/api/v1/media/source", f.adminToken, body)
+	if err != nil {
+		return "", err
+	}
+	return perfIDFromPayload(payload, "sourced media")
+}
+
+func (f releasePerfFixture) processMedia(mediaID string) (string, error) {
+	body := []byte(`{"media_id":"` + mediaID + `","format":"image/webp"}`)
+	payload, err := perfRequestBody(f.client, http.MethodPost, f.baseURL+"/api/v1/media/process", f.adminToken, body)
+	if err != nil {
+		return "", err
+	}
+	return perfIDFromPayload(payload, "processed media")
+}
+
+func (f releasePerfFixture) testWebhookDelivery() error {
+	webhookID, err := f.createWebhook()
+	if err != nil {
+		return err
+	}
+	if err := perfRequest(f.client, http.MethodPost, f.baseURL+"/api/v1/webhooks/"+webhookID+"/test", f.adminToken, []byte(`{"event_type":"order.placed"}`)); err != nil {
+		return err
+	}
+	return perfRequest(f.client, http.MethodDelete, f.baseURL+"/api/v1/webhooks/"+webhookID, f.adminToken, nil)
+}
+
+func (f releasePerfFixture) createWebhook() (string, error) {
+	body := []byte(`{"url":"` + f.webhookReceiverURL + `","event_types":["order.placed"],"secret":"perf-local-secret"}`)
+	payload, err := perfRequestBody(f.client, http.MethodPost, f.baseURL+"/api/v1/webhooks", f.adminToken, body)
+	if err != nil {
+		return "", err
+	}
+	return perfIDFromPayload(payload, "webhook")
+}
+
+func perfIDFromPayload(payload []byte, label string) (string, error) {
+	var decoded struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return "", err
+	}
+	if decoded.ID == "" {
+		return "", fmt.Errorf("missing %s id", label)
+	}
+	return decoded.ID, nil
 }
 
 func perfLogin(t *testing.T, client *http.Client, baseURL string) string {
