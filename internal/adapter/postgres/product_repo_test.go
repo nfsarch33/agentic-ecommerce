@@ -206,6 +206,33 @@ func assignScanValue(dest, value any) {
 		*d = value.(int)
 	case *time.Time:
 		*d = value.(time.Time)
+	case *[]string:
+		if value == nil {
+			*d = nil
+			return
+		}
+		strs, ok := value.([]string)
+		if !ok {
+			panic("unsupported []string scan value")
+		}
+		// Defensive copy: callers should not see aliased state.
+		out := make([]string, len(strs))
+		copy(out, strs)
+		*d = out
+	case **time.Time:
+		if value == nil {
+			*d = nil
+			return
+		}
+		switch v := value.(type) {
+		case *time.Time:
+			*d = v
+		case time.Time:
+			t := v
+			*d = &t
+		default:
+			panic("unsupported *time.Time scan value")
+		}
 	default:
 		panic("unsupported scan destination")
 	}

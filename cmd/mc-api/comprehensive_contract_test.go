@@ -94,6 +94,18 @@ func TestOpenAPIOperationsHaveComprehensiveContractCoverage(t *testing.T) {
 		"updateProduct":                    true,
 		"updateTenantSettings":             true,
 		"validateMedia":                    true,
+		"cancelMembership":                 true,
+		"createMembership":                 true,
+		"createMembershipPlan":             true,
+		"deleteMembershipPlan":             true,
+		"getMembership":                    true,
+		"getMembershipPlan":                true,
+		"listMemberships":                  true,
+		"listMembershipPlans":              true,
+		"pauseMembership":                  true,
+		"resumeMembership":                 true,
+		"updateMembership":                 true,
+		"updateMembershipPlan":             true,
 	}
 
 	var seen []string

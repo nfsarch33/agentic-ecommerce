@@ -11,6 +11,14 @@ const (
 	SyncCompleted     EventType = "sync.completed"
 	AgentRunCompleted EventType = "agent.run.completed"
 	ComplianceChecked EventType = "compliance.checked"
+
+	// Membership bounded context events. The lifecycle reflects the
+	// subscription state machine in internal/domain/membership/state.go.
+	MembershipCreated   EventType = "membership.created"
+	MembershipRenewed   EventType = "membership.renewed"
+	MembershipCancelled EventType = "membership.cancelled"
+	MembershipPaused    EventType = "membership.paused"
+	MembershipResumed   EventType = "membership.resumed"
 )
 
 type Event struct {
