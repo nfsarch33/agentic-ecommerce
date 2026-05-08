@@ -10,9 +10,11 @@ import (
 	"time"
 )
 
+// testSecret values are deterministic test fixtures. Avoid the
+// hex-only pattern that gitleaks flags as generic-api-key.
 const (
 	testSecretShort = "shortsecret"
-	testSecret      = "0123456789abcdef0123456789abcdef" // exactly 32 bytes
+	testSecret      = "test-stripe-webhook-secret-32by!" // 32 bytes; gitleaks:allow
 )
 
 func TestNewWebhookVerifierRejectsShortSecret(t *testing.T) {

@@ -12,6 +12,9 @@ import (
 	"time"
 )
 
+// stripeWebhookTestSecret matches the fallback dev secret in main.go's
+// buildStripeWebhookVerifier so tests run against the in-process
+// verifier without env overrides. gitleaks:allow
 const stripeWebhookTestSecret = "dev-only-stripe-webhook-secret-32b"
 
 func sign(t *testing.T, secret []byte, payload []byte, ts int64) string {
