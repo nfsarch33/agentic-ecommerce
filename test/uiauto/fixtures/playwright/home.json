@@ -1,0 +1,38 @@
+{
+  "suites": [
+    {
+      "file": "e2e/home.spec.ts",
+      "specs": [
+        {
+          "file": "e2e/home.spec.ts",
+          "tests": [
+            {
+              "results": [
+                {
+                  "duration": 421,
+                  "status": "passed",
+                  "steps": [
+                    {
+                      "selector": "/",
+                      "title": "page.goto('/')"
+                    },
+                    {
+                      "selector": "role=heading[name=/agentic ecommerce/i]",
+                      "title": "expect(heading).toBeVisible"
+                    },
+                    {
+                      "selector": "role=link[name=/browse products/i]",
+                      "title": "expect(link).toBeVisible"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "title": "home page renders the hero"
+        }
+      ]
+    }
+  ]
+}
+

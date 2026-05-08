@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1.7
+#
+# Documented build harness override for the uiauto-framework runner.
+# Tracks upstream issue: nfsarch33/uiauto-framework#8 -- the upstream
+# Dockerfile pins golang:1.24.11 but go.mod declares go 1.26, so the stock
+# image fails with "go.mod requires go >= 1.26 (running go 1.24.11;
+# GOTOOLCHAIN=local)".
+#
+# This file lives in the agentic-ecommerce repo and pulls source from the
+# `framework` named context wired up in docker-compose.dev.yml's
+# uiauto-runner.build.additional_contexts. It is NOT a vendor fork; the
+# framework source itself is unchanged.
+#
+# Once the upstream issue is fixed (Dockerfile gets GOTOOLCHAIN=auto or a
+# Go 1.26 base image), revert the compose `build:` block to point at the
+# upstream Dockerfile and delete this file.
+FROM golang:1.24.11-bookworm AS build
+ENV GOTOOLCHAIN=auto
+ENV GOSUMDB=sum.golang.org
+WORKDIR /src
+COPY --from=framework . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/ui-agent ./cmd/ui-agent
+
+FROM gcr.io/distroless/base-debian12:nonroot
+COPY --from=build /out/ui-agent /ui-agent
+WORKDIR /work
+ENTRYPOINT ["/ui-agent"]

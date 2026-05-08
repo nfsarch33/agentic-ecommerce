@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage coverage-check integration-pg lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate
+.PHONY: test build vet coverage coverage-check integration-pg lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate uiauto-smoke uiauto-compare compose-uiauto-config uiauto-down uiauto-up
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -40,6 +40,7 @@ build:
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/content-worker ./cmd/content-worker
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/agent-worker ./cmd/agent-worker
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/temporal-worker ./cmd/temporal-worker
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/uiauto-compare ./cmd/uiauto-compare
 
 coverage:
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test -race -coverprofile=coverage.out ./...
@@ -335,3 +336,75 @@ monitoring-validate:
 		echo "promtool not installed; using Go YAML/JSON validation"; \
 	fi
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test ./monitoring
+
+# v2.1.0: uiauto-framework comparison harness. Research-mode integration; no
+# CI gate. Driven by docker compose profile `uiauto` defined in
+# docker-compose.dev.yml. Uses host paths from $(HOME) for the framework
+# checkout and the frontend scenarios so canonical (non-worktree) checkouts
+# work out of the box. Override with `make UIAUTO_FRAMEWORK_PATH=... uiauto-smoke`.
+UIAUTO_FRAMEWORK_PATH ?= $(HOME)/Code/personal/uiauto-framework
+UIAUTO_SCENARIOS_PATH ?= $(HOME)/Code/personal/agentic-ecommerce-web/test/uiauto/scenarios
+UIAUTO_EXAMPLE_SCENARIOS_PATH ?= $(CURDIR)/test/uiauto/example
+UIAUTO_HARNESS_PATH ?= $(CURDIR)/test/uiauto
+UIAUTO_PROFILE := --profile uiauto
+UIAUTO_REPORT_DATE ?= $(shell date -u +%Y-%m-%d)
+UIAUTO_REPORT_DIR ?= reports/uiauto-comparison/$(UIAUTO_REPORT_DATE)
+UIAUTO_PW_RESULTS_DIR ?= $(UIAUTO_REPORT_DIR)/playwright
+UIAUTO_RESULTS_DIR ?= $(UIAUTO_REPORT_DIR)/uiauto
+UIAUTO_COMPARE_MODE ?= fixtures
+UIAUTO_FIXTURES_DIR ?= $(CURDIR)/test/uiauto/fixtures
+
+export UIAUTO_FRAMEWORK_PATH
+export UIAUTO_SCENARIOS_PATH
+export UIAUTO_EXAMPLE_SCENARIOS_PATH
+export UIAUTO_HARNESS_PATH
+
+compose-uiauto-config:
+	@test -d "$(UIAUTO_FRAMEWORK_PATH)" || { \
+		echo "UIAUTO_FRAMEWORK_PATH=$(UIAUTO_FRAMEWORK_PATH) does not exist; clone nfsarch33/uiauto-framework or set UIAUTO_FRAMEWORK_PATH"; \
+		exit 1; \
+	}
+	$(COMPOSE) $(UIAUTO_PROFILE) config --quiet
+
+uiauto-up:
+	@test -d "$(UIAUTO_FRAMEWORK_PATH)" || { \
+		echo "UIAUTO_FRAMEWORK_PATH=$(UIAUTO_FRAMEWORK_PATH) does not exist"; \
+		exit 1; \
+	}
+	$(COMPOSE) $(UIAUTO_PROFILE) up -d --wait uiauto-chrome
+
+uiauto-down:
+	$(COMPOSE) $(UIAUTO_PROFILE) down --remove-orphans
+
+# uiauto-smoke runs the bundled example.com scenario through the chromedp
+# service. Uses --status if docker is unavailable so the gate fails fast with
+# a clear message. The success criterion for v2.1.0 is binary: the runner
+# image builds, the chromedp endpoint is reachable, and ui-agent reports a
+# zero exit code.
+uiauto-smoke:
+	@if ! command -v docker >/dev/null 2>&1; then \
+		echo "uiauto-smoke: docker is not installed; skipping (research-mode advisory gate)"; \
+		exit 0; \
+	fi
+	@test -d "$(UIAUTO_FRAMEWORK_PATH)" || { \
+		echo "uiauto-smoke: UIAUTO_FRAMEWORK_PATH=$(UIAUTO_FRAMEWORK_PATH) does not exist"; \
+		exit 1; \
+	}
+	$(COMPOSE) $(UIAUTO_PROFILE) build uiauto-runner
+	$(COMPOSE) $(UIAUTO_PROFILE) up -d --wait uiauto-chrome
+	$(COMPOSE) $(UIAUTO_PROFILE) run --rm uiauto-runner status
+	$(COMPOSE) $(UIAUTO_PROFILE) down --remove-orphans
+
+# uiauto-compare drives the comparison generator. Default mode is `fixtures`
+# which reads pre-baked test/uiauto/fixtures/{playwright,uiauto}/*.json so the
+# target is hermetic; switch to `--mode=runtime` when you have live results
+# from `bun run test:e2e --reporter=json` and ui-agent demo runs.
+uiauto-compare: build
+	mkdir -p $(UIAUTO_REPORT_DIR)
+	./bin/uiauto-compare \
+		--mode=$(UIAUTO_COMPARE_MODE) \
+		--scenarios-dir="$(UIAUTO_SCENARIOS_PATH)" \
+		--fixtures-dir="$(UIAUTO_FIXTURES_DIR)" \
+		--playwright-results-dir="$(UIAUTO_PW_RESULTS_DIR)" \
+		--uiauto-results-dir="$(UIAUTO_RESULTS_DIR)" \
+		--output-dir="$(UIAUTO_REPORT_DIR)"

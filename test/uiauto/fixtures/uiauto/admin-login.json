@@ -1,0 +1,57 @@
+{
+  "failed_steps": 0,
+  "finished_at": "2026-05-08T04:00:11Z",
+  "heal_path_summary": {
+    "fingerprint-\u003estructural-\u003ellm": 1
+  },
+  "passed_steps": 5,
+  "scenario_id": "admin-login",
+  "scenario_name": "Admin sign in flow",
+  "started_at": "2026-05-08T04:00:09Z",
+  "steps": [
+    {
+      "instruction": "Navigate to /login",
+      "selector": "h1[name~=Sign in]",
+      "status": "passed",
+      "step_index": 0,
+      "tier": "light"
+    },
+    {
+      "instruction": "Fill admin email",
+      "selector": "input[type=email]",
+      "status": "passed",
+      "step_index": 1,
+      "tier": "light"
+    },
+    {
+      "instruction": "Fill admin password",
+      "selector": "input[type=password]",
+      "status": "passed",
+      "step_index": 2,
+      "tier": "light"
+    },
+    {
+      "heal_path": "fingerprint-\u003estructural-\u003ellm",
+      "instruction": "Click Sign in button",
+      "page_url": "http://127.0.0.1:3100/login",
+      "selector": "button[type=submit]",
+      "status": "passed",
+      "step_index": 3,
+      "tier": "smart"
+    },
+    {
+      "instruction": "Verify Admin dashboard heading",
+      "selector": "h1[name~=Admin dashboard]",
+      "status": "passed",
+      "step_index": 4,
+      "tier": "light"
+    }
+  ],
+  "tier_breakdown": {
+    "light": 4,
+    "smart": 1
+  },
+  "total_latency_ms": 2104,
+  "total_steps": 5
+}
+

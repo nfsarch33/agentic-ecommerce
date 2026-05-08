@@ -449,6 +449,112 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # uiauto-chrome: headless Chromium with the DevTools protocol exposed on
+  # 9222. Mirrors uiauto-framework's docker-compose.integration.yml so the
+  # ui-agent runner can attach via --remote-debug-url=http://uiauto-chrome:9222.
+  # Profile-gated: this service only starts when `--profile uiauto` is engaged
+  # (e.g. `make uiauto-smoke`). v2.1.0 research-mode integration; not required
+  # by the default dev stack.
+  uiauto-chrome:
+    image: chromedp/headless-shell:stable
+    container_name: ec-uiauto-chrome
+    profiles: ["uiauto"]
+    restart: "no"
+    command:
+      - --no-sandbox
+      - --disable-gpu
+      - --remote-allow-origins=*
+    # Default host port is 9333 to avoid colliding with a developer's
+    # locally-running Chrome on 9222 (mirrors uiauto-framework's
+    # docker-compose.integration.yml convention). Container side stays on
+    # the conventional 9222 so the runner uses the standard CDP URL.
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${UIAUTO_CDP_HOST_PORT:-9333}:9222"
+    # chromedp/headless-shell ships without wget/curl, and CMD-SHELL runs
+    # via /bin/sh (dash) which has no /dev/tcp. We invoke bash explicitly
+    # so the healthcheck can use bash's built-in /dev/tcp probe to assert
+    # the CDP socket is accepting connections.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9222"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  # uiauto-omniparser-stub: lightweight wiremock stub matching the OmniParser
+  # /probe and /parse contract. Real OmniParser V2 needs a GPU; the stub keeps
+  # the comparison runs hermetic. Optional service: when omniparser is down,
+  # ui-agent demo runs in OCR fallback mode (see uiauto-framework
+  # docs/observability.md). v2.1.0 ports this stub from
+  # uiauto-framework/docker-compose.integration.yml.
+  uiauto-omniparser-stub:
+    image: wiremock/wiremock:3.9.1
+    container_name: ec-uiauto-omniparser-stub
+    profiles: ["uiauto"]
+    restart: "no"
+    command: ["--port", "8080", "--global-response-templating"]
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${UIAUTO_OMNIPARSER_HOST_PORT:-8001}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/__admin/health >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  # uiauto-runner: builds ui-agent from the host uiauto-framework checkout and
+  # runs scenarios against the chromedp service. Scenarios mount read-only so
+  # a misbehaving runner cannot modify the canonical fixtures. Output volume
+  # captures demo-results.json + screenshots for the comparison generator.
+  #
+  # UIAUTO_FRAMEWORK_PATH default targets the canonical checkout at
+  # $HOME/Code/personal/uiauto-framework. The Makefile exports it for the
+  # uiauto targets; ad-hoc compose users must set it explicitly.
+  #
+  # UIAUTO_SCENARIOS_PATH points at agentic-ecommerce-web/test/uiauto/scenarios
+  # by default. UIAUTO_EXAMPLE_SCENARIOS_PATH points at this repo's bundled
+  # smoke scenario so `make uiauto-smoke` works without the frontend repo.
+  uiauto-runner:
+    image: ec-uiauto-runner:dev
+    container_name: ec-uiauto-runner
+    profiles: ["uiauto"]
+    restart: "no"
+    # build.context is a named additional context (`harness`) keyed off
+    # this repo's test/uiauto directory so docker compose can reach the
+    # documented Dockerfile.runner override regardless of where the EC
+    # repo lives on disk (canonical or worktree).
+    #
+    # The override exists because nfsarch33/uiauto-framework#8 makes the
+    # stock Dockerfile fail on Go toolchain mismatch. Framework source
+    # comes via the named context `framework`, NOT a vendor fork.
+    # When the upstream issue is fixed, replace the build block with the
+    # original `context: ${UIAUTO_FRAMEWORK_PATH}` shape and delete
+    # test/uiauto/Dockerfile.runner.
+    build:
+      context: ${UIAUTO_HARNESS_PATH:-./test/uiauto}
+      dockerfile: Dockerfile.runner
+      additional_contexts:
+        framework: ${UIAUTO_FRAMEWORK_PATH:-../uiauto-framework}
+    depends_on:
+      uiauto-chrome:
+        condition: service_healthy
+    environment:
+      REMOTE_DEBUG_URL: ${UIAUTO_REMOTE_DEBUG_URL:-http://uiauto-chrome:9222}
+      OMNIPARSER_URL: ${UIAUTO_OMNIPARSER_URL:-http://uiauto-omniparser-stub:8080}
+      UIAUTO_OUTPUT_DIR: /work/output
+    volumes:
+      - ${UIAUTO_SCENARIOS_PATH:-../agentic-ecommerce-web/test/uiauto/scenarios}:/work/scenarios:ro
+      - ${UIAUTO_EXAMPLE_SCENARIOS_PATH:-./test/uiauto/example}:/work/example-scenarios:ro
+      - ec-uiauto-output:/work/output
+    entrypoint: ["/ui-agent"]
+    command: ["status"]
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   ec-pgdata:
   ec-redisdata:
@@ -457,3 +563,4 @@ volumes:
   ec-n8ndata:
   ec-wc-dbdata:
   ec-wpdata:
+  ec-uiauto-output:
