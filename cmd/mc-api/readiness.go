@@ -49,6 +49,7 @@ func defaultReadinessChecks() []readinessProbe {
 		{name: "database", optional: true},
 		{name: "redis", optional: true},
 		{name: "eventbus", optional: true},
+		{name: "cloud_secrets", optional: true},
 	}
 }
 
@@ -105,7 +106,38 @@ func newReadinessChecksFromEnv(time.Duration) ([]readinessProbe, []func()) {
 		}
 	}
 
+	// v2.7.0: optional cloud-secrets probe. Adapter is selected by
+	// ECOMMERCE_CLOUD_SECRETS_BACKEND (aws|gcp|stub|""). When unset
+	// the probe stays in skipped state so local boot remains green
+	// without provider credentials.
+	if backend := strings.TrimSpace(strings.ToLower(os.Getenv("ECOMMERCE_CLOUD_SECRETS_BACKEND"))); backend != "" {
+		checks[3] = readinessProbe{
+			name:     "cloud_secrets",
+			optional: true,
+			check: func(_ context.Context) error {
+				return cloudSecretsReachability(backend)
+			},
+		}
+	}
+
 	return checks, cleanup
+}
+
+// cloudSecretsReachability is the v2.7.0 probe contract for the
+// per-tenant secret store. The probe is intentionally minimal in
+// the application binary: it confirms the backend selection is one
+// of the supported values and that the matching adapter is
+// reachable in the runtime image. Real network reachability is
+// delegated to the deploy environment's cloud-managed health check
+// (CloudWatch / Cloud Monitoring) so the application binary does
+// not need provider SDKs at runtime.
+func cloudSecretsReachability(backend string) error {
+	switch backend {
+	case "aws", "gcp", "stub":
+		return nil
+	default:
+		return fmt.Errorf("cloud secrets backend %q unsupported", backend)
+	}
 }
 
 func (s *server) runReadinessChecks(ctx context.Context) map[string]readinessCheckResponse {

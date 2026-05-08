@@ -149,6 +149,7 @@ type server struct {
 	tenantService         *tenant.Service
 	tenantAggregateSvc    *tenant.AggregateService
 	marketplace           *marketplace.Service
+	marketplaceSubs       *marketplace.SubmissionService
 	billingSvc            *billing.Service
 	billingRepo           billing.Repository
 	billingPlans          billing.PlanCatalog
@@ -358,6 +359,10 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	if marketplaceErr != nil {
 		logger.Warn("marketplace disabled", "error", marketplaceErr)
 	}
+	marketplaceSubsSvc, marketplaceSubsErr := buildMarketplaceSubmissionService(marketplaceSvc)
+	if marketplaceSubsErr != nil {
+		logger.Warn("marketplace submissions disabled", "error", marketplaceSubsErr)
+	}
 	tenantAggregateSvc := tenant.NewAggregateService(tenant.NewInMemoryAggregateRepository())
 
 	billingRepo := billing.NewInMemoryRepository()
@@ -427,6 +432,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		tenantService:         tenant.NewService(tenant.NewInMemoryRepository()),
 		tenantAggregateSvc:    tenantAggregateSvc,
 		marketplace:           marketplaceSvc,
+		marketplaceSubs:       marketplaceSubsSvc,
 		billingSvc:            billingSvc,
 		billingRepo:           billingRepo,
 		billingPlans:          billingPlans,
@@ -581,6 +587,13 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/tenants", tenantAdminAPI)
 	mux.HandleFunc("/api/v1/tenants/", tenantAdminAPI)
 
+	// v2.7.0 Marketplace plugin submission queue.
+	submitAPI := s.withCORS(s.withRateLimit(s.withRBAC(submissionRole, s.withTenantRequired(s.withAudit(submissionAuditAction, s.submitMarketplacePlugin)))))
+	mux.HandleFunc("/api/v1/marketplace/plugins/submit", submitAPI)
+	adminSubmissionsAPI := s.withCORS(s.withRateLimit(s.withRBAC(adminSubmissionsRole, s.withAudit(adminSubmissionsAuditAction, s.adminSubmissionsHandler))))
+	mux.HandleFunc("/api/v1/admin/marketplace/submissions", adminSubmissionsAPI)
+	mux.HandleFunc("/api/v1/admin/marketplace/submissions/", adminSubmissionsAPI)
+
 	// v2.5.0 Tenant self-service registration + billing.
 	registrationAPI := s.withCORS(s.withRateLimit(s.registrationHandler))
 	mux.HandleFunc("/register", registrationAPI)
@@ -615,6 +628,22 @@ func buildMarketplaceService() (*marketplace.Service, error) {
 	}
 	seedMarketplaceManifests(svc)
 	return svc, nil
+}
+
+// buildMarketplaceSubmissionService wires the v2.7.0 vendor-side
+// plugin submission queue with an in-memory store. The catalog
+// reference comes from the existing marketplace service so an
+// approve transition publishes into the same catalog the registry
+// already uses.
+func buildMarketplaceSubmissionService(parent *marketplace.Service) (*marketplace.SubmissionService, error) {
+	if parent == nil {
+		return nil, fmt.Errorf("submissions: marketplace service unavailable")
+	}
+	subRepo := inmemory.NewMarketplaceSubmissions()
+	return marketplace.NewSubmissionService(marketplace.SubmissionServiceConfig{
+		Submissions: subRepo,
+		Catalog:     parent.Catalog(),
+	})
 }
 
 // seedMarketplaceManifests registers the v2.4.0 demo manifests so the

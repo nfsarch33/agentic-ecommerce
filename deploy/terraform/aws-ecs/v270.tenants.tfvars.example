@@ -1,0 +1,35 @@
+# v2.7.0 example tenant fan-out for AWS ECS dry-run review.
+# Sanitised public-safe placeholders only; the contract test in
+# terraform_contract_test.go rejects any literal that looks like a
+# real account, key, or LAN/Tailscale IP.
+
+tenant_secret_path_prefix = "agentic-ecommerce"
+
+tenants = {
+  acme = {
+    plan                 = "growth"
+    region               = "us-east-1"
+    billing_webhook_path = "/webhooks/stripe"
+    cdn_enabled          = true
+    cdn_hostname_suffix  = "media.example.com"
+    secret_keys = [
+      "stripe-api-key",
+      "stripe-webhook-secret",
+      "license-hmac",
+      "url-hmac",
+      "registration-hmac",
+      "marketplace-webhook",
+    ]
+  }
+  umbrella = {
+    plan                 = "free"
+    region               = "us-east-1"
+    billing_webhook_path = "/webhooks/stripe"
+    cdn_enabled          = false
+    cdn_hostname_suffix  = ""
+    secret_keys = [
+      "stripe-api-key",
+      "stripe-webhook-secret",
+    ]
+  }
+}
