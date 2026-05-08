@@ -2,6 +2,79 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## Unreleased (v2.2.0 MVP)
+
+### Added — Membership bounded context
+
+- New domain package `internal/domain/membership/` with `Member`,
+  `MembershipPlan`, and `Subscription` aggregates plus an explicit
+  state machine (`trial`/`active`/`paused`/`cancelled`/`expired`) driven
+  by a transition table. Every legal `(state, transition) -> state`
+  triple is exhaustively asserted by table-driven tests; every illegal
+  pair returns the typed `membership.ErrInvalidTransition`.
+- New ports `port.MembershipRepository`, `port.MembershipPaymentGateway`,
+  and `port.MembershipNotificationSender` with compile-time
+  assertions added to `internal/port/contract_test.go`.
+- New adapters:
+  - `internal/adapter/postgres/membership_repo.go` (tenant-keyed CRUD
+    backed by tables introduced by migration `0007_membership.sql`).
+  - `internal/adapter/inmemory/membership_repo.go` (used by tests and
+    the dev compose stack).
+  - `internal/adapter/stripe/payment_gateway.go` — deterministic
+    Stripe stub that returns hash-derived stable IDs so workflow
+    replay tests are hermetic. Real Stripe lands in v2.5.0.
+  - `internal/adapter/notification/membership_sender.go` — in-memory
+    `MembershipNotificationRecorder` for tests + dev.
+- `MembershipLifecycleWorkflow` in `internal/workflow/membership_lifecycle.go`
+  with `ChargeStripe`, `SendNotification`, and `RecordBillingEvent`
+  activities. Workflow code is deterministic (no `time.Now`, no
+  `rand`), every side effect goes through an activity, and a
+  determinism smoke test (`TestMembershipLifecycleWorkflowDeterministicSmoke`)
+  asserts identical results across two runs.
+- Membership-specific HTTP endpoints on `mc-api`:
+  - `POST/GET /api/v1/memberships`, `GET/PATCH /api/v1/memberships/{id}`,
+    `POST /api/v1/memberships/{id}/{cancel,pause,resume}`.
+  - `POST/GET /api/v1/membership-plans`, `GET/PATCH/DELETE /api/v1/membership-plans/{id}`.
+  - All routes gated by RBAC (`membershipsRole`, `membershipPlansRole`)
+    and `withTenantRequired`. Customer-reads-own / admin-reads-any rule
+    enforced inside the handler. Mutations emit audit events.
+- Eventbus integration:
+  - New `EventType` constants `membership.created`, `membership.renewed`,
+    `membership.cancelled`, `membership.paused`, `membership.resumed` in
+    `internal/eventbus/event.go` (alongside the existing product/order
+    types, single source of truth for the bus contract).
+  - New `eventbus.MembershipPayload` typed envelope (versioned,
+    tenant-aware) and `eventbus.NewMembershipEvent` constructor that
+    validates required fields (tenant, subscription, plan, state) and
+    rejects non-membership event types. Table-driven serialisation tests
+    in `internal/eventbus/membership_test.go`.
+  - New workflow-side adapters in `internal/adapter/notification/`:
+    `BusSender` (implements `port.MembershipNotificationSender` by
+    publishing to an `eventbus.Publisher`, with a
+    `transitionToEventType` mapper covering activate/renew/cancel/pause/
+    resume) and `MultiSender` (fan-out with `errors.Join`). The
+    workflow's notifier is now wired as
+    `MultiSender(Recorder, BusSender)` so every state transition emits
+    the same canonical eventbus envelope as the handler path.
+  - Handler `publishMembershipEvent` refactored to use the typed
+    constructor; inline `map[string]any` payload assembly removed.
+- OpenAPI spec (`api/openapi.yaml`) updated with all new endpoints +
+  `Money`, `MembershipPlanRequest`, `MembershipPlanResponse`,
+  `MembershipPlansListResponse`, `MembershipCreateRequest`,
+  `MembershipUpdateRequest`, `MembershipResponse`, and
+  `MembershipsListResponse` schemas.
+
+### Operational notes
+
+- Postgres migration numbering: existing tree uses `0001`-`0006`
+  (compliance reporting), so the membership migration is `0007`.
+- The workflow replay test (`TestMembershipLifecycleWorkflowReplaysGoldenHistory`)
+  skips with a regen-instruction message when the golden history JSON
+  is absent. The deterministic smoke test (always on) plus the
+  exhaustive state-machine matrix covers determinism in the MVP run.
+  Capturing the golden JSON requires a running Temporal dev server and
+  is tracked as a v2.2.1 follow-up.
+
 ## Unreleased (v2.1.0 MVP)
 
 ### Added
