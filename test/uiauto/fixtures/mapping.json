@@ -1,0 +1,23 @@
+[
+  {
+    "scenario": "home",
+    "spec": "home"
+  },
+  {
+    "scenario": "products",
+    "spec": "products"
+  },
+  {
+    "scenario": "checkout",
+    "spec": "checkout"
+  },
+  {
+    "scenario": "admin-login",
+    "spec": "admin-login"
+  },
+  {
+    "scenario": "admin-agents",
+    "spec": "admin-agents"
+  }
+]
+

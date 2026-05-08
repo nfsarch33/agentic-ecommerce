@@ -1,0 +1,42 @@
+{
+  "suites": [
+    {
+      "file": "e2e/products.spec.ts",
+      "specs": [
+        {
+          "file": "e2e/products.spec.ts",
+          "tests": [
+            {
+              "results": [
+                {
+                  "duration": 612,
+                  "status": "passed",
+                  "steps": [
+                    {
+                      "selector": "/products",
+                      "title": "page.goto('/products')"
+                    },
+                    {
+                      "selector": "role=heading[name=Products]",
+                      "title": "expect(heading).toBeVisible"
+                    },
+                    {
+                      "selector": "role=heading[name=/resistance band set/i]",
+                      "title": "expect(detail heading).toBeVisible"
+                    },
+                    {
+                      "selector": "role=button[name=/add to cart/i]",
+                      "title": "expect(button).toBeEnabled"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "title": "products page and product detail render against mc-api"
+        }
+      ]
+    }
+  ]
+}
+
