@@ -22,7 +22,9 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
+	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
+	"github.com/nfsarch33/agentic-ecommerce/internal/tenant"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -48,15 +50,16 @@ type temporalDialer func(opts client.Options) (client.Client, error)
 // and activities. All fields are concrete pointers to keep the
 // dependency surface explicit (no interface{} bag-of-everything).
 type workerDeps struct {
-	Logger             *slog.Logger
-	TaskQueue          string
-	ScheduleCfg        agentScheduleConfig
-	Repo               port.ProductRepository
-	RepoCleanup        func()
-	PublishActivities  *ecworkflow.ProductPublishActivities
-	ContentActivities  *ecworkflow.ContentGenerationActivities
-	MediaActivities    *ecworkflow.MediaProcessingActivities
-	SourcingActivities *ecworkflow.SourcingActivities
+	Logger               *slog.Logger
+	TaskQueue            string
+	ScheduleCfg          agentScheduleConfig
+	Repo                 port.ProductRepository
+	RepoCleanup          func()
+	PublishActivities    *ecworkflow.ProductPublishActivities
+	ContentActivities    *ecworkflow.ContentGenerationActivities
+	MediaActivities      *ecworkflow.MediaProcessingActivities
+	SourcingActivities   *ecworkflow.SourcingActivities
+	OnboardingActivities *ecworkflow.TenantOnboardingActivities
 }
 
 type agentScheduleConfig struct {
@@ -142,18 +145,34 @@ func buildWorkerDeps(ctx context.Context, logger *slog.Logger, scheduleCfg agent
 	contentActivities := newContentGenerationActivitiesFromEnv(logger)
 	mediaActivities := newMediaProcessingActivitiesFromEnv(logger, repo)
 	sourcingActivities := ecworkflow.NewSourcingActivities(ecworkflow.SourcingActivityDeps{})
+	onboardingActivities := newTenantOnboardingActivitiesFromEnv()
 
 	return &workerDeps{
-		Logger:             logger,
-		TaskQueue:          temporalTaskQueueFromEnv(),
-		ScheduleCfg:        scheduleCfg,
-		Repo:               repo,
-		RepoCleanup:        cleanupRepo,
-		PublishActivities:  publishActivities,
-		ContentActivities:  contentActivities,
-		MediaActivities:    mediaActivities,
-		SourcingActivities: sourcingActivities,
+		Logger:               logger,
+		TaskQueue:            temporalTaskQueueFromEnv(),
+		ScheduleCfg:          scheduleCfg,
+		Repo:                 repo,
+		RepoCleanup:          cleanupRepo,
+		PublishActivities:    publishActivities,
+		ContentActivities:    contentActivities,
+		MediaActivities:      mediaActivities,
+		SourcingActivities:   sourcingActivities,
+		OnboardingActivities: onboardingActivities,
 	}, nil
+}
+
+// newTenantOnboardingActivitiesFromEnv wires the v2.9.0 tenant
+// onboarding activity struct. The dependencies default to in-memory
+// implementations so the worker can boot in dev without a postgres
+// or notifier wired up. Production deployments swap these for
+// adapter-backed implementations through the same struct.
+func newTenantOnboardingActivitiesFromEnv() *ecworkflow.TenantOnboardingActivities {
+	tenants := tenant.NewAggregateService(tenant.NewInMemoryAggregateRepository())
+	regs := registration.NewInMemoryRepository()
+	return ecworkflow.NewTenantOnboardingActivities(ecworkflow.TenantOnboardingActivityDeps{
+		Tenants:       tenants,
+		Registrations: regs,
+	})
 }
 
 // registerWorkflowsAndActivities binds the workflow and activity
@@ -186,6 +205,14 @@ func registerWorkflowsAndActivities(w workerRegistry, deps *workerDeps) {
 	w.RegisterActivityWithOptions(deps.SourcingActivities.ComparePrices, activity.RegisterOptions{Name: ecworkflow.CompareSourcingPricesActivity})
 	w.RegisterActivityWithOptions(deps.SourcingActivities.CheckMargin, activity.RegisterOptions{Name: ecworkflow.CheckSourcingMarginActivity})
 	w.RegisterActivityWithOptions(deps.SourcingActivities.RecommendCandidate, activity.RegisterOptions{Name: ecworkflow.RecommendSourcingCandidateActivity})
+
+	w.RegisterWorkflow(ecworkflow.TenantOnboardingWorkflow)
+	w.RegisterActivityWithOptions(deps.OnboardingActivities.ValidateRegistration, activity.RegisterOptions{Name: ecworkflow.TenantValidateRegistrationActivity})
+	w.RegisterActivityWithOptions(deps.OnboardingActivities.ProvisionTenant, activity.RegisterOptions{Name: ecworkflow.TenantProvisionRecordActivity})
+	w.RegisterActivityWithOptions(deps.OnboardingActivities.SeedDefaultPlan, activity.RegisterOptions{Name: ecworkflow.TenantSeedDefaultPlanActivity})
+	w.RegisterActivityWithOptions(deps.OnboardingActivities.IssueWelcomeNotification, activity.RegisterOptions{Name: ecworkflow.TenantIssueWelcomeActivity})
+	w.RegisterActivityWithOptions(deps.OnboardingActivities.RegisterDefaultPlugins, activity.RegisterOptions{Name: ecworkflow.TenantRegisterDefaultPluginsActivity})
+	w.RegisterActivityWithOptions(deps.OnboardingActivities.RollbackRecord, activity.RegisterOptions{Name: ecworkflow.TenantRollbackRecordActivity})
 }
 
 func newMediaProcessingActivitiesFromEnv(logger *slog.Logger, repo port.ProductRepository) *ecworkflow.MediaProcessingActivities {

@@ -1,13 +1,21 @@
 openapi: 3.1.0
 info:
   title: Agentic Ecommerce Mission Control API
-  version: 2.0.0
+  version: 2.9.0
   description: |
-    Public v2.0.0 contract for the Agentic Ecommerce Go backend consumed by
+    Public v1.x.y contract for the Agentic Ecommerce Go backend consumed by
     agentic-ecommerce-web. This spec intentionally excludes private
     operator endpoints and credential-bearing surfaces. Protected endpoints
     use short-lived HMAC-signed JWT bearer tokens and RBAC roles:
     admin, operator, and viewer.
+
+    Version policy: v1 endpoints are stable through host v3.x. The
+    v2 preview surface (api/openapi-v2-preview.yaml) is opt-in only
+    and subject to change without notice. See docs/api-versioning.md
+    for negotiation, deprecation timeline, and Accept-header opt-in.
+  x-api-version-policy: |
+    v1 endpoints are stable through v3.x; v2 preview endpoints are
+    subject to change without notice. See docs/api-versioning.md.
 servers:
   - url: http://localhost:8080
     description: Local development

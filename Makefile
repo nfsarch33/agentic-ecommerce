@@ -41,6 +41,7 @@ build:
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/agent-worker ./cmd/agent-worker
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/temporal-worker ./cmd/temporal-worker
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/uiauto-compare ./cmd/uiauto-compare
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/ec-cli ./cmd/ec-cli
 
 coverage:
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test -race -coverprofile=coverage.out ./...

@@ -81,6 +81,7 @@ func newReleasePerformanceFixture(t *testing.T) releasePerfFixture {
 			HTTPClient:  webhookReceiver.Client(),
 			MaxAttempts: 1,
 			Backoff:     func(int) time.Duration { return 0 },
+			SSRFGuard:   outbound.NewPermissiveSSRFGuard(),
 		}),
 	})
 	srv.configureSecurity()
