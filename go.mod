@@ -15,6 +15,7 @@ require (
 	go.temporal.io/sdk v1.43.0
 	go.uber.org/goleak v1.3.0
 	google.golang.org/protobuf v1.36.11
+	gopkg.in/dnaeon/go-vcr.v3 v3.2.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

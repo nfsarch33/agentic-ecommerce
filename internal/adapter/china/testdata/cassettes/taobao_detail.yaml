@@ -1,0 +1,35 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: cassette.taobao.local
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers: {}
+        url: https://cassette.taobao.local/detail?id=tb-vcr-123
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding: []
+        trailer: {}
+        content_length: 327
+        uncompressed: false
+        body: |
+            {"id":"tb-vcr-123","title":"Cassette Detail Speaker","native_category":"audio","price_cny":29.5,"moq":5,"lead_time_days":7,"seller_id":"tb-seller-01","seller_name":"Taobao Seller 01","seller_rating":4.8,"seller_level":"tmall_gold","review_count":1240,"monthly_sales":3500,"url":"https://item.taobao.com/item.htm?id=tb-vcr-123"}
+        headers:
+            Content-Type:
+                - application/json
+        status: 200 OK
+        code: 200
+        duration: 1ms

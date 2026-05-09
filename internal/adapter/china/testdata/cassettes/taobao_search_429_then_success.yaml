@@ -1,0 +1,111 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: cassette.taobao.local
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/json
+            User-Agent:
+                - Mozilla/5.0 (compatible; agentic-ecommerce/3.1.0)
+        url: https://cassette.taobao.local/search?q=wireless+earbuds&max=3
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding: []
+        trailer: {}
+        content_length: 13
+        uncompressed: false
+        body: |
+            rate limited
+        headers:
+            Content-Type:
+                - text/plain; charset=utf-8
+        status: 429 Too Many Requests
+        code: 429
+        duration: 1ms
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: cassette.taobao.local
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/json
+            User-Agent:
+                - Mozilla/5.0 (compatible; agentic-ecommerce/3.1.0)
+        url: https://cassette.taobao.local/search?q=wireless+earbuds&max=3
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding: []
+        trailer: {}
+        content_length: 13
+        uncompressed: false
+        body: |
+            rate limited
+        headers:
+            Content-Type:
+                - text/plain; charset=utf-8
+        status: 429 Too Many Requests
+        code: 429
+        duration: 1ms
+    - id: 2
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: cassette.taobao.local
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/json
+            User-Agent:
+                - Mozilla/5.0 (compatible; agentic-ecommerce/3.1.0)
+        url: https://cassette.taobao.local/search?q=wireless+earbuds&max=3
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding: []
+        trailer: {}
+        content_length: 587
+        uncompressed: false
+        body: |
+            {"products":[{"id":"cassette-taobao-earbud-01","title":"Cassette Taobao Earbud 01","native_category":"audio","price_cny":28.5,"moq":5,"lead_time_days":8,"seller_id":"seller-cassette-01","seller_name":"Cassette Audio Store","seller_rating":4.8,"seller_level":"tmall_gold","review_count":1200,"monthly_sales":3200,"url":"https://item.taobao.com/item.htm?id=cassette-taobao-earbud-01"},{"id":"cassette-taobao-earbud-02","title":"Cassette Taobao Earbud 02","native_category":"audio","price_cny":31,"moq":8,"lead_time_days":10,"seller_id":"seller-cassette-02","seller_name":"Cassette Audio Store 2","seller_rating":4.6,"seller_level":"gold","review_count":860,"monthly_sales":2100,"url":"https://item.taobao.com/item.htm?id=cassette-taobao-earbud-02"}]}
+        headers:
+            Content-Type:
+                - application/json
+        status: 200 OK
+        code: 200
+        duration: 1ms

@@ -1,0 +1,35 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: cassette.1688.local
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers: {}
+        url: https://cassette.1688.local/search?keyword=wireless+earbuds&max=12
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding: []
+        trailer: {}
+        content_length: 4897
+        uncompressed: false
+        body: |
+            {"products":[{"id":"cassette-1688-earbud-01","title":"Cassette Wireless Earbuds 01","category":"electronics","sub_category":"audio","price_cny":13.88,"moq":20,"lead_time_days":5,"supplier_id":"cassette-supplier-01","supplier_name":"Cassette Supplier 01","supplier_rating":4.7,"supplier_verified_gold":true,"review_count":100,"monthly_sales":500,"url":"https://detail.1688.com/offer/cassette-earbud-01.html"},{"id":"cassette-1688-earbud-02","title":"Cassette Wireless Earbuds 02","category":"electronics","sub_category":"audio","price_cny":14.88,"moq":25,"lead_time_days":6,"supplier_id":"cassette-supplier-02","supplier_name":"Cassette Supplier 02","supplier_rating":4.1,"supplier_verified_gold":false,"review_count":110,"monthly_sales":525,"url":"https://detail.1688.com/offer/cassette-earbud-02.html"},{"id":"cassette-1688-earbud-03","title":"Cassette Wireless Earbuds 03","category":"electronics","sub_category":"audio","price_cny":15.880000000000003,"moq":30,"lead_time_days":7,"supplier_id":"cassette-supplier-03","supplier_name":"Cassette Supplier 03","supplier_rating":4.2,"supplier_verified_gold":true,"review_count":120,"monthly_sales":550,"url":"https://detail.1688.com/offer/cassette-earbud-03.html"},{"id":"cassette-1688-earbud-04","title":"Cassette Wireless Earbuds 04","category":"electronics","sub_category":"audio","price_cny":16.880000000000003,"moq":35,"lead_time_days":8,"supplier_id":"cassette-supplier-04","supplier_name":"Cassette Supplier 04","supplier_rating":4.3,"supplier_verified_gold":false,"review_count":130,"monthly_sales":575,"url":"https://detail.1688.com/offer/cassette-earbud-04.html"},{"id":"cassette-1688-earbud-05","title":"Cassette Wireless Earbuds 05","category":"electronics","sub_category":"audio","price_cny":17.880000000000003,"moq":40,"lead_time_days":9,"supplier_id":"cassette-supplier-05","supplier_name":"Cassette Supplier 05","supplier_rating":4.4,"supplier_verified_gold":true,"review_count":140,"monthly_sales":600,"url":"https://detail.1688.com/offer/cassette-earbud-05.html"},{"id":"cassette-1688-earbud-06","title":"Cassette Wireless Earbuds 06","category":"electronics","sub_category":"audio","price_cny":18.880000000000003,"moq":45,"lead_time_days":10,"supplier_id":"cassette-supplier-06","supplier_name":"Cassette Supplier 06","supplier_rating":4.0,"supplier_verified_gold":false,"review_count":150,"monthly_sales":625,"url":"https://detail.1688.com/offer/cassette-earbud-06.html"},{"id":"cassette-1688-earbud-07","title":"Cassette Wireless Earbuds 07","category":"electronics","sub_category":"audio","price_cny":19.880000000000003,"moq":50,"lead_time_days":11,"supplier_id":"cassette-supplier-07","supplier_name":"Cassette Supplier 07","supplier_rating":4.1,"supplier_verified_gold":true,"review_count":160,"monthly_sales":650,"url":"https://detail.1688.com/offer/cassette-earbud-07.html"},{"id":"cassette-1688-earbud-08","title":"Cassette Wireless Earbuds 08","category":"electronics","sub_category":"audio","price_cny":20.880000000000003,"moq":55,"lead_time_days":12,"supplier_id":"cassette-supplier-08","supplier_name":"Cassette Supplier 08","supplier_rating":4.2,"supplier_verified_gold":false,"review_count":170,"monthly_sales":675,"url":"https://detail.1688.com/offer/cassette-earbud-08.html"},{"id":"cassette-1688-earbud-09","title":"Cassette Wireless Earbuds 09","category":"electronics","sub_category":"audio","price_cny":21.880000000000003,"moq":60,"lead_time_days":13,"supplier_id":"cassette-supplier-09","supplier_name":"Cassette Supplier 09","supplier_rating":4.3,"supplier_verified_gold":true,"review_count":180,"monthly_sales":700,"url":"https://detail.1688.com/offer/cassette-earbud-09.html"},{"id":"cassette-1688-earbud-10","title":"Cassette Wireless Earbuds 10","category":"electronics","sub_category":"audio","price_cny":22.880000000000003,"moq":65,"lead_time_days":14,"supplier_id":"cassette-supplier-10","supplier_name":"Cassette Supplier 10","supplier_rating":4.4,"supplier_verified_gold":false,"review_count":190,"monthly_sales":725,"url":"https://detail.1688.com/offer/cassette-earbud-10.html"},{"id":"cassette-1688-earbud-11","title":"Cassette Wireless Earbuds 11","category":"electronics","sub_category":"audio","price_cny":23.880000000000003,"moq":70,"lead_time_days":15,"supplier_id":"cassette-supplier-11","supplier_name":"Cassette Supplier 11","supplier_rating":4.0,"supplier_verified_gold":true,"review_count":200,"monthly_sales":750,"url":"https://detail.1688.com/offer/cassette-earbud-11.html"},{"id":"cassette-1688-earbud-12","title":"Cassette Wireless Earbuds 12","category":"electronics","sub_category":"audio","price_cny":24.880000000000003,"moq":75,"lead_time_days":16,"supplier_id":"cassette-supplier-12","supplier_name":"Cassette Supplier 12","supplier_rating":4.1,"supplier_verified_gold":false,"review_count":210,"monthly_sales":775,"url":"https://detail.1688.com/offer/cassette-earbud-12.html"}]}
+        headers:
+            Content-Type:
+                - application/json
+        status: 200 OK
+        code: 200
+        duration: 1ms
