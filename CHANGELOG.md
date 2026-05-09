@@ -2,6 +2,111 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## v2.10.0 Resilience and Observability MVP -- 2026-05-09
+
+The 70 GB MacBook OOM event of 2026-05-09 informed the v321 fleet
+hygiene work. v2.10.0 mirrors that pattern inside the EC product
+stack: bounded concurrency, runtime-aware OOM detection, a unified
+observability surface, and an EvoMap feed so the agent can self-tune.
+
+### Added — Resilience pillar (5 stories)
+
+- **`internal/lifecycle/`** (Story 1): `Manager` orchestrates
+  signal-driven cancellation, drain of in-flight work, and
+  reverse-order Closer invocation with a bounded shutdown deadline.
+  `Closer` interface and `CloserFunc` adapter. mc-api, agent-worker,
+  and temporal-worker all register their HTTP server, memwatch
+  sampler, and (for temporal) Postgres pool through this Manager.
+  Unit tests cover happy-path drain, signal-during-handler,
+  closer-error-aggregation, double-shutdown idempotency, drain
+  timeout exceeded. 81% coverage.
+- **`internal/workerpool/`** (Story 2): `Pool` wraps a bounded
+  task channel + per-worker goroutine with panic isolation, drain
+  on Close, saturation backpressure (`ErrPoolSaturated`), and
+  resource-aware sizing. Tests cover sizing math, queue saturation,
+  panic isolation, drain-on-cancel, post-close submit. 85% coverage.
+  Audited every `go func` in the backend; the only two production
+  goroutines (`cmd/mc-api/app.go` http server, `cmd/agent-worker/main.go`
+  metrics server) are already short-lived runner-style goroutines
+  bounded by their `http.Server.ListenAndServe()` lifetime, and
+  `internal/agent/orchestrator.go` already enforces `MaxConcurrent`
+  via a counter (`s.running++`/`--`). New worker-fan-out work in
+  v2.11+ uses the pool.
+- **`internal/memwatch/`** (Story 3): `Sampler` reads
+  `runtime.MemStats` (HeapInuse, HeapAlloc, NumGoroutine, GC pause)
+  every 5 s and emits `Sample` to a `Sink`. Heap ceiling +
+  goroutine ceiling fire callbacks after dwell windows
+  (`ECOMMERCE_HEAP_CEILING_BYTES`/`ECOMMERCE_GOROUTINE_CEILING`).
+  Implements `lifecycle.Closer`. 92% coverage.
+- **`internal/middleware/memcap.go`** (Story 3): per-request memory
+  cap. Rejects requests whose `Content-Length` exceeds
+  `MaxRequestBytes` with HTTP 413 + JSON error body, and wraps the
+  body in `http.MaxBytesReader` so chunked clients cannot bypass the
+  static check. Per-tenant override via `TenantOverride`. 100%
+  coverage.
+- **`go.uber.org/goleak`** (Story 3): `TestMain(m)` wrappers added
+  to `internal/lifecycle`, `internal/workerpool`, `internal/memwatch`
+  to fail any test that leaks a goroutine.
+- **`internal/metrics/`** (Story 4): hand-rolled Prometheus registry
+  exposing the v2.10.0 `ec_*` metric set
+  (`ec_http_requests_total`, `ec_http_duration_seconds`,
+  `ec_workflow_runs_total`, `ec_workflow_duration_seconds`,
+  `ec_workerpool_queued`, `ec_workerpool_saturation_total`,
+  `ec_oom_alarms_total`, `ec_goroutine_count`, `ec_heap_bytes`).
+  Bounded label cardinality (`WithMaxSeries`) so a hot label can't
+  OOM the registry. 95% coverage.
+- **`internal/observability/`** (Story 4): shared OpenTelemetry
+  helpers (`TraceIDFromContext`, `TraceIDFromRequest`,
+  `ParseTraceparent`) and slog correlation
+  (`LoggerFromContext`/`LoggerFromRequest`,
+  `ContextWithTenant`/`TenantFromContext`, `RequestLogger`
+  middleware). 92% coverage.
+- **`monitoring/grafana/dashboards/v210/`** (Story 4): four
+  dashboards — `ec-overview`, `ec-tenant`, `ec-workerpools`,
+  `ec-resilience` — covering RED method, per-tenant deep-dive, pool
+  saturation, OOM/goroutine/heap/workflow failure trends.
+- **`internal/evomap/`** (Story 5): NDJSON `Sink` writes one
+  `Capsule` per minute per binary to a rotating file, plus
+  `Aggregate`/`RenderCapsuleMarkdown`/`WriteCapsule` for the rollup
+  pipeline. 88% coverage.
+- **`cmd/evomap-rollup/`** (Story 5, NEW 8th binary): daily rollup
+  reads NDJSON, aggregates KPIs, writes a markdown capsule that
+  mirrors the existing fleet evoloop schema. Uses
+  `lifecycle.Manager`. 89% coverage.
+
+### Changed — binary refactors (Story 1 wiring)
+
+- `cmd/mc-api/app.go`: `runServer` now delegates through
+  `runServerWithLifecycle` so the http.Server is registered as a
+  Closer. New `startObservability(mgr, logger, "mc-api")` boots
+  `metrics.Registry` + `memwatch.Sampler` and registers them.
+  `metricsHandler` appends the `ec_*` registry output after the
+  legacy `agentic_ecommerce_*` exposition (single `/metrics` endpoint
+  emits both surfaces).
+- `cmd/agent-worker/main.go`: replaces the inline ctx.Done shutdown
+  branch with `mgr.Shutdown()`. Memory metrics + ec_* registry
+  exposed on the existing metrics endpoint via `noopHeader`-wrapped
+  handler call.
+- `cmd/temporal-worker/main.go`: registers `memwatch.Sampler` with a
+  per-binary `metrics.Registry` so Temporal's worker.Run path inherits
+  goroutine + heap ceiling monitoring without touching its
+  InterruptCh signal handling.
+
+### Quality gates (v2.10.0 baseline)
+
+| Gate                       | Result          |
+|----------------------------|-----------------|
+| `go test -race ./...`      | PASS            |
+| `go vet ./...`             | clean           |
+| Coverage                   | 84.5% (>= 83%)  |
+| Sentrux quality            | 6904 -> 6939    |
+| Sentrux coupling           | 0.41 -> 0.40    |
+| Sentrux complex_fn         | 4 (unchanged)   |
+| `make build` (8 binaries)  | PASS            |
+| `make compose-config`      | PASS            |
+| `runx shell-leak-scan`     | no findings     |
+| goleak (3 critical pkgs)   | clean           |
+
 ## Unreleased (v2.9.0 Developer Experience + Documentation)
 
 ### Added — Plugin Developer SDK (public package)

@@ -38,6 +38,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
+	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
@@ -62,6 +63,12 @@ var (
 	httpResponses3xx               atomic.Int64
 	httpResponses4xx               atomic.Int64
 	httpResponses5xx               atomic.Int64
+
+	// v2.10.0 Story 4: optional ec_* registry. Set by mainImpl via
+	// startObservability; metricsHandler appends its output to the
+	// legacy agentic_ecommerce_* exposition. Atomic so tests + runtime
+	// stay race-clean.
+	ecRegistry atomic.Pointer[metrics.Registry]
 )
 
 type moneyResponse struct {
@@ -281,7 +288,20 @@ agentic_ecommerce_embedding_failures_total{provider="bridge",reason="stub"} 0
 		float64(httpRequestDurationMicros.Load())/1_000_000,
 		httpRequestsTotal.Load(),
 	)
+	if reg := ecRegistry.Load(); reg != nil {
+		// Stream the ec_* registry into the same response so a single
+		// scrape covers both the legacy and v2.10.0 surface.
+		reg.Handler().ServeHTTP(noopHeader{w}, r)
+	}
 }
+
+// noopHeader prevents the embedded ec_* handler from overwriting the
+// legacy text/plain content-type header. Both registries emit
+// Prometheus text format so the existing header is correct.
+type noopHeader struct{ http.ResponseWriter }
+
+func (n noopHeader) Header() http.Header { return http.Header{} }
+func (n noopHeader) WriteHeader(int)     {}
 
 func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.OrderRepository, cartRepo port.CartRepository) *server {
 	wcClient := woocommerce.NewClient(woocommerce.Config{

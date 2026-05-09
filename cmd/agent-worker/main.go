@@ -21,6 +21,9 @@ import (
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	pricingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/pricing"
 	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
+	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
+	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
+	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 )
 
 var (
@@ -31,7 +34,29 @@ var (
 	agentWorkerRunsFailedTotal       atomic.Int64
 	agentScheduledRunsSucceededTotal atomic.Int64
 	agentScheduledRunsFailedTotal    atomic.Int64
+
+	// v2.10.0 Story 4: ec_* registry mounted into the agent-worker's
+	// /metrics handler when run() boots the lifecycle Manager.
+	agentEcRegistry atomic.Pointer[metrics.Registry]
 )
+
+// startWorkerObservability wires the ec_* registry + memwatch sampler
+// into the supplied lifecycle.Manager. Mirrors the mc-api pattern.
+func startWorkerObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary string) *metrics.Registry {
+	reg := metrics.NewRegistry(binary)
+	sampler := memwatch.NewSampler(logger, memwatch.Config{
+		BinaryName:     binary,
+		SampleInterval: 5 * time.Second,
+		Sink: memwatch.SinkFunc(func(_ context.Context, s memwatch.Sample) {
+			reg.GoroutineCount.Set(float64(s.GoroutineCount), metrics.Labels{})
+			reg.HeapBytes.Set(float64(s.HeapInUseBytes), metrics.Labels{})
+		}),
+		HeapAlarmCallback: func() { reg.OOMAlarms.Inc(metrics.Labels{}) },
+	})
+	go func() { _ = sampler.Run(context.Background()) }()
+	mgr.Register("memwatch", sampler)
+	return reg
+}
 
 // Config is the runtime contract between compose and the agent scheduler.
 type Config struct {
@@ -153,11 +178,19 @@ func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		return runScheduledJobs(ctx, logger, cfg)
 	}
 
+	mgr := lifecycle.New(logger, 10*time.Second)
+	reg := startWorkerObservability(mgr, logger, "agent-worker")
+	agentEcRegistry.Store(reg)
+	defer agentEcRegistry.Store(nil)
+
 	httpServer := &http.Server{
 		Addr:              cfg.MetricsAddr,
 		Handler:           workerMux(cfg),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	mgr.Register("metrics-server", lifecycle.CloserFunc(func(closeCtx context.Context) error {
+		return httpServer.Shutdown(closeCtx)
+	}))
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- httpServer.ListenAndServe()
@@ -196,9 +229,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
 			return nil
 		case <-ctx.Done():
 			logger.Info("agent-worker.shutdown")
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			return httpServer.Shutdown(shutdownCtx)
+			return mgr.Shutdown()
 		case <-tickerC:
 			if err := runScheduledJobs(ctx, logger, cfg); err != nil {
 				return err
@@ -396,8 +427,18 @@ agentic_ecommerce_agent_worker_compliance_failures_total{eventbus_driver=%q,sync
 # TYPE agentic_ecommerce_agent_worker_media_validation_failures_total counter
 agentic_ecommerce_agent_worker_media_validation_failures_total{eventbus_driver=%q,sync_channel=%q} 0
 `, version, commit, enabled, cfg.Concurrency, cfg.Interval.Seconds(), schedulesEnabled, cfg.ScheduleDefaultInterval.Seconds(), cfg.ScheduleMaxConcurrentRuns, cfg.ScheduleTaskQueue, cfg.ScheduleTaskQueue, agentScheduledRunsSucceededTotal.Load(), cfg.ScheduleTaskQueue, agentScheduledRunsFailedTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsSucceededTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsFailedTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel)
+		if reg := agentEcRegistry.Load(); reg != nil {
+			reg.Handler().ServeHTTP(noopHeader{w}, r)
+		}
 	}
 }
+
+// noopHeader prevents the embedded ec_* handler from overwriting the
+// agentic_ecommerce_* content-type header.
+type noopHeader struct{ http.ResponseWriter }
+
+func (n noopHeader) Header() http.Header { return http.Header{} }
+func (n noopHeader) WriteHeader(int)     {}
 
 func isHealthcheckArgs(args []string) bool {
 	if len(args) < 2 {
