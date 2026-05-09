@@ -1,0 +1,84 @@
+{
+  "binaries": [
+    {
+      "binary_path": "/Users/jason.lian/runs/runx",
+      "built_at": "2026-05-09T04:53:37Z",
+      "command": "runx make install --repo runx",
+      "go_version_metadata": "go1.24.11",
+      "name": "runx",
+      "repo_alias": "runx",
+      "sha256": "f187b33d68a1ec076bb5d91365f5fc23c9c34305d76cbd6cd748b0e543e223e0",
+      "size_bytes": 11393058,
+      "symlink_path": "/Users/jason.lian/bin/runx -\u003e /Users/jason.lian/runs/runx",
+      "version": "d90cecd"
+    },
+    {
+      "binary_path": "/Users/jason.lian/bin/cursor-tools",
+      "built_at": "2026-05-09T04:53:53Z",
+      "command": "runx make install --repo cursor-tools",
+      "go_version_metadata": "go1.24.11",
+      "name": "cursor-tools",
+      "repo_alias": "cursor-tools",
+      "sha256": "b8a769234def48656c80976c5e843dcd7c2949eedf7cef2d7d9c0cc0c99f3654",
+      "size_bytes": 7832178,
+      "version": "v0.2.0-quality-baseline-35-g6555bc8"
+    },
+    {
+      "binary_path": "/Users/jason.lian/bin/ec-cli",
+      "built_at": "2026-05-09T04:54:00Z",
+      "command": "runx make build --repo ecommerce  (Makefile build target builds all 8 cmd/* binaries; ec-cli installed by 'cp bin/ec-cli ~/bin/ec-cli')",
+      "go_version_metadata": "go1.25.10",
+      "name": "ec-cli",
+      "repo_alias": "ecommerce",
+      "sha256": "3c5a1e2cef7197286491a4898b2635ed3629e8e70a91686d20278d69c7642c0b",
+      "size_bytes": 8802738,
+      "source_path": "/Users/jason.lian/agentic-ecommerce/bin/ec-cli",
+      "version": "dev"
+    }
+  ],
+  "captured_at": "2026-05-09T04:54:00Z",
+  "go_toolchain_for_ecommerce": "go1.25.10",
+  "host_arch": "arm64",
+  "host_os": "darwin",
+  "host_runtime_go": "go1.24.11 darwin/arm64",
+  "note": "GOTOOLCHAIN=auto in the Makefile downloads + uses go1.25.10 to satisfy ecommerce go.mod even though the host runtime stays on go1.24.11. cursor-tools and runx pin go1.24.5/1.24.x in their respective go.mod files and are still built with the host runtime.",
+  "schema_version": 1,
+  "smoke_tests": [
+    {
+      "command": "runx doctor",
+      "evidence": "runs/logs/runx/config presence pass, hosts=8 keys=2 repos=38 forwards=3 — status: GREEN",
+      "name": "runx doctor",
+      "result": "GREEN"
+    },
+    {
+      "command": "ec-cli version",
+      "evidence": "version=dev, commit=unknown, build_time=unknown — binary executes cleanly",
+      "name": "ec-cli version",
+      "result": "PASS"
+    },
+    {
+      "command": "ec-cli doctor --json",
+      "evidence": "healthy=false because ECOMMERCE_DB_URL/ECOMMERCE_REDIS_URL/ECOMMERCE_TEMPORAL_ADDR not set without compose stack; binary itself parses, exec'd cleanly, JSON shape valid. Compose-stack smoke deferred to v3.0.0 live validation matrix per release-gate split.",
+      "name": "ec-cli doctor",
+      "result": "EXPECTED_UNHEALTHY_NO_COMPOSE"
+    },
+    {
+      "command": "RUNX_CURSOR_TOOLS_BIN=/Users/jason.lian/.local/bin/cursor-tools runx workspace doctor --quick",
+      "evidence": "Score: 27 (RED). Findings: multiple repos behind upstream by 1-950 commits. NO ecommerce/agentic-ecommerce-web findings. RED is from openclaw (-950), windows-mcp (-3), runx itself (-1), uiauto-framework (-1), skills (-1) — all pre-existing fleet drift, none touched by v2.10.x. Note: workspace command is no longer in cursor-tools HEAD source; old binary at ~/.local/bin/cursor-tools (May 6, 11.5MB) preserved as fallback via RUNX_CURSOR_TOOLS_BIN env.",
+      "name": "runx workspace doctor --quick",
+      "result": "PRE_EXISTING_RED_NON_BLOCKER"
+    },
+    {
+      "command": "cursor-tools doctor identity --strict",
+      "evidence": "Pre-existing Zendesk GITHUB_TOKEN family env vars in this Cursor shell trip the identity gate. Mitigation per personal-repo-shell-hygiene skill is 'runx env personal-shell --exec' for any push/PR operation. Not blocking for v2.10.1 build evidence.",
+      "name": "cursor-tools doctor identity --strict",
+      "result": "EXPECTED_FAIL_GITHUB_TOKEN_FAMILY"
+    }
+  ],
+  "v2_10_1_observations": [
+    "cursor-tools workspace command was removed from cursor-tools repo HEAD before this sprint; pre-existing carry-forward — RUNX_CURSOR_TOOLS_BIN escape hatch preserves fleet hygiene check until cursor-tools workspace is reinstated or migrated to runx-native.",
+    "All three rebuild targets succeeded; ec-cli embeds go1.25.10 metadata confirming Go toolchain auto-download + use against ecommerce go.mod requirement.",
+    "Pre-flight evidence: backend main HEAD = cdad8ec (v2.10.0 PR #76 merged), frontend main HEAD = 20eb3bd (v2.9.0)."
+  ]
+}
+

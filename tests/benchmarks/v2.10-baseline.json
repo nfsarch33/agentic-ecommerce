@@ -1,0 +1,201 @@
+{
+  "benchmarks": [
+    {
+      "iterations": [
+        {
+          "allocs_per_op": 29,
+          "bytes_per_op": 2064,
+          "n": 427280,
+          "ns_per_op": 2767
+        },
+        {
+          "allocs_per_op": 29,
+          "bytes_per_op": 2064,
+          "n": 429147,
+          "ns_per_op": 2766
+        }
+      ],
+      "name": "BenchmarkVerifyAccessToken",
+      "package": "internal/security"
+    },
+    {
+      "iterations": [
+        {
+          "allocs_per_op": 20,
+          "bytes_per_op": 2441,
+          "n": 686143,
+          "ns_per_op": 1621
+        },
+        {
+          "allocs_per_op": 20,
+          "bytes_per_op": 2441,
+          "n": 747542,
+          "ns_per_op": 1720
+        }
+      ],
+      "name": "BenchmarkMintAccessToken",
+      "package": "internal/security"
+    },
+    {
+      "iterations": [
+        {
+          "allocs_per_op": 15,
+          "bytes_per_op": 793,
+          "n": 1426401,
+          "ns_per_op": 835.8
+        },
+        {
+          "allocs_per_op": 15,
+          "bytes_per_op": 793,
+          "n": 1428958,
+          "ns_per_op": 846.2
+        }
+      ],
+      "name": "BenchmarkLicenseKeyGenerate",
+      "package": "internal/domain/digital"
+    },
+    {
+      "iterations": [
+        {
+          "allocs_per_op": 13,
+          "bytes_per_op": 785,
+          "n": 2256782,
+          "ns_per_op": 532.6
+        },
+        {
+          "allocs_per_op": 13,
+          "bytes_per_op": 785,
+          "n": 2264661,
+          "ns_per_op": 542.6
+        }
+      ],
+      "name": "BenchmarkLicenseKeyValidate",
+      "package": "internal/domain/digital"
+    },
+    {
+      "iterations": [
+        {
+          "allocs_per_op": 15,
+          "bytes_per_op": 784,
+          "n": 1938554,
+          "ns_per_op": 612.4
+        },
+        {
+          "allocs_per_op": 15,
+          "bytes_per_op": 784,
+          "n": 1875099,
+          "ns_per_op": 611.9
+        }
+      ],
+      "name": "BenchmarkWebhookVerify",
+      "package": "internal/billing"
+    },
+    {
+      "iterations": [
+        {
+          "allocs_per_op": 45,
+          "bytes_per_op": 2184,
+          "n": 526530,
+          "ns_per_op": 2214
+        },
+        {
+          "allocs_per_op": 45,
+          "bytes_per_op": 2184,
+          "n": 547420,
+          "ns_per_op": 2219
+        }
+      ],
+      "name": "BenchmarkIssueSignedURL",
+      "package": "internal/adapter/signedurl"
+    },
+    {
+      "iterations": [
+        {
+          "allocs_per_op": 29,
+          "bytes_per_op": 1504,
+          "n": 667946,
+          "ns_per_op": 1700
+        },
+        {
+          "allocs_per_op": 29,
+          "bytes_per_op": 1504,
+          "n": 687903,
+          "ns_per_op": 1679
+        }
+      ],
+      "name": "BenchmarkVerifySignedURL",
+      "package": "internal/adapter/signedurl"
+    },
+    {
+      "iterations": [
+        {
+          "allocs_per_op": 5,
+          "bytes_per_op": 664,
+          "n": 1423380,
+          "ns_per_op": 872.6
+        },
+        {
+          "allocs_per_op": 5,
+          "bytes_per_op": 664,
+          "n": 1404838,
+          "ns_per_op": 829.8
+        }
+      ],
+      "name": "BenchmarkMediaValidation",
+      "package": "internal/media"
+    },
+    {
+      "iterations": [
+        {
+          "allocs_per_op": 5,
+          "bytes_per_op": 272,
+          "n": 1640684,
+          "ns_per_op": 718.6
+        },
+        {
+          "allocs_per_op": 5,
+          "bytes_per_op": 272,
+          "n": 1703739,
+          "ns_per_op": 729.1
+        }
+      ],
+      "name": "BenchmarkMediaQAValidate",
+      "package": "internal/media/intelligence"
+    }
+  ],
+  "captured_at": "2026-05-09T05:06:00Z",
+  "captured_by": "v2.10.1 QA Task 2 (resilience-validation)",
+  "command": "go test -bench=. -benchmem -run=^$ -count=2 -timeout=10m -json ./internal/security/... ./internal/domain/digital/... ./internal/billing/... ./internal/adapter/signedurl/... ./internal/media/...",
+  "git_head": "cdad8ec",
+  "host": {
+    "arch": "arm64",
+    "build_toolchain_go": "go1.25.10 (auto-downloaded via GOTOOLCHAIN=auto)",
+    "cpu": "Apple M4 Pro",
+    "host_runtime_go": "go1.24.11",
+    "os": "darwin"
+  },
+  "raw_output_file": "v2.10-baseline.raw.json",
+  "schema_version": 1,
+  "summary": {
+    "total_benchmarks": 9,
+    "v2_10_1_added_for_baseline_continuity": [
+      "BenchmarkMediaValidation",
+      "BenchmarkMediaQAValidate"
+    ],
+    "v2_6_0_baseline_set": [
+      "BenchmarkVerifyAccessToken",
+      "BenchmarkMintAccessToken",
+      "BenchmarkLicenseKeyGenerate",
+      "BenchmarkLicenseKeyValidate",
+      "BenchmarkWebhookVerify",
+      "BenchmarkIssueSignedURL",
+      "BenchmarkVerifySignedURL"
+    ]
+  },
+  "v3_0_0_release_gate": {
+    "criterion": "no v2.10.1 hot-path benchmark may regress \u003e 25% vs the v2.6.0 ledger",
+    "gate_status_for_v3_0_0": "PASS",
+    "outcome": "see v2.10-vs-v2.6-comparison.md"
+  }
+}
+
