@@ -36,6 +36,22 @@ const (
 	// Carries the typed SourcingProposalPayload via Event.Payload (as
 	// map[string]any for in-memory bus compatibility).
 	ProductSourcingProposed EventType = "product.sourcing.proposed"
+
+	// v3.2.0 EC-2 enrichment + v3.3.0 EC-3 channel publish bounded
+	// context. Carries the typed ProductEnrichedPayload (see
+	// product_enriched.go).
+	ProductEnriched EventType = "product.enriched"
+
+	// v3.3.0 EC-3-2 TikTok listing rollback signal. Emitted by the
+	// EC-3-2 channel agent when the publish path failed and the
+	// compensating action ran. Carries TikTokListingRollbackPayload.
+	TikTokListingRolledBack EventType = "tiktok.listing.rolled_back"
+
+	// v3.3.0 EC-3-3 inbound TikTok Shop order webhook event. Carries
+	// the typed OrderReceivedPayload (see order_received.go) so the
+	// downstream fulfilment + inventory pipelines stay tenant-scoped
+	// and idempotency-keyed.
+	OrderReceived EventType = "order.received"
 )
 
 type Event struct {

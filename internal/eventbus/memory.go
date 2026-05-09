@@ -27,21 +27,30 @@ func NewInMemoryBus() *InMemoryBus {
 
 func (b *InMemoryBus) Publish(ctx context.Context, event Event) error {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	if b.closed {
+		b.mu.Unlock()
 		return ErrBusClosed
 	}
-
 	b.delivered = append(b.delivered, event)
-
+	// v3.3.0: snapshot the per-group handlers under the lock then
+	// release it before dispatching so handlers that publish back
+	// (e.g. EC-3-2 saga rollback) cannot self-deadlock. Dedup is
+	// computed here so the snapshot is the exact set of handlers
+	// that would have fired in the previous lock-during-dispatch
+	// model -- behaviour-equivalent for non-republishing handlers.
 	delivered := make(map[string]bool)
+	dispatch := make([]Handler, 0, len(b.subs[event.Type]))
 	for _, sub := range b.subs[event.Type] {
 		if delivered[sub.group] {
 			continue
 		}
 		delivered[sub.group] = true
-		_ = sub.handler(ctx, event)
+		dispatch = append(dispatch, sub.handler)
+	}
+	b.mu.Unlock()
+
+	for _, h := range dispatch {
+		_ = h(ctx, event)
 	}
 	return nil
 }
