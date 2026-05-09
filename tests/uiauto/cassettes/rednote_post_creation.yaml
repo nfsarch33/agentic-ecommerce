@@ -1,0 +1,39 @@
+version: 1
+name: rednote_post_creation
+description: |
+  v3.7.0 EC-10-5 sample cassette: RedNote (Xiaohongshu / XHS)
+  organic-post creation through the omniparser-bridge facade.
+  Reuses the EC-4-1 RedNote uiauto client wire shape: the bridge
+  POST is signed with HMAC-SHA256 + X-Bridge-* headers; the
+  response carries note_id + status. The recorded host is the
+  placeholder `https://omniparser.example.local/uiauto/rednote/post`
+  so this cassette commits cleanly into a public repo (zero
+  internal hostnames per public-repo-gate).
+http:
+  - method: POST
+    url: https://omniparser.example.local/uiauto/rednote/post
+    request_body: |
+      {"tenant_id":"tenant-a","product_id":"prod-1","caption":"Test post","image_urls":["https://cdn.example.local/img.jpg"]}
+    status: 201
+    headers:
+      Content-Type: application/json
+    response_body: |
+      {"note_id":"note-987","status":"posted","occurred_at":"2026-05-10T12:00:00Z"}
+    occurred_at: 2026-05-10T12:00:00Z
+dom_snapshots:
+  - step_label: pre-publish
+    snapshot: |
+      <body><div id="caption-input">Test post</div><button id="publish-btn">发布</button></body>
+    occurred_at: 2026-05-10T11:59:55Z
+  - step_label: post-publish
+    snapshot: |
+      <body><div class="success">笔记已发布</div></body>
+    occurred_at: 2026-05-10T12:00:01Z
+ui_events:
+  - kind: type
+    selector: "#caption-input"
+    value: "Test post"
+    occurred_at: 2026-05-10T11:59:50Z
+  - kind: click
+    selector: "#publish-btn"
+    occurred_at: 2026-05-10T11:59:58Z

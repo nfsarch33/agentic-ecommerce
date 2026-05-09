@@ -105,6 +105,36 @@ func TestChannelHealthMetricsRender(t *testing.T) {
 	}
 }
 
+// TestUIAutoHardeningMetricsRender is the v3.7.0 EC-10 metrics-side
+// gate. The handler MUST emit the seven new ec_uiauto_* /
+// ec_omniparser_* / ec_captcha_* series so the Prometheus alert
+// rules + Grafana panels can scrape them.
+func TestUIAutoHardeningMetricsRender(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry("mc-api")
+	r.UIAutoSessionOpsTotal.Inc(Labels{"tenant_id": "t1", "channel": "rednote", "op": "save"})
+	r.OmniParserInferenceDurationSeconds.Observe(0.45, Labels{})
+	r.OmniParserMemoryPressurePauses.Inc(Labels{"tenant_id": "t1"})
+	r.OmniParserConcurrentInflight.Set(3, Labels{})
+	r.UIAutoRateLimitDropsTotal.Inc(Labels{"tenant_id": "t1", "channel": "rednote", "reason": "drain"})
+	r.CAPTCHADetectionsTotal.Inc(Labels{"tenant_id": "t1", "channel": "tiktok", "signal": "body"})
+	r.CAPTCHAResolutionDurationSeconds.Observe(120, Labels{})
+	body := scrape(t, r)
+	for _, want := range []string{
+		"ec_uiauto_session_ops_total",
+		"ec_omniparser_inference_duration_seconds",
+		"ec_omniparser_memory_pressure_pauses_total",
+		"ec_omniparser_concurrent_inflight",
+		"ec_uiauto_rate_limit_drops_total",
+		"ec_captcha_detections_total",
+		"ec_captcha_resolution_duration_seconds",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("response missing %q\n%s", want, body)
+		}
+	}
+}
+
 func TestHistogramSumAndCount(t *testing.T) {
 	t.Parallel()
 	r := NewRegistry("mc-api")
