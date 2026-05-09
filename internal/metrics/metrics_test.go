@@ -79,6 +79,32 @@ func TestLabelCardinalityBoundedByConfig(t *testing.T) {
 	}
 }
 
+// TestChannelHealthMetricsRender is the v3.4.1 EC-4-5 metrics-side
+// gate. The handler MUST emit the five new ec_channel_health_*
+// series so the Prometheus alert rule + Grafana panel can scrape
+// them.
+func TestChannelHealthMetricsRender(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry("mc-api")
+	r.ChannelHealthState.Set(2, Labels{"tenant_id": "t1", "channel": "tiktok"})
+	r.ChannelHealthFailureRate.Set(0.06, Labels{"tenant_id": "t1", "channel": "tiktok"})
+	r.ChannelHealthConsecutiveFailures.Set(4, Labels{"tenant_id": "t1", "channel": "tiktok"})
+	r.ChannelHealthAlertsTotal.Inc(Labels{"tenant_id": "t1", "channel": "tiktok", "state": "unhealthy"})
+	r.ChannelHealthRecoveriesTotal.Inc(Labels{"tenant_id": "t1", "channel": "tiktok"})
+	body := scrape(t, r)
+	for _, want := range []string{
+		"ec_channel_health_state",
+		"ec_channel_health_failure_rate",
+		"ec_channel_health_consecutive_failures",
+		"ec_channel_health_alerts_total",
+		"ec_channel_health_recoveries_total",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("response missing %q\n%s", want, body)
+		}
+	}
+}
+
 func TestHistogramSumAndCount(t *testing.T) {
 	t.Parallel()
 	r := NewRegistry("mc-api")

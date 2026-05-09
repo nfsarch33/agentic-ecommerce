@@ -38,16 +38,31 @@
 package media
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/social"
 )
+
+// VideoBridgePostPath is the canonical path the video bridge exposes
+// for /video/assemble live-encode requests. Used in the HMAC
+// canonical form so the bridge can re-verify.
+const VideoBridgePostPath = "/video/assemble"
+
+// VideoBridgePlatform is the literal value used for the
+// X-Bridge-Platform header so a single video-bridge instance can
+// route TikTok / RedNote / Reels output under one HMAC scheme.
+const VideoBridgePlatform = "video"
 
 // EC-5-3 typed sentinels.
 var (
@@ -70,6 +85,18 @@ var (
 	// ErrVideoAssemblyFailed wraps any unexpected failure inside
 	// the pipeline.
 	ErrVideoAssemblyFailed = errors.New("media: video assembly failed")
+
+	// ErrVideoScriptInvalid is the v3.4.1 sentinel returned when
+	// the supplied script payload is structurally invalid (e.g.,
+	// no scenes, no voiceover). Surfaces from the stub + the
+	// future live bridge so callers branch consistently via
+	// errors.Is.
+	ErrVideoScriptInvalid = errors.New("media: video script invalid")
+
+	// ErrVideoBridgeSignature is the v3.4.1 sentinel returned when
+	// the HMAC signature build for the bridge POST fails (e.g.,
+	// secret too short or hash error).
+	ErrVideoBridgeSignature = errors.New("media: video bridge signature build failed")
 )
 
 // VideoFormat is the requested output aspect ratio.
@@ -101,6 +128,13 @@ type VideoAssemblyRequest struct {
 	BrandingOverlay string // optional brand watermark text
 	DurationSec     int
 	OutputKeyPrefix string // optional, e.g. "tiktok"
+	// Scenes is the v3.4.1 EC-5-3 structured scene list. When the
+	// operator passes a non-nil Scenes the stub validates that at
+	// least one entry is supplied (returns ErrVideoScriptInvalid
+	// when empty) so the live ffmpeg bridge gets a deterministic
+	// validation surface BEFORE the bridge ships. nil keeps the
+	// v3.4.0 behaviour (VoiceoverScript-only validation).
+	Scenes []string
 }
 
 // VideoAssemblyResult captures the pipeline output.
@@ -225,6 +259,9 @@ func (p *VideoAssemblyPipeline) guardAssemble(req VideoAssemblyRequest) error {
 	}
 	if strings.TrimSpace(req.VoiceoverScript) == "" {
 		return fmt.Errorf("%w: VoiceoverScript required (from EC-5-1 generator)", ErrVideoAssemblerUnconfigured)
+	}
+	if req.Scenes != nil && len(req.Scenes) == 0 {
+		return fmt.Errorf("%w: Scenes is non-nil but empty (zero scenes)", ErrVideoScriptInvalid)
 	}
 	return nil
 }
@@ -364,4 +401,64 @@ func NewBridgeVideoAssembler(cfg BridgeVideoAssemblerConfig) (*BridgeVideoAssemb
 // uiauto-framework PR per ADR-028.
 func (b *BridgeVideoAssembler) Assemble(_ context.Context, req VideoAssemblyRequest) (VideoAssemblyResult, error) {
 	return VideoAssemblyResult{}, fmt.Errorf("%w: action=%s product=%s (bridge URL=%q)", ErrVideoBridgeUnconfigured, req.Action, req.ProductID, b.cfg.BridgeURL)
+}
+
+// Config returns a copy of the bridge configuration. Useful for
+// admin surfaces and tests that report the running shape without
+// exposing the raw secret bytes.
+func (b *BridgeVideoAssembler) Config() BridgeVideoAssemblerConfig {
+	return BridgeVideoAssemblerConfig{
+		BridgeURL: b.cfg.BridgeURL,
+		Timeout:   b.cfg.Timeout,
+	}
+}
+
+// BuildSignedRequest is the v3.4.1 wire-shape contract surface.
+// It assembles the *http.Request that the live bridge call WOULD
+// send -- including the X-Bridge-Timestamp + X-Bridge-Sign +
+// X-Bridge-Tenant + X-Bridge-Platform headers -- WITHOUT performing
+// the round-trip. Tests use it to gate the bridge contract before
+// the live ffmpeg POST lands; the production Assemble path will
+// call this internally once the bridge is deployed.
+//
+// Decomposition: marshal + sign + assemble are split out so this
+// public method body stays small (sentrux complex_fn guard).
+func (b *BridgeVideoAssembler) BuildSignedRequest(ctx context.Context, req VideoAssemblyRequest, now time.Time) (*http.Request, error) {
+	body, err := json.Marshal(map[string]any{
+		"tenant_id":         req.TenantID,
+		"product_id":        req.ProductID,
+		"action":            string(req.Action),
+		"format":            string(req.Format),
+		"hero_image_urls":   req.HeroImageURLs,
+		"voiceover_script":  req.VoiceoverScript,
+		"subtitle_lines":    req.SubtitleLines,
+		"background_music":  req.BackgroundMusic,
+		"branding_overlay":  req.BrandingOverlay,
+		"duration_sec":      req.DurationSec,
+		"output_key_prefix": req.OutputKeyPrefix,
+		"scenes":            req.Scenes,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: marshal body: %v", ErrVideoBridgeSignature, err)
+	}
+	timestamp := now.UTC().Unix()
+	signature, err := social.ComputeTikTokSignature(social.TikTokSignRequest{
+		Secret:    b.cfg.BridgeSecret,
+		Timestamp: timestamp,
+		Path:      VideoBridgePostPath,
+		Body:      body,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrVideoBridgeSignature, err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, b.cfg.BridgeURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("%w: build request: %v", ErrVideoBridgeSignature, err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Bridge-Timestamp", fmt.Sprintf("%d", timestamp))
+	httpReq.Header.Set("X-Bridge-Sign", signature)
+	httpReq.Header.Set("X-Bridge-Tenant", req.TenantID)
+	httpReq.Header.Set("X-Bridge-Platform", VideoBridgePlatform)
+	return httpReq, nil
 }
