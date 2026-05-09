@@ -80,6 +80,14 @@ func (s *InMemoryVectorStore) Search(_ context.Context, query SearchQuery) ([]Se
 	return results, nil
 }
 
+// Size returns the number of distinct chunks held in the store.
+// Used by tests + diagnostics; not part of the VectorStore contract.
+func (s *InMemoryVectorStore) Size() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.chunks)
+}
+
 func CosineSimilarity(a, b []float64) float64 {
 	if len(a) == 0 || len(a) != len(b) {
 		return 0

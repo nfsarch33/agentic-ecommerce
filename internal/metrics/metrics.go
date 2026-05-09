@@ -71,6 +71,25 @@ type Registry struct {
 	SourcingDuration          *Histogram
 	SourcingComplianceRejects *Counter
 	SupplierScoreDistribution *Histogram
+
+	// v3.2.0 EC-2 AI Product Enrichment Pipeline metrics.
+	// Cardinality budget per series:
+	//   ec_enrichment_runs_total{tenant_id, stage, status}
+	//     ~ tenants(10) * stages(4) * statuses(2) = 80 series.
+	//   ec_enrichment_duration_seconds{stage}        ~ 4 series.
+	//   ec_enrichment_quality_score{stage}            ~ 4 series.
+	//   ec_image_processing_total{action, status}    ~ actions(2) * statuses(4) = 8 series.
+	//   ec_trend_ingest_records_total{platform}      ~ 3 series.
+	//   ec_seo_keyword_injects_total{tenant_id}      ~ 10 series.
+	// Total ~ 109 series additive for v3.2.0; well under the
+	// per-binary 10_000 cap.
+	EnrichmentRuns          *Counter
+	EnrichmentDuration      *Histogram
+	EnrichmentQualityScore  *Histogram
+	ImageProcessingTotal    *Counter
+	ImageProcessingDuration *Histogram
+	TrendIngestRecordsTotal *Counter
+	SEOKeywordInjectsTotal  *Counter
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -96,6 +115,13 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.SourcingDuration = newHistogram(r, "ec_sourcing_duration_seconds", "China sourcing agent run duration by source.", defaultDurationBuckets)
 	r.SourcingComplianceRejects = newCounter(r, "ec_sourcing_compliance_rejects_total", "Products rejected by the compliance gate by category.")
 	r.SupplierScoreDistribution = newHistogram(r, "ec_supplier_score_distribution", "Distribution of supplier scores observed during sourcing.", defaultScoreBuckets)
+	r.EnrichmentRuns = newCounter(r, "ec_enrichment_runs_total", "v3.2.0 AI product enrichment pipeline runs by tenant + stage + status.")
+	r.EnrichmentDuration = newHistogram(r, "ec_enrichment_duration_seconds", "v3.2.0 enrichment pipeline duration by stage.", defaultDurationBuckets)
+	r.EnrichmentQualityScore = newHistogram(r, "ec_enrichment_quality_score", "v3.2.0 enrichment pipeline output quality score by stage (0..1).", defaultScoreBuckets)
+	r.ImageProcessingTotal = newCounter(r, "ec_image_processing_total", "v3.2.0 EC-2-2 image pipeline operations by action + status.")
+	r.ImageProcessingDuration = newHistogram(r, "ec_image_processing_duration_seconds", "v3.2.0 EC-2-2 image pipeline duration by action.", defaultDurationBuckets)
+	r.TrendIngestRecordsTotal = newCounter(r, "ec_trend_ingest_records_total", "v3.2.0 EC-2-4 trend records ingested by platform.")
+	r.SEOKeywordInjectsTotal = newCounter(r, "ec_seo_keyword_injects_total", "v3.2.0 EC-2-3 SEO keyword injection runs by tenant.")
 	return r
 }
 
@@ -130,6 +156,13 @@ func (r *Registry) Handler() http.Handler {
 		r.SourcingDuration.write(&sb)
 		r.SourcingComplianceRejects.write(&sb)
 		r.SupplierScoreDistribution.write(&sb)
+		r.EnrichmentRuns.write(&sb)
+		r.EnrichmentDuration.write(&sb)
+		r.EnrichmentQualityScore.write(&sb)
+		r.ImageProcessingTotal.write(&sb)
+		r.ImageProcessingDuration.write(&sb)
+		r.TrendIngestRecordsTotal.write(&sb)
+		r.SEOKeywordInjectsTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
