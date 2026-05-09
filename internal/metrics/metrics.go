@@ -168,6 +168,35 @@ type Registry struct {
 	ChannelHealthConsecutiveFailures *Gauge
 	ChannelHealthAlertsTotal         *Counter
 	ChannelHealthRecoveriesTotal     *Counter
+
+	// v3.5.0 EC-6 + EC-7 pricing + fulfilment seed metrics.
+	// Cardinality budget per series:
+	//   ec_supplier_cost_changes_total{tenant_id, source, direction}
+	//     ~ tenants(10) * sources(4: 1688/taobao/aliexpress/
+	//       pinduoduo) * directions(2) = 80 series.
+	//   ec_pricing_decisions_total{tenant_id, outcome}
+	//     ~ tenants(10) * outcomes(4: approved | approval_pending |
+	//       guardrail_blocked | llm_failover) = 40 series.
+	//   ec_pricing_change_pct
+	//     ~ histogram (no labels) = 5 series (one per bucket plus
+	//       sum + count surfaced as separate text format lines).
+	//   ec_order_aggregator_normalisations_total{tenant_id, channel, status}
+	//     ~ tenants(10) * channels(5) * statuses(3: ok/duplicate/
+	//       failure) = 150 series.
+	//   ec_dropship_orders_total{tenant_id, supplier, status}
+	//     ~ tenants(10) * suppliers(2: 1688/aliexpress) *
+	//       statuses(5: placed/approval_pending/rolled_back/
+	//       fallback_used/no_fallback) = 100 series.
+	//   ec_fx_rate_age_seconds
+	//     ~ gauge (no labels) = 1 series.
+	// Total ~ 376 additive series for v3.5.0; well under the
+	// per-binary 10_000 cap.
+	SupplierCostChangesTotal           *Counter
+	PricingDecisionsTotal              *Counter
+	PricingChangePctHistogram          *Histogram
+	OrderAggregatorNormalisationsTotal *Counter
+	DropshipOrdersTotal                *Counter
+	FXRateAgeSeconds                   *Gauge
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -219,6 +248,12 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.ChannelHealthConsecutiveFailures = newGauge(r, "ec_channel_health_consecutive_failures", "v3.4.1 EC-4-5 channel health monitor consecutive-failure counter by tenant + channel.")
 	r.ChannelHealthAlertsTotal = newCounter(r, "ec_channel_health_alerts_total", "v3.4.1 EC-4-5 channel health monitor transitions into degraded/unhealthy by tenant + channel + state.")
 	r.ChannelHealthRecoveriesTotal = newCounter(r, "ec_channel_health_recoveries_total", "v3.4.1 EC-4-5 channel health monitor transitions back to healthy by tenant + channel.")
+	r.SupplierCostChangesTotal = newCounter(r, "ec_supplier_cost_changes_total", "v3.5.0 EC-6-1 supplier cost monitor change detections by tenant + source + direction.")
+	r.PricingDecisionsTotal = newCounter(r, "ec_pricing_decisions_total", "v3.5.0 EC-6-3 dynamic pricing agent decisions by tenant + outcome (approved|approval_pending|guardrail_blocked|llm_failover).")
+	r.PricingChangePctHistogram = newHistogram(r, "ec_pricing_change_pct", "v3.5.0 EC-6-3 dynamic pricing agent absolute change percentage histogram.", defaultPctBuckets)
+	r.OrderAggregatorNormalisationsTotal = newCounter(r, "ec_order_aggregator_normalisations_total", "v3.5.0 EC-7-1 multi-channel order aggregator normalisations by tenant + channel + status.")
+	r.DropshipOrdersTotal = newCounter(r, "ec_dropship_orders_total", "v3.5.0 EC-7-2 drop-ship supplier orders by tenant + supplier + status.")
+	r.FXRateAgeSeconds = newGauge(r, "ec_fx_rate_age_seconds", "v3.5.0 EC-6-2 AUD/CNY FX rate age (seconds since last refresh); ErrFXRateStale fires above 86400.")
 	return r
 }
 
@@ -229,6 +264,12 @@ var defaultDurationBuckets = []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5
 // 0.1-step granularity so reviewers can see the score distribution
 // without label cardinality.
 var defaultScoreBuckets = []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0}
+
+// defaultPctBuckets is used by the v3.5.0 EC-6-3 pricing change
+// histogram. Buckets cover the [0, 0.5] absolute-change-pct range
+// with finer granularity below 0.15 (the operator-approval
+// threshold) so the dashboard can render the approval-gate cliff.
+var defaultPctBuckets = []float64{0.01, 0.025, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5}
 
 // Handler returns the http.Handler that exposes /metrics in
 // Prometheus text format.
@@ -279,6 +320,12 @@ func (r *Registry) Handler() http.Handler {
 		r.ChannelHealthConsecutiveFailures.write(&sb)
 		r.ChannelHealthAlertsTotal.write(&sb)
 		r.ChannelHealthRecoveriesTotal.write(&sb)
+		r.SupplierCostChangesTotal.write(&sb)
+		r.PricingDecisionsTotal.write(&sb)
+		r.PricingChangePctHistogram.write(&sb)
+		r.OrderAggregatorNormalisationsTotal.write(&sb)
+		r.DropshipOrdersTotal.write(&sb)
+		r.FXRateAgeSeconds.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")

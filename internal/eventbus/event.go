@@ -52,6 +52,41 @@ const (
 	// downstream fulfilment + inventory pipelines stay tenant-scoped
 	// and idempotency-keyed.
 	OrderReceived EventType = "order.received"
+
+	// v3.5.0 EC-6-1 supplier cost-change event. Carries the typed
+	// SupplierCostChangedPayload; the EC-6-3 dynamic pricing agent
+	// subscribes to it.
+	SupplierCostChanged EventType = "supplier.cost.changed"
+
+	// v3.5.0 EC-6-3 dynamic pricing approval gate event. Emitted
+	// when the proposed price change exceeds the operator-configured
+	// large-change threshold (default 15%).
+	PriceChangePendingApproval EventType = "price.change.pending_approval"
+
+	// v3.5.0 EC-6-3 dynamic pricing approved-and-applied event.
+	// Emitted when the agent applied a price within guardrails (or
+	// after operator approval cleared the gate).
+	PriceChangeApplied EventType = "price.change.applied"
+
+	// v3.5.0 EC-7-1 normalised cross-channel order event. Emitted
+	// by the multi-channel order aggregator workflow once an order
+	// has been deduped + normalised. EC-7-2 drop-ship agent
+	// subscribes to it.
+	OrderNormalised EventType = "order.normalised"
+
+	// v3.5.0 EC-7-2 drop-ship pending-approval event for orders
+	// that exceed the operator-configured large-order threshold
+	// (default A$500).
+	LargeDropshipOrderPendingApproval EventType = "dropship.order.pending_approval"
+
+	// v3.5.0 EC-7-2 drop-ship placed event. Emitted after the
+	// supplier order succeeded (primary or fallback adapter).
+	DropshipOrderPlaced EventType = "dropship.order.placed"
+
+	// v3.5.0 EC-7-2 drop-ship saga rollback event. Emitted when
+	// every supplier adapter failed AND the customer-side
+	// fulfillment trigger was rolled back.
+	DropshipOrderRolledBack EventType = "dropship.order.rolled_back"
 )
 
 type Event struct {
