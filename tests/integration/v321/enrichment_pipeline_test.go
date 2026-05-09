@@ -56,6 +56,21 @@ type productEvidence struct {
 	TrendKeywordCount   int
 }
 
+// smokeHarness bundles every wired component for the 50-product
+// smoke. Returned by setupSmokeHarness so the top-level test stays a
+// thin orchestrator (cyclomatic complexity guard for sentrux: keeps
+// TestEnrichmentPipeline_50ProductSmoke under the complex_fn
+// threshold).
+type smokeHarness struct {
+	descriptionGen *enrichment.DescriptionGenerator
+	imagePipeline  *media.ProductImagePipeline
+	seoInjector    *seo.ProductSEO
+	trendAdapter   *ragTrendsAdapter
+	llm            *fixtureLLM
+	wcImporter     *fixtureCatalogueImporter
+	products       []fixtureProduct
+}
+
 // TestEnrichmentPipeline_50ProductSmoke is the v3.2.1 QA-1
 // acceptance test (per the parent plan: "End-to-end live smoke:
 // 50 sample products through full enrichment pipeline; quality
@@ -65,10 +80,33 @@ func TestEnrichmentPipeline_50ProductSmoke(t *testing.T) {
 	defer cancel()
 
 	const targetProductCount = 50
-	const tenantID = "cylrl"
 	const minQuality = 0.75
 
-	// 1. Resilience-pillar harness: workerpool + rag.Service.
+	h := setupSmokeHarness(t, ctx, targetProductCount, minQuality)
+
+	evidences := make([]productEvidence, 0, len(h.products))
+	for _, p := range h.products {
+		ev := runOneProduct(ctx, t, h.descriptionGen, h.imagePipeline, h.seoInjector, h.trendAdapter, p)
+		evidences = append(evidences, ev)
+	}
+
+	hits, histogram, sources := summariseEvidence(evidences, minQuality)
+	hitRate := float64(hits) / float64(len(evidences))
+	logSmokeReport(t, evidences, histogram, sources, hits, hitRate, h.wcImporter, h.llm)
+
+	assertSmokeOutcome(t, evidences, hits, hitRate, h.wcImporter, h.llm)
+}
+
+// setupSmokeHarness wires every component of the EC-2 enrichment
+// pipeline + registers each Closer with a single lifecycle.Manager
+// so end-of-test drain happens automatically. The trend store is
+// pre-seeded via TrendIngestor.Run so the SEO stage always finds
+// keywords for every fixture topic.
+func setupSmokeHarness(t *testing.T, ctx context.Context, productCount int, minQuality float64) *smokeHarness {
+	t.Helper()
+	const tenantID = "cylrl"
+	now := func() time.Time { return time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC) }
+
 	pool := workerpool.New(nil, workerpool.Config{
 		Name:       "v321-smoke",
 		MinWorkers: 2,
@@ -79,73 +117,22 @@ func TestEnrichmentPipeline_50ProductSmoke(t *testing.T) {
 	vectorStore := rag.NewInMemoryVectorStore(rag.DefaultEmbeddingDimensions)
 	ragService := rag.NewService(embedder, vectorStore, rag.ChunkOptions{MaxWords: 32})
 
-	// 2. EC-2-4 trend ingestor seed.
-	trendIngestor, err := rag.NewTrendIngestor(nil, rag.TrendIngestorConfig{
-		Sources:  buildFixtureTrendSources(),
-		Service:  ragService,
-		Pool:     pool,
-		TenantID: tenantID,
-		Now:      func() time.Time { return time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC) },
-	})
-	if err != nil {
-		t.Fatalf("NewTrendIngestor: %v", err)
-	}
-	report, err := trendIngestor.Run(ctx)
-	if err != nil {
-		t.Fatalf("TrendIngestor.Run: %v", err)
-	}
-	if report.RecordsIngested == 0 {
-		t.Fatalf("TrendIngestor.Run: zero records ingested; report=%+v", report)
-	}
+	trendIngestor := mustNewTrendIngestor(t, ragService, pool, tenantID, now)
+	seedTrendStore(t, ctx, trendIngestor)
 
-	// 3. EC-2-1 description generator.
 	llm := &fixtureLLM{}
-	descriptionGen, err := enrichment.NewDescriptionGenerator(nil, enrichment.DescriptionGeneratorConfig{
-		Generator:  llm,
-		TenantID:   tenantID,
-		MinQuality: minQuality,
-		Now:        func() time.Time { return time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC) },
-	})
-	if err != nil {
-		t.Fatalf("NewDescriptionGenerator: %v", err)
-	}
+	descriptionGen := mustNewDescriptionGenerator(t, llm, tenantID, minQuality, now)
 
-	// 4. EC-2-2 image pipeline (stub remover; deterministic
-	// 6x6 PNGs from the fixture downloader).
-	products := buildFixtureProducts(targetProductCount)
-	if len(products) != targetProductCount {
-		t.Fatalf("buildFixtureProducts returned %d, want %d", len(products), targetProductCount)
+	products := buildFixtureProducts(productCount)
+	if len(products) != productCount {
+		t.Fatalf("buildFixtureProducts returned %d, want %d", len(products), productCount)
 	}
-	downloader := newFixtureDownloader(products)
-	mediaStore := newFixtureMediaStore()
-	imagePipeline, err := media.NewProductImagePipeline(nil, media.ProductImagePipelineConfig{
-		Downloader: downloader,
-		Remover:    media.NewStubBackgroundRemover(),
-		Store:      mediaStore,
-		TenantID:   tenantID,
-		KeyPrefix:  "v321-smoke",
-		Now:        func() time.Time { return time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC) },
-	})
-	if err != nil {
-		t.Fatalf("NewProductImagePipeline: %v", err)
-	}
+	imagePipeline := mustNewImagePipeline(t, products, tenantID, now)
 
-	// 5. EC-2-3 SEO injector wired with the rag-backed trend
-	// adapter + the fixture WC importer.
 	wcImporter := newFixtureCatalogueImporter()
 	trendAdapter := &ragTrendsAdapter{service: ragService}
-	seoInjector, err := seo.NewProductSEO(nil, seo.ProductSEOConfig{
-		Trends:   trendAdapter,
-		Importer: wcImporter,
-		TenantID: tenantID,
-		Now:      func() time.Time { return time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC) },
-	})
-	if err != nil {
-		t.Fatalf("NewProductSEO: %v", err)
-	}
+	seoInjector := mustNewSEOInjector(t, trendAdapter, wcImporter, tenantID, now)
 
-	// 6. lifecycle.Manager registration so the resilience pillar
-	// drain happens at end-of-test (LIFO).
 	manager := lifecycle.New(nil, 5*time.Second)
 	manager.Register("workerpool", pool)
 	manager.Register("trend_ingestor", trendIngestor)
@@ -158,39 +145,120 @@ func TestEnrichmentPipeline_50ProductSmoke(t *testing.T) {
 		}
 	})
 
-	// 7. Drive every product through the full pipeline + collect
-	// per-product evidence for the histogram.
-	evidences := make([]productEvidence, 0, targetProductCount)
-	for _, p := range products {
-		ev := runOneProduct(ctx, t, descriptionGen, imagePipeline, seoInjector, trendAdapter, p)
-		evidences = append(evidences, ev)
+	return &smokeHarness{
+		descriptionGen: descriptionGen,
+		imagePipeline:  imagePipeline,
+		seoInjector:    seoInjector,
+		trendAdapter:   trendAdapter,
+		llm:            llm,
+		wcImporter:     wcImporter,
+		products:       products,
 	}
+}
 
-	// 8. Histogram + assertion.
-	hits, histogram, sources := summariseEvidence(evidences, minQuality)
-	hitRate := float64(hits) / float64(len(evidences))
-	logSmokeReport(t, evidences, histogram, sources, hits, hitRate, wcImporter, llm)
+// mustNewTrendIngestor builds the EC-2-4 trend ingestor or fails the
+// test. Extracted so setupSmokeHarness stays linear (each helper
+// raises a single error path; no inline t.Fatalf forks).
+func mustNewTrendIngestor(t *testing.T, service *rag.Service, pool *workerpool.Pool, tenantID string, now func() time.Time) *rag.TrendIngestor {
+	t.Helper()
+	ingestor, err := rag.NewTrendIngestor(nil, rag.TrendIngestorConfig{
+		Sources:  buildFixtureTrendSources(),
+		Service:  service,
+		Pool:     pool,
+		TenantID: tenantID,
+		Now:      now,
+	})
+	if err != nil {
+		t.Fatalf("NewTrendIngestor: %v", err)
+	}
+	return ingestor
+}
 
+// seedTrendStore pre-populates the rag store with platform trend
+// keywords so the SEO injector finds keywords for every fixture topic.
+// Fails the test if the seed run returns zero records.
+func seedTrendStore(t *testing.T, ctx context.Context, ingestor *rag.TrendIngestor) {
+	t.Helper()
+	report, err := ingestor.Run(ctx)
+	if err != nil {
+		t.Fatalf("TrendIngestor.Run: %v", err)
+	}
+	if report.RecordsIngested == 0 {
+		t.Fatalf("TrendIngestor.Run: zero records ingested; report=%+v", report)
+	}
+}
+
+func mustNewDescriptionGenerator(t *testing.T, gen *fixtureLLM, tenantID string, minQuality float64, now func() time.Time) *enrichment.DescriptionGenerator {
+	t.Helper()
+	d, err := enrichment.NewDescriptionGenerator(nil, enrichment.DescriptionGeneratorConfig{
+		Generator:  gen,
+		TenantID:   tenantID,
+		MinQuality: minQuality,
+		Now:        now,
+	})
+	if err != nil {
+		t.Fatalf("NewDescriptionGenerator: %v", err)
+	}
+	return d
+}
+
+func mustNewImagePipeline(t *testing.T, products []fixtureProduct, tenantID string, now func() time.Time) *media.ProductImagePipeline {
+	t.Helper()
+	p, err := media.NewProductImagePipeline(nil, media.ProductImagePipelineConfig{
+		Downloader: newFixtureDownloader(products),
+		Remover:    media.NewStubBackgroundRemover(),
+		Store:      newFixtureMediaStore(),
+		TenantID:   tenantID,
+		KeyPrefix:  "v321-smoke",
+		Now:        now,
+	})
+	if err != nil {
+		t.Fatalf("NewProductImagePipeline: %v", err)
+	}
+	return p
+}
+
+func mustNewSEOInjector(t *testing.T, trends *ragTrendsAdapter, importer *fixtureCatalogueImporter, tenantID string, now func() time.Time) *seo.ProductSEO {
+	t.Helper()
+	inj, err := seo.NewProductSEO(nil, seo.ProductSEOConfig{
+		Trends:   trends,
+		Importer: importer,
+		TenantID: tenantID,
+		Now:      now,
+	})
+	if err != nil {
+		t.Fatalf("NewProductSEO: %v", err)
+	}
+	return inj
+}
+
+// assertSmokeOutcome runs the post-loop assertions. Extracted so the
+// top-level test stays under the sentrux complex_fn threshold.
+func assertSmokeOutcome(
+	t *testing.T,
+	evidences []productEvidence,
+	hits int,
+	hitRate float64,
+	wcImporter *fixtureCatalogueImporter,
+	llm *fixtureLLM,
+) {
+	t.Helper()
+	n := len(evidences)
 	if hitRate < 0.75 {
-		t.Fatalf("quality-scorer hit rate = %.4f (%d/%d), want >= 0.75 (per Epic 2 EC-2-1 acceptance)", hitRate, hits, len(evidences))
+		t.Fatalf("quality-scorer hit rate = %.4f (%d/%d), want >= 0.75 (per Epic 2 EC-2-1 acceptance)", hitRate, hits, n)
 	}
-	if wcImporter.Calls() != len(evidences) {
-		t.Fatalf("WC importer Calls = %d, want %d (one per product)", wcImporter.Calls(), len(evidences))
+	if got := wcImporter.Calls(); got != n {
+		t.Fatalf("WC importer Calls = %d, want %d (one per product)", got, n)
 	}
-	if wcImporter.NewSKUs() != len(evidences) {
-		t.Fatalf("WC importer NewSKUs = %d, want %d (every fixture is a fresh SKU)", wcImporter.NewSKUs(), len(evidences))
+	if got := wcImporter.NewSKUs(); got != n {
+		t.Fatalf("WC importer NewSKUs = %d, want %d (every fixture is a fresh SKU)", got, n)
 	}
-	if wcImporter.StoredCount() != len(evidences) {
-		t.Fatalf("WC importer StoredCount = %d, want %d (zero overlap allowed across the 50 fixture IDs)", wcImporter.StoredCount(), len(evidences))
+	if got := wcImporter.StoredCount(); got != n {
+		t.Fatalf("WC importer StoredCount = %d, want %d (zero overlap allowed across the 50 fixture IDs)", got, n)
 	}
-	if got := llm.calls.Load(); int(got) != len(evidences) {
-		t.Fatalf("fixture LLM calls = %d, want %d (description gen runs exactly once per product)", got, len(evidences))
+	if got := llm.calls.Load(); int(got) != n {
+		t.Fatalf("fixture LLM calls = %d, want %d (description gen runs exactly once per product)", got, n)
 	}
-
-	// Image evidence: every product must have produced a PNG with
-	// at least one transparent pixel (the StubBackgroundRemover's
-	// dominant-corner replacement contract). Fails loudly if a
-	// future regression breaks the image stage for any product.
 	for _, ev := range evidences {
 		if !ev.ImageHasTransparent {
 			t.Errorf("product %s: image pipeline produced no transparent pixels", ev.ProductID)
