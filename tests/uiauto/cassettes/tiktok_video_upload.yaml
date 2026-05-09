@@ -1,0 +1,35 @@
+version: 1
+name: tiktok_video_upload
+description: |
+  v3.7.0 EC-10-5 sample cassette: TikTok creator-center video
+  upload through the omniparser-bridge facade. Reuses the EC-3-5
+  TikTok uiauto client wire shape: bridge POST signed with
+  HMAC-SHA256 + X-Bridge-* headers; response carries post_id +
+  status. The recorded host is the placeholder
+  `https://omniparser.example.local/uiauto/tiktok/post` so this
+  cassette commits cleanly into a public repo (zero internal
+  hostnames per public-repo-gate).
+http:
+  - method: POST
+    url: https://omniparser.example.local/uiauto/tiktok/post
+    request_body: |
+      {"tenant_id":"tenant-a","product_id":"prod-1","video_url":"https://cdn.example.local/v.mp4","caption":"Demo"}
+    status: 200
+    headers:
+      Content-Type: application/json
+    response_body: |
+      {"post_id":"tk-321","status":"posted","occurred_at":"2026-05-10T12:00:00Z"}
+    occurred_at: 2026-05-10T12:00:00Z
+dom_snapshots:
+  - step_label: upload-form
+    snapshot: |
+      <body><input type="file" id="video-upload"><textarea id="caption">Demo</textarea></body>
+    occurred_at: 2026-05-10T11:59:50Z
+ui_events:
+  - kind: type
+    selector: "#caption"
+    value: "Demo"
+    occurred_at: 2026-05-10T11:59:55Z
+  - kind: click
+    selector: "#submit-upload"
+    occurred_at: 2026-05-10T11:59:59Z

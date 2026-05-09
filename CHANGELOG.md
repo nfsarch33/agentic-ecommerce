@@ -2,6 +2,102 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## v3.7.0 -- Epic 10 uiauto hardening MVP -- 2026-05-10
+
+### Release Summary
+
+v3.7.0 ships Epic 10's uiauto hardening primitives so the
+omniparser-bridge fleet path becomes production-grade for unattended
+RedNote / TikTok creator-center / Facebook page automation. Five
+small-and-focused packages: cross-platform session manager
+(macOS keychain + AES-256-GCM file fallback), OmniParser memory
+guard, stealth-pacing rate limiter, multilingual CAPTCHA detector +
+operator-resume webhook, and a YAML cassette replay harness with
+three sample cassettes. All gates remain GREEN with `complex_fn`
+unchanged at 4 (12-sprint streak) and Sentrux quality holding the
+v3.6.1 baseline.
+
+### Capability surface added
+
+- **Session manager** (`internal/uiauto/session/`). Cross-platform
+  per-tenant per-channel session blob storage. macOS uses
+  `/usr/bin/security` (`darwin` build tag). Linux + WSL + CI use a
+  pure-Go AES-256-GCM file store keyed off the
+  `EC_SESSION_MASTER_KEY` env var (32 hex bytes). Encryption-at-
+  rest applies in both lanes (defense in depth). Typed errors:
+  `ErrSessionNotFound`, `ErrSessionExpired` (>30 days),
+  `ErrKeychainUnavailable`, `ErrInvalidMasterKey`,
+  `ErrSessionTampered`. 30-day age cap rejects expired blobs at
+  load time.
+- **OmniParser memory guard** (`internal/uiauto/memguard/`).
+  Pre-flight predicted-RSS check + concurrent-inflight cap
+  (default 4) + per-request 30s timeout + degrade-on-persistent-
+  failure path (3 consecutive 5xx -> `ErrDegraded` until cooldown).
+  Wires into the existing v2.10.0 Story 5 EvoMap sink.
+- **Stealth-pacing rate limiter** (`internal/uiauto/ratelimit/`).
+  Token bucket per (tenant, channel). Default rules: RedNote 1 op
+  / 5 min, TikTok 1 op / 2 min, Facebook 5 ops / hr, Instagram 1
+  op / hr, default fallback 1 op / 30 s. Stealth jitter via
+  `crypto/rand` (NOT `math/rand`). Drain-on-overflow above 20
+  queued ops per bucket emits operator alert. Replay protection
+  via 24-hour HMAC-SHA256 nonce window with
+  `subtle.ConstantTimeCompare` -- reuses the v3.3.0 EC-3-1 HMAC
+  pattern.
+- **CAPTCHA detector** (`internal/uiauto/captcha/`). Multi-signal
+  fingerprint (HTTP body, status+WAF-keyword, DOM selectors,
+  free-text keyword) across 7 languages: EN, zh-cn, zh-tw, JP,
+  KR, ES, FR. On detection emits `CAPTCHADetectedEvent`, pauses
+  pipeline via `PausePipeline` handle, and exposes
+  `POST /api/v1/uiauto/captcha/<event_id>/resolved` operator-auth
+  resume webhook (1-hour solve budget; `ErrCAPTCHASolveTimeout`
+  on breach).
+- **Replay harness** (`internal/uiauto/replay/`). YAML cassette
+  recorder + deterministic player; mismatch detection returns
+  `ErrPlaybackMismatch`. Three sample cassettes shipped in
+  `tests/uiauto/cassettes/`: RedNote post creation, TikTok video
+  upload, CAPTCHA encounter. Schema is forward-compatible with
+  the existing `gopkg.in/dnaeon/go-vcr.v3` cassettes used by the
+  v3.1.1 China sourcing tests.
+
+### Resilience pillar wiring (per v2.10.0 baseline)
+
+- 5 NEW `goleak.VerifyTestMain` `leak_test.go` wrappers --
+  `internal/uiauto/{session,memguard,ratelimit,captcha,replay}`.
+- 7 NEW `ec_*` Prometheus metrics with cardinality budgets:
+  `ec_uiauto_session_ops_total` (~120 series),
+  `ec_omniparser_inference_duration_seconds` (histogram),
+  `ec_omniparser_memory_pressure_pauses_total` (~10 series),
+  `ec_omniparser_concurrent_inflight` (gauge),
+  `ec_uiauto_rate_limit_drops_total` (~80 series),
+  `ec_captcha_detections_total` (~120 series upper bound; ~30 live),
+  `ec_captcha_resolution_duration_seconds` (histogram).
+- 6 NEW EvoMap KPI fields rolled into `Capsule.KPIs` and the
+  `Aggregate` daily-roll-up: `uiauto_session_ops_total`,
+  `omniparser_inference_p95_ms`, `omniparser_memory_pauses_total`,
+  `uiauto_rate_limit_drops_total`, `captcha_detections_total`,
+  `captcha_avg_resolution_seconds`.
+
+### Quality gates (v3.7.0 measured)
+
+- `go test -race -p 4 ./...` PASS across all packages on the worktree.
+- `go vet ./...` clean.
+- `make build` builds 8 binaries (mc-api, wc-sync, content-worker,
+  agent-worker, temporal-worker, uiauto-compare, ec-cli,
+  evomap-rollup).
+- `make compose-config` PASS.
+- `runx shell-leak-scan --root <worktree>` PASS (22 files scanned,
+  0 findings).
+- Sentrux gate: Quality 7035 / Coupling 0.33 / Cycles 0 / God files 0
+  / `complex_fn=4` (HARD GATE held; 12-sprint streak).
+- Coverage 84.3% (== v3.6.1 baseline; >= 83% gate).
+
+### Public-repo gate
+
+- ZERO infrastructure host names committed. Cassettes use
+  placeholder host `omniparser.example.local`. Master key + bridge
+  URL travel exclusively via env vars (`EC_SESSION_MASTER_KEY`,
+  `EC_OMNIPARSER_BRIDGE_URL`).
+
 ## v3.1.1 -- China Sourcing pipeline QA validation -- 2026-05-09
 
 ### Release Summary
