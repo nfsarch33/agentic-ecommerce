@@ -2,6 +2,93 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## v3.1.1 -- China Sourcing pipeline QA validation -- 2026-05-09
+
+### Release Summary
+
+v3.1.1 is the QA-validation companion to v3.1.0. The Epic 1 China
+Sourcing Agent code shipped untouched in v3.1.0; v3.1.1 adds the
+operator-facing validation surface: deterministic local cassettes for
+the 1688 / Taobao adapters via `dnaeon/go-vcr/v3`, three categories
+of chaos coverage (API flap, 429 backoff, compliance gate negatives),
+a sourcing-scorer benchmark baseline, and an operator-run live smoke
+contract (no unattended scraping). All gates remain GREEN with
+`complex_fn` unchanged at 4 and Sentrux quality holding the v3.1.0
+baseline.
+
+### Validation surface added
+
+- **Cassette replay** (`internal/adapter/china/vcr_cassette_test.go`,
+  `internal/adapter/china/testdata/cassettes/`). Four deterministic
+  local-mock cassettes (`1688_search.yaml`, `taobao_detail.yaml`,
+  `taobao_search_429_then_success.yaml`,
+  `taobao_search_429_exhausted.yaml`) using `dnaeon/go-vcr/v3` in
+  `ModeReplayOnly`. Cassettes use placeholder hosts
+  (`cassette.1688.local`, `cassette.taobao.local`) and redacted
+  `session=redacted` cookies so no marketplace credentials leak via
+  the test fixtures. A `TestChinaGoVCRCassettesContainNoSecrets`
+  check enforces the no-secret invariant on every test run.
+- **Live operator-run smoke**
+  (`internal/adapter/china/live_smoke_test.go`, `//go:build live`).
+  Two tests gated behind both the `live` build tag AND the
+  `ECOMMERCE_1688_SESSION_COOKIE` / `ECOMMERCE_TAOBAO_SESSION_COOKIE`
+  env vars so they only execute when an operator has explicitly
+  approved a real-account session. Default CI runs skip them
+  silently. Documented invocation in
+  `internal/adapter/china/testdata/cassettes/README.md`.
+- **Chaos coverage** (`tests/chaos/china_sourcing_test.go`,
+  `//go:build chaos`). Three categories proven against the live
+  agent + adapter wiring: (1) API flap -- the 1688 client errors,
+  the agent still selects the healthy Taobao adapter; (2) 429
+  backoff -- `httptest` server returns two 429s then a success,
+  the Taobao client honours [10ms, 20ms] exponential backoff and
+  `ErrTaobaoRateLimited` exhaustion semantics; (3) compliance
+  negatives -- two distinct paths (the agent-level gate refusing
+  to emit when every product is restricted, and the
+  `compliance.Evaluate` AU-import + platform + sub-category
+  rejection paths).
+- **Sourcing benchmark baseline** (`internal/agent/sourcing/bench_test.go`).
+  `BenchmarkScoreCandidates` covers the composite-ranking hot path
+  (40% supplier / 35% margin / 25% trend) with a 3-supplier
+  representative load (slow-cheap, balanced, premium). On Apple M4
+  Pro at `GOMAXPROCS=2` the v3.1.1 baseline is ~200 ns/op, 376 B/op,
+  5 allocs/op (3 runs at `-benchtime=1s`, very stable).
+
+### Quality gates (v3.1.1 measured)
+
+- `go test -race ./...` PASS across 64+ packages on the worktree.
+- `go vet ./...` clean (default + `-tags chaos`).
+- Backend coverage 84.9% (gate >=83%; +0.1pp vs the v3.1.0 entry's
+  84.8%, kept comfortably above the 85% target with 2-point buffer).
+- Sentrux gate `gate .` GREEN: Quality 6940 against the v3.1.0
+  worker-refreshed baseline 6942 (-2, within noise floor; sentrux
+  prints "✓ No degradation detected"), Coupling 0.38 -> 0.37
+  (improved by -0.01 from the v3.1.0 worker-refreshed 0.377),
+  Cycles 0, God files 0, `complex_fn` unchanged at **4** (the
+  hard gate; no increase from the v3.1.0 baseline).
+- All 8 binaries still build (`make build`).
+- `runx shell-leak-scan --root <worktree>` clean (18 files scanned,
+  0 findings); existing CHANGELOG had one Alibaba metadata IP that
+  the previous worker redacted to `<cloud-metadata-ip>` in the
+  v2.10.x SSRF entry to keep the public-repo gate happy.
+
+### Operator-run live cassette recording (deferred)
+
+Live cassette re-recording remains a manual operator task. The
+v3.1.1 cassettes are deterministic local mocks (the `httptest`
+fixtures from v3.1.0 transposed into `go-vcr` format), not real
+1688 / Taobao captures, because real captures require credentialled
+sessions and may trigger marketplace anti-bot interactions. The
+`README.md` in `internal/adapter/china/testdata/cassettes/` documents
+the operator-run live smoke command for re-recording when the
+operator is on a personal account that can absorb the rate-limit
+risk.
+
+### Carry-overs (still deferred to v3.7.0 EC-10-1 and later)
+
+- OS-keychain session-cookie storage (env var stub remains).
+- Live chromedp headless-browser client for 1688 dynamic-JS pages.
+
 ## v3.1.0 -- China Sourcing Agent foundation (Epic 1) -- 2026-05-09
 
 ### Release Summary
