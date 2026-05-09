@@ -90,6 +90,30 @@ type Registry struct {
 	ImageProcessingDuration *Histogram
 	TrendIngestRecordsTotal *Counter
 	SEOKeywordInjectsTotal  *Counter
+
+	// v3.3.0 EC-3 TikTok Shop integration metrics. Cardinality
+	// budget per series:
+	//   ec_tiktok_api_calls_total{tenant_id, endpoint, status}
+	//     ~ tenants(10) * endpoints(6: products.list/create/update/
+	//       delete + inventory.sync + oauth) * statuses(8) = 480 series.
+	//   ec_tiktok_api_duration_seconds{endpoint}     ~ 6 series.
+	//   ec_tiktok_listing_attempts_total{outcome}    ~ outcomes(6:
+	//     published, publish_failed, rolled_back, uiauto.ok,
+	//     uiauto.bridge_rejected, uiauto.transport_error) = 6 series.
+	//   ec_tiktok_webhook_received_total{event_type, status}
+	//     ~ event_types(2: order, refund) * statuses(8) = 16 series.
+	//   ec_tiktok_inventory_sync_total{direction, status}
+	//     ~ directions(2) * statuses(7) = 14 series.
+	//   ec_tiktok_signature_failures_total{reason}   ~ reasons(5:
+	//     missing, mismatch, malformed, expired, other) = 5 series.
+	// Total ~ 527 additive series for v3.3.0; well under the
+	// per-binary 10_000 cap.
+	TikTokAPICallsTotal          *Counter
+	TikTokAPIDurationSeconds     *Histogram
+	TikTokListingAttemptsTotal   *Counter
+	TikTokWebhookReceivedTotal   *Counter
+	TikTokInventorySyncTotal     *Counter
+	TikTokSignatureFailuresTotal *Counter
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -122,6 +146,12 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.ImageProcessingDuration = newHistogram(r, "ec_image_processing_duration_seconds", "v3.2.0 EC-2-2 image pipeline duration by action.", defaultDurationBuckets)
 	r.TrendIngestRecordsTotal = newCounter(r, "ec_trend_ingest_records_total", "v3.2.0 EC-2-4 trend records ingested by platform.")
 	r.SEOKeywordInjectsTotal = newCounter(r, "ec_seo_keyword_injects_total", "v3.2.0 EC-2-3 SEO keyword injection runs by tenant.")
+	r.TikTokAPICallsTotal = newCounter(r, "ec_tiktok_api_calls_total", "v3.3.0 EC-3-1 TikTok Shop API calls by tenant + endpoint + status.")
+	r.TikTokAPIDurationSeconds = newHistogram(r, "ec_tiktok_api_duration_seconds", "v3.3.0 EC-3-1 TikTok Shop API duration by endpoint.", defaultDurationBuckets)
+	r.TikTokListingAttemptsTotal = newCounter(r, "ec_tiktok_listing_attempts_total", "v3.3.0 EC-3-2 TikTok listing publish attempts by outcome.")
+	r.TikTokWebhookReceivedTotal = newCounter(r, "ec_tiktok_webhook_received_total", "v3.3.0 EC-3-3 TikTok webhook events received by event_type + status.")
+	r.TikTokInventorySyncTotal = newCounter(r, "ec_tiktok_inventory_sync_total", "v3.3.0 EC-3-4 TikTok inventory sync transitions by direction + status.")
+	r.TikTokSignatureFailuresTotal = newCounter(r, "ec_tiktok_signature_failures_total", "v3.3.0 EC-3-1/EC-3-3 TikTok HMAC signature failures by reason.")
 	return r
 }
 
@@ -163,6 +193,12 @@ func (r *Registry) Handler() http.Handler {
 		r.ImageProcessingDuration.write(&sb)
 		r.TrendIngestRecordsTotal.write(&sb)
 		r.SEOKeywordInjectsTotal.write(&sb)
+		r.TikTokAPICallsTotal.write(&sb)
+		r.TikTokAPIDurationSeconds.write(&sb)
+		r.TikTokListingAttemptsTotal.write(&sb)
+		r.TikTokWebhookReceivedTotal.write(&sb)
+		r.TikTokInventorySyncTotal.write(&sb)
+		r.TikTokSignatureFailuresTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
