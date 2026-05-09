@@ -197,6 +197,36 @@ type Registry struct {
 	OrderAggregatorNormalisationsTotal *Counter
 	DropshipOrdersTotal                *Counter
 	FXRateAgeSeconds                   *Gauge
+
+	// v3.6.0 EC-8 + EC-9 customer service + analytics metrics.
+	// Cardinality budget per series:
+	//   ec_enquiry_classifications_total{tenant_id, intent, sentiment, language}
+	//     ~ tenants(10) * intents(8) * sentiments(4) * languages(4)
+	//       = 1280 series upper bound; in practice tenants typically
+	//       cluster on 1-2 languages so the live cap is ~64 series
+	//       per tenant.
+	//   ec_faq_responses_total{tenant_id, outcome}
+	//     ~ tenants(10) * outcomes(4: auto_replied | suggested |
+	//       escalated | no_match) = 40 series.
+	//   ec_message_webhook_received_total{tenant_id, channel, status}
+	//     ~ tenants(10) * channels(2: tiktok | facebook) *
+	//       statuses(~10: replied/suggested/escalated/duplicate/
+	//       hmac_failed/decode_failed/idempotency_error/read_failed/
+	//       failed/pipeline_error) = 200 series.
+	//   ec_gmv_rollup_request_duration_seconds histogram
+	//     ~ no labels = 1 series (10 buckets in the textual output).
+	//   ec_sse_active_connections{tenant_id}
+	//     ~ tenants(10) = 10 series.
+	//   ec_sse_events_dispatched_total{tenant_id, event_type}
+	//     ~ tenants(10) * event_types(10) = 100 series.
+	// Total ~ 1631 additive series for v3.6.0; well under the
+	// per-binary 10_000 cap.
+	EnquiryClassificationsTotal *Counter
+	FAQResponsesTotal           *Counter
+	MessageWebhookReceivedTotal *Counter
+	GMVRequestDurationSeconds   *Histogram
+	SSEActiveConnections        *Gauge
+	SSEEventsDispatchedTotal    *Counter
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -254,6 +284,12 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.OrderAggregatorNormalisationsTotal = newCounter(r, "ec_order_aggregator_normalisations_total", "v3.5.0 EC-7-1 multi-channel order aggregator normalisations by tenant + channel + status.")
 	r.DropshipOrdersTotal = newCounter(r, "ec_dropship_orders_total", "v3.5.0 EC-7-2 drop-ship supplier orders by tenant + supplier + status.")
 	r.FXRateAgeSeconds = newGauge(r, "ec_fx_rate_age_seconds", "v3.5.0 EC-6-2 AUD/CNY FX rate age (seconds since last refresh); ErrFXRateStale fires above 86400.")
+	r.EnquiryClassificationsTotal = newCounter(r, "ec_enquiry_classifications_total", "v3.6.0 EC-8-1 enquiry classifier results by tenant + intent + sentiment + language.")
+	r.FAQResponsesTotal = newCounter(r, "ec_faq_responses_total", "v3.6.0 EC-8-2 FAQ responder outcomes by tenant + outcome (auto_replied|suggested|escalated|no_match).")
+	r.MessageWebhookReceivedTotal = newCounter(r, "ec_message_webhook_received_total", "v3.6.0 EC-8-3 inbound message webhook deliveries by tenant + channel + status.")
+	r.GMVRequestDurationSeconds = newHistogram(r, "ec_gmv_rollup_request_duration_seconds", "v3.6.0 EC-9-1 GMV analytics request duration histogram.", defaultDurationBuckets)
+	r.SSEActiveConnections = newGauge(r, "ec_sse_active_connections", "v3.6.0 EC-9-2 active SSE agent-activity connections by tenant.")
+	r.SSEEventsDispatchedTotal = newCounter(r, "ec_sse_events_dispatched_total", "v3.6.0 EC-9-2 SSE events dispatched by tenant + event_type.")
 	return r
 }
 
@@ -326,6 +362,12 @@ func (r *Registry) Handler() http.Handler {
 		r.OrderAggregatorNormalisationsTotal.write(&sb)
 		r.DropshipOrdersTotal.write(&sb)
 		r.FXRateAgeSeconds.write(&sb)
+		r.EnquiryClassificationsTotal.write(&sb)
+		r.FAQResponsesTotal.write(&sb)
+		r.MessageWebhookReceivedTotal.write(&sb)
+		r.GMVRequestDurationSeconds.write(&sb)
+		r.SSEActiveConnections.write(&sb)
+		r.SSEEventsDispatchedTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")

@@ -105,6 +105,16 @@ type KPIs struct {
 	OrderAggregatorNormalisationsTotal int     `json:"order_aggregator_normalisations_total,omitempty"`
 	DropshipOrdersTotal                int     `json:"dropship_orders_total,omitempty"`
 	FXRateAgeMaxSeconds                float64 `json:"fx_rate_age_max_seconds,omitempty"`
+
+	// v3.6.0 EC-8 + EC-9 customer service + analytics KPIs.
+	// Additive so prior schema readers keep working. Surface from
+	// the v3.6.0 observability spine + emitted per-minute by the
+	// sampler driver. Mirrors the EC-3/4/5 additive pattern.
+	EnquiryClassificationsTotal int     `json:"enquiry_classifications_total,omitempty"`
+	FAQResponsesTotal           int     `json:"faq_responses_total,omitempty"`
+	MessageWebhookReceivedTotal int     `json:"message_webhook_received_total,omitempty"`
+	GMVP95LatencyMs             float64 `json:"gmv_p95_latency_ms,omitempty"`
+	SSEActiveConnectionsMax     int     `json:"sse_active_connections_max,omitempty"`
 }
 
 // Config controls Sink construction.
@@ -301,6 +311,13 @@ type AggregateResult struct {
 	TotalOrderAggregatorNormalisations int
 	TotalDropshipOrders                int
 	MaxFXRateAgeSeconds                float64
+
+	// v3.6.0 EC-8 + EC-9 KPIs aggregated into the daily roll-up.
+	TotalEnquiryClassifications int
+	TotalFAQResponses           int
+	TotalMessageWebhookReceived int
+	MaxGMVP95LatencyMs          float64
+	MaxSSEActiveConnections     int
 }
 
 // aggregateAccumulator carries the per-iteration running sums + sample
@@ -341,6 +358,7 @@ func Aggregate(caps []Capsule) AggregateResult {
 		accumulateTikTok(c, &res)
 		accumulateChannelContent(c, &res, &acc)
 		accumulatePricingFulfilment(c, &res)
+		accumulateCustomerServiceAnalytics(c, &res)
 	}
 	n := float64(len(caps))
 	res.MeanThroughputRPS = acc.sumRPS / n
@@ -454,5 +472,19 @@ func accumulatePricingFulfilment(c Capsule, res *AggregateResult) {
 	res.TotalDropshipOrders += c.KPIs.DropshipOrdersTotal
 	if c.KPIs.FXRateAgeMaxSeconds > res.MaxFXRateAgeSeconds {
 		res.MaxFXRateAgeSeconds = c.KPIs.FXRateAgeMaxSeconds
+	}
+}
+
+// accumulateCustomerServiceAnalytics rolls in the v3.6.0 EC-8 +
+// EC-9 customer service + analytics KPIs.
+func accumulateCustomerServiceAnalytics(c Capsule, res *AggregateResult) {
+	res.TotalEnquiryClassifications += c.KPIs.EnquiryClassificationsTotal
+	res.TotalFAQResponses += c.KPIs.FAQResponsesTotal
+	res.TotalMessageWebhookReceived += c.KPIs.MessageWebhookReceivedTotal
+	if c.KPIs.GMVP95LatencyMs > res.MaxGMVP95LatencyMs {
+		res.MaxGMVP95LatencyMs = c.KPIs.GMVP95LatencyMs
+	}
+	if c.KPIs.SSEActiveConnectionsMax > res.MaxSSEActiveConnections {
+		res.MaxSSEActiveConnections = c.KPIs.SSEActiveConnectionsMax
 	}
 }

@@ -153,6 +153,11 @@ func TestOpenAPIOperationsHaveComprehensiveContractCoverage(t *testing.T) {
 		"getBillingInvoice":              true,
 		"getBillingUsage":                true,
 		"stripeWebhook":                  true,
+		// v3.6.0 EC-9 analytics + agent activity surfaces.
+		"getGMVDailyRollup":   true,
+		"getGMVByChannel":     true,
+		"getGMVByProduct":     true,
+		"streamAgentActivity": true,
 	}
 
 	var seen []string
