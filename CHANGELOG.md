@@ -2,6 +2,124 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## v3.1.0 -- China Sourcing Agent foundation (Epic 1) -- 2026-05-09
+
+### Release Summary
+
+v3.1.0 opens the ADR-026 v4 roadmap with Epic 1 (China Sourcing
+Agent) -- the first MVP sprint that introduces autonomous product
+discovery from Chinese B2B/B2C platforms (1688, Taobao) into the
+catalog. Five tightly-coupled stories ship together because they
+share heavy domain context (sourcing pipeline) and a single
+integration surface (the `ChinaSourcingAgent` orchestrator). All
+five honour the v2.10 resilience pillar -- every new package
+registers with the `internal/lifecycle.Manager`, fans out via
+`internal/workerpool.Pool` (no raw goroutines), is verified with
+`goleak.VerifyTestMain`, emits Prometheus metrics + EvoMap NDJSON
+KPIs, and gates production startup on `OMNIPARSER_BRIDGE_URL` per
+the v2.10.1 omniparser-bridge integration.
+
+### Stories
+
+- **EC-1-1**: 1688 supplier scraper adapter
+  (`internal/adapter/china/1688_client.go`,
+  `internal/adapter/china/models.go`). HTTP+JSON adapter with token-
+  bucket rate limit (1 req / 2s default), session-cookie injection,
+  context-aware backoff, httptest-cassette unit coverage, typed
+  `Err1688RateLimited` sentinel, and the `china.Client` port the
+  sourcing agent fans out across.
+- **EC-1-2**: Taobao/Tmall API adapter
+  (`internal/adapter/china/taobao_client.go`). Same `china.Client`
+  port; exponential backoff on 429 (initial 100ms, cap 5s, max 3
+  retries) honouring the `internal/lifecycle` cancellation contract;
+  category mapping covers the top-14 Taobao native categories
+  (`SupportedCategories()`); typed `ErrTaobaoRateLimited` sentinel.
+- **EC-1-3**: IronClaw-compatible China sourcing agent
+  (`internal/agent/sourcing/china_agent.go`,
+  `internal/agent/sourcing/scorer.go`,
+  `internal/agent/sourcing/errors.go`). Concurrent fan-out across
+  every configured `china.Client` via `internal/workerpool`; product
+  filtering through the EC-1-4 compliance gate; supplier filtering
+  through the EC-1-5 supplier-score floor; trend-signal blending via
+  the optional `TrendSignaler` port (pgvector via the existing
+  `internal/rag` package); composite ranking (40% supplier / 35%
+  margin / 25% trend); typed event emission via the new
+  `eventbus.SourcingProposalPayload` envelope (v1 schema). Refuses
+  to start when `OMNIPARSER_BRIDGE_URL` is unset (alias-only argv;
+  no shell leak).
+- **EC-1-4**: China import compliance pre-screening gate
+  (`internal/compliance/china_import.go`). Pure-function rule engine
+  enforcing the AU import restricted list (firearms, ammunition,
+  medical devices, explosives, narcotics, asbestos, animal products,
+  endangered species, ...) and the TikTok/Facebook prohibited-
+  category lists (vape, gambling, CBD, weight-loss supplements,
+  counterfeit, ...). Returns typed `Decision{ProductID, TenantID,
+  Pass, Reasons, RuleHits, BlockedFor}`; `EvaluateBatch` partitions
+  approved + rejected; case-insensitive subcategory matching; typed
+  `ErrRestrictedCategory` sentinel. 20-fixture acceptance test
+  covering compliant + non-compliant categories.
+- **EC-1-5**: Supplier MOQ + lead-time scoring
+  (`internal/domain/supplier.go`). Pure-function `Supplier.Score()`
+  starts at 1.0 then subtracts capped MOQ-penalty (>50 units) and
+  lead-time penalty (>20 days), adds `VerifiedGoldBonus` and
+  review-ratio bonus (>=0.85). `FilterByScore` drops suppliers below
+  `SupplierScoreFloor` (0.5). Typed `ErrSupplierBelowScore` and
+  `ErrInvalidSupplier` sentinels. 100% statement coverage on the
+  scorer.
+
+### Resilience pillar wiring
+
+- `goleak.VerifyTestMain(m)` in every new test package:
+  `internal/domain/`, `internal/compliance/`, `internal/adapter/china/`,
+  and the existing `internal/agent/sourcing/` test main coverage
+  catches any sourcing-agent leak.
+- Every fan-out task routes through `internal/workerpool.Pool.Submit`;
+  zero raw `go func()` calls in the new code.
+- The agent rejects construction without
+  `OMNIPARSER_BRIDGE_URL`, with explicit env-var fallback and a
+  unit-tested `t.Setenv` reject-if-unset case.
+- New Prometheus metrics added to `internal/metrics.Registry`:
+  `ec_sourcing_runs_total{tenant_id,source}`,
+  `ec_sourcing_duration_seconds{source}`,
+  `ec_sourcing_compliance_rejects_total{category}`, and
+  `ec_supplier_score_distribution`. Cardinality budget documented
+  in-place: ~20 + 2 + ~25 + 1 = ~48 series total.
+- New EvoMap KPI fields: `sourcing_runs_total`,
+  `sourcing_compliance_rejects_total`, `sourcing_p95_ms`,
+  `supplier_score_mean`. Daily roll-up aggregates them into the
+  fleet-level capsule.
+- New typed event payload `eventbus.SourcingProposalPayload`
+  (`Version=1`, schema `product.sourcing.proposed`) emitted on every
+  successful agent run.
+
+### Quality gates
+
+- `go test -race ./...` PASS across 64+ packages.
+- `go vet ./...` clean.
+- Backend coverage 84.8% (gate >=83%; +0.3pp vs v3.0.0 baseline of
+  84.5%).
+- Sentrux: Quality 6904 -> 6924 (+20), Coupling 0.41 -> 0.36
+  (improved -0.05; ceiling 0.42), 0 cycles, 0 god files,
+  `complex_fn` unchanged at 4 (gate "no degradation").
+- All 8 binaries still build (`make build`).
+- `compose-config` + `compose-config-prod` validate.
+- `runx shell-leak-scan --repo ecommerce` clean (no findings).
+- New `.env.example` and `.env.compose.example` entries:
+  `OMNIPARSER_BRIDGE_URL`, `ECOMMERCE_1688_SESSION_COOKIE`,
+  `ECOMMERCE_TAOBAO_SESSION_COOKIE`.
+
+### Carry-overs (deferred to v3.1.x and later)
+
+- Live chromedp headless-browser client for 1688 dynamic-JS pages
+  (deferred behind the `china.Client` port; v3.1.0 ships HTTP+JSON
+  adapter only).
+- Live cassette recording via `dnaeon/go-vcr/v3` (the test fixtures
+  use `httptest.NewServer` + embedded JSON; the port is shaped so
+  cassettes drop in without API changes).
+- OS-keychain session-cookie storage (deferred to v3.7.0 EC-10-1;
+  v3.1.0 reads `ECOMMERCE_*_SESSION_COOKIE` env vars per stub
+  fallback).
+
 ## v3.0.0 -- Production-Ready Multi-Tenant Agentic E-commerce -- 2026-05-09
 
 ### Release Summary

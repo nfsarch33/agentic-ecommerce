@@ -58,6 +58,19 @@ type Registry struct {
 	OOMAlarms            *Counter
 	GoroutineCount       *Gauge
 	HeapBytes            *Gauge
+
+	// v3.1.0 EC-1-3 China Sourcing Agent metrics. Cardinality budget:
+	// ec_sourcing_runs_total{tenant_id, source} -- bounded by tenants
+	// (~10) x sources (2: 1688, taobao) = 20 series.
+	// ec_sourcing_duration_seconds{source} -- 2 series.
+	// ec_sourcing_compliance_rejects_total{category} -- bounded by
+	// the compliance.auImportRestricted + platformProhibited maps
+	// (~25 distinct categories).
+	// ec_supplier_score_distribution -- 1 series (no labels).
+	SourcingRuns              *Counter
+	SourcingDuration          *Histogram
+	SourcingComplianceRejects *Counter
+	SupplierScoreDistribution *Histogram
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -79,10 +92,20 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.OOMAlarms = newCounter(r, "ec_oom_alarms_total", "memwatch heap-ceiling breaches that fired the alarm callback.")
 	r.GoroutineCount = newGauge(r, "ec_goroutine_count", "Sampled runtime.NumGoroutine.")
 	r.HeapBytes = newGauge(r, "ec_heap_bytes", "Sampled runtime.MemStats.HeapInuse.")
+	r.SourcingRuns = newCounter(r, "ec_sourcing_runs_total", "v3.1.0 China sourcing agent runs by tenant + source.")
+	r.SourcingDuration = newHistogram(r, "ec_sourcing_duration_seconds", "China sourcing agent run duration by source.", defaultDurationBuckets)
+	r.SourcingComplianceRejects = newCounter(r, "ec_sourcing_compliance_rejects_total", "Products rejected by the compliance gate by category.")
+	r.SupplierScoreDistribution = newHistogram(r, "ec_supplier_score_distribution", "Distribution of supplier scores observed during sourcing.", defaultScoreBuckets)
 	return r
 }
 
 var defaultDurationBuckets = []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
+
+// defaultScoreBuckets is used by the supplier-score distribution
+// histogram. Buckets cover the [0, 1] supplier-score range with
+// 0.1-step granularity so reviewers can see the score distribution
+// without label cardinality.
+var defaultScoreBuckets = []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0}
 
 // Handler returns the http.Handler that exposes /metrics in
 // Prometheus text format.
@@ -103,6 +126,10 @@ func (r *Registry) Handler() http.Handler {
 		r.OOMAlarms.write(&sb)
 		r.GoroutineCount.write(&sb)
 		r.HeapBytes.write(&sb)
+		r.SourcingRuns.write(&sb)
+		r.SourcingDuration.write(&sb)
+		r.SourcingComplianceRejects.write(&sb)
+		r.SupplierScoreDistribution.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
