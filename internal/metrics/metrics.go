@@ -147,6 +147,27 @@ type Registry struct {
 	VideoScriptGenerationsTotal  *Counter
 	VideoScriptQualityScore      *Histogram
 	VideoAssemblyTotal           *Counter
+
+	// v3.4.1 EC-4-5 channel health monitor metrics. Cardinality
+	// budget per series:
+	//   ec_channel_health_state{tenant_id, channel}
+	//     ~ tenants(10) * channels(5) = 50 series.
+	//   ec_channel_health_failure_rate{tenant_id, channel}
+	//     ~ tenants(10) * channels(5) = 50 series.
+	//   ec_channel_health_consecutive_failures{tenant_id, channel}
+	//     ~ tenants(10) * channels(5) = 50 series.
+	//   ec_channel_health_alerts_total{tenant_id, channel, state}
+	//     ~ tenants(10) * channels(5) * states(2: degraded/
+	//       unhealthy) = 100 series.
+	//   ec_channel_health_recoveries_total{tenant_id, channel}
+	//     ~ tenants(10) * channels(5) = 50 series.
+	// Total ~ 300 additive series for v3.4.1; well under the
+	// per-binary 10_000 cap.
+	ChannelHealthState               *Gauge
+	ChannelHealthFailureRate         *Gauge
+	ChannelHealthConsecutiveFailures *Gauge
+	ChannelHealthAlertsTotal         *Counter
+	ChannelHealthRecoveriesTotal     *Counter
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -193,6 +214,11 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.VideoScriptGenerationsTotal = newCounter(r, "ec_video_script_generations_total", "v3.4.0 EC-5-1 video script generations by tenant + platform + source.")
 	r.VideoScriptQualityScore = newHistogram(r, "ec_video_script_quality_score", "v3.4.0 EC-5-1 video script quality score by platform (0..1).", defaultScoreBuckets)
 	r.VideoAssemblyTotal = newCounter(r, "ec_video_assembly_total", "v3.4.0 EC-5-3 video assembly operations by action + status.")
+	r.ChannelHealthState = newGauge(r, "ec_channel_health_state", "v3.4.1 EC-4-5 channel health monitor state by tenant + channel (0=healthy, 1=degraded, 2=unhealthy).")
+	r.ChannelHealthFailureRate = newGauge(r, "ec_channel_health_failure_rate", "v3.4.1 EC-4-5 channel health monitor sliding-window failure rate by tenant + channel.")
+	r.ChannelHealthConsecutiveFailures = newGauge(r, "ec_channel_health_consecutive_failures", "v3.4.1 EC-4-5 channel health monitor consecutive-failure counter by tenant + channel.")
+	r.ChannelHealthAlertsTotal = newCounter(r, "ec_channel_health_alerts_total", "v3.4.1 EC-4-5 channel health monitor transitions into degraded/unhealthy by tenant + channel + state.")
+	r.ChannelHealthRecoveriesTotal = newCounter(r, "ec_channel_health_recoveries_total", "v3.4.1 EC-4-5 channel health monitor transitions back to healthy by tenant + channel.")
 	return r
 }
 
@@ -248,6 +274,11 @@ func (r *Registry) Handler() http.Handler {
 		r.VideoScriptGenerationsTotal.write(&sb)
 		r.VideoScriptQualityScore.write(&sb)
 		r.VideoAssemblyTotal.write(&sb)
+		r.ChannelHealthState.write(&sb)
+		r.ChannelHealthFailureRate.write(&sb)
+		r.ChannelHealthConsecutiveFailures.write(&sb)
+		r.ChannelHealthAlertsTotal.write(&sb)
+		r.ChannelHealthRecoveriesTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
