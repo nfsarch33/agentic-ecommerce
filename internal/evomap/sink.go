@@ -69,6 +69,20 @@ type KPIs struct {
 	ImageProcessingFailuresTotal int     `json:"image_processing_failures_total,omitempty"`
 	TrendIngestRecordsTotal      int     `json:"trend_ingest_records_total,omitempty"`
 	SEOKeywordInjectsTotal       int     `json:"seo_keyword_injects_total,omitempty"`
+
+	// v3.3.0 EC-3 TikTok Shop integration KPIs. Additive so prior
+	// schema readers keep working. Surface from the v3.3.0
+	// observability spine (internal/observability/tiktok_metrics.go)
+	// + emitted per-minute by the sampler driver.
+	TikTokAPICallsTotal          int     `json:"tiktok_api_calls_total,omitempty"`
+	TikTokAPIFailuresTotal       int     `json:"tiktok_api_failures_total,omitempty"`
+	TikTokAPIP95Ms               float64 `json:"tiktok_api_p95_ms,omitempty"`
+	TikTokListingPublishedTotal  int     `json:"tiktok_listing_published_total,omitempty"`
+	TikTokListingRolledBackTotal int     `json:"tiktok_listing_rolled_back_total,omitempty"`
+	TikTokWebhookReceivedTotal   int     `json:"tiktok_webhook_received_total,omitempty"`
+	TikTokWebhookSignatureFails  int     `json:"tiktok_webhook_signature_fails,omitempty"`
+	TikTokInventorySyncTotal     int     `json:"tiktok_inventory_sync_total,omitempty"`
+	TikTokInventorySyncRollbacks int     `json:"tiktok_inventory_sync_rollbacks,omitempty"`
 }
 
 // Config controls Sink construction.
@@ -234,6 +248,18 @@ type AggregateResult struct {
 	TotalImageProcessingFailures int
 	TotalTrendIngestRecords      int
 	TotalSEOKeywordInjects       int
+
+	// v3.3.0 EC-3 TikTok integration KPIs aggregated into the
+	// daily roll-up. Operator + EvoLoop dashboards pivot on these.
+	TotalTikTokAPICalls           int
+	TotalTikTokAPIFailures        int
+	MaxTikTokAPIP95Ms             float64
+	TotalTikTokListingPublished   int
+	TotalTikTokListingRolledBack  int
+	TotalTikTokWebhookReceived    int
+	TotalTikTokWebhookSigFailures int
+	TotalTikTokInventorySync      int
+	TotalTikTokInventoryRollbacks int
 }
 
 // Aggregate computes summary KPIs across a slice of capsules.
@@ -292,6 +318,18 @@ func Aggregate(caps []Capsule) AggregateResult {
 		res.TotalImageProcessingFailures += c.KPIs.ImageProcessingFailuresTotal
 		res.TotalTrendIngestRecords += c.KPIs.TrendIngestRecordsTotal
 		res.TotalSEOKeywordInjects += c.KPIs.SEOKeywordInjectsTotal
+		// v3.3.0 EC-3 KPIs.
+		res.TotalTikTokAPICalls += c.KPIs.TikTokAPICallsTotal
+		res.TotalTikTokAPIFailures += c.KPIs.TikTokAPIFailuresTotal
+		if c.KPIs.TikTokAPIP95Ms > res.MaxTikTokAPIP95Ms {
+			res.MaxTikTokAPIP95Ms = c.KPIs.TikTokAPIP95Ms
+		}
+		res.TotalTikTokListingPublished += c.KPIs.TikTokListingPublishedTotal
+		res.TotalTikTokListingRolledBack += c.KPIs.TikTokListingRolledBackTotal
+		res.TotalTikTokWebhookReceived += c.KPIs.TikTokWebhookReceivedTotal
+		res.TotalTikTokWebhookSigFailures += c.KPIs.TikTokWebhookSignatureFails
+		res.TotalTikTokInventorySync += c.KPIs.TikTokInventorySyncTotal
+		res.TotalTikTokInventoryRollbacks += c.KPIs.TikTokInventorySyncRollbacks
 	}
 	n := float64(len(caps))
 	res.MeanThroughputRPS = sumRPS / n

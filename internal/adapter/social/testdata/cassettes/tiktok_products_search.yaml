@@ -1,0 +1,35 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: cassette.tiktokshop.local
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers: {}
+        url: https://cassette.tiktokshop.local/api/products/search?page_size=10
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding: []
+        trailer: {}
+        content_length: 1924
+        uncompressed: false
+        body: |
+            {"code":0,"data":{"next_page":"page-cursor-2","total_seen":50,"products":[{"product_id":"tt-cassette-product-01","tenant_id":"tenant-test","title":"Cassette Headphones 01","category_id":"cat-audio","status":"active","updated_at":"2026-05-01T10:00:00Z","stock":50,"price_cents":1999,"currency":"AUD"},{"product_id":"tt-cassette-product-02","tenant_id":"tenant-test","title":"Cassette Headphones 02","category_id":"cat-audio","status":"active","updated_at":"2026-05-01T10:01:00Z","stock":40,"price_cents":2099,"currency":"AUD"},{"product_id":"tt-cassette-product-03","tenant_id":"tenant-test","title":"Cassette Headphones 03","category_id":"cat-audio","status":"active","updated_at":"2026-05-01T10:02:00Z","stock":35,"price_cents":2199,"currency":"AUD"},{"product_id":"tt-cassette-product-04","tenant_id":"tenant-test","title":"Cassette Headphones 04","category_id":"cat-audio","status":"active","updated_at":"2026-05-01T10:03:00Z","stock":30,"price_cents":2299,"currency":"AUD"},{"product_id":"tt-cassette-product-05","tenant_id":"tenant-test","title":"Cassette Headphones 05","category_id":"cat-audio","status":"active","updated_at":"2026-05-01T10:04:00Z","stock":25,"price_cents":2399,"currency":"AUD"},{"product_id":"tt-cassette-product-06","tenant_id":"tenant-test","title":"Cassette Headphones 06","category_id":"cat-audio","status":"active","updated_at":"2026-05-01T10:05:00Z","stock":20,"price_cents":2499,"currency":"AUD"},{"product_id":"tt-cassette-product-07","tenant_id":"tenant-test","title":"Cassette Headphones 07","category_id":"cat-audio","status":"active","updated_at":"2026-05-01T10:06:00Z","stock":18,"price_cents":2599,"currency":"AUD"},{"product_id":"tt-cassette-product-08","tenant_id":"tenant-test","title":"Cassette Headphones 08","category_id":"cat-audio","status":"active","updated_at":"2026-05-01T10:07:00Z","stock":15,"price_cents":2699,"currency":"AUD"},{"product_id":"tt-cassette-product-09","tenant_id":"tenant-test","title":"Cassette Headphones 09","category_id":"cat-audio","status":"active","updated_at":"2026-05-01T10:08:00Z","stock":10,"price_cents":2799,"currency":"AUD"},{"product_id":"tt-cassette-product-10","tenant_id":"tenant-test","title":"Cassette Headphones 10","category_id":"cat-audio","status":"active","updated_at":"2026-05-01T10:09:00Z","stock":5,"price_cents":2899,"currency":"AUD"}]}}
+        headers:
+            Content-Type:
+                - application/json
+        status: 200 OK
+        code: 200
+        duration: 1ms
