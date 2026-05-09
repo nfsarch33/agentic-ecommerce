@@ -275,6 +275,134 @@ func TestGrafanaDashboardCoversV080ObservabilityViews(t *testing.T) {
 	}
 }
 
+// TestChannelHealthAlertRulesPresent is the v3.4.1 EC-4-5 monitoring-
+// side gate. The new channel-health.yml file MUST define the four
+// alert rules the v3.4.1 plan calls out + the spike alert; each
+// must reference the right ec_channel_health_* metric so the
+// Grafana panel + alert manager stay in sync.
+func TestChannelHealthAlertRulesPresent(t *testing.T) {
+	t.Parallel()
+
+	var rules prometheusRules
+	readYAML(t, "prometheus/alerts/channel-health.yml", &rules)
+	byName := alertRulesByName(rules)
+
+	cases := []struct {
+		alert    string
+		severity string
+		forValue string
+		contains []string
+	}{
+		{
+			alert:    "ChannelHealthFailureRateHigh",
+			severity: "warning",
+			forValue: "1m",
+			contains: []string{"ec_channel_health_failure_rate", "> 0.05"},
+		},
+		{
+			alert:    "ChannelHealthConsecutiveFailuresHigh",
+			severity: "warning",
+			forValue: "1m",
+			contains: []string{"ec_channel_health_consecutive_failures", ">= 3"},
+		},
+		{
+			alert:    "ChannelHealthUnhealthy",
+			severity: "critical",
+			forValue: "1m",
+			contains: []string{"ec_channel_health_state == 2"},
+		},
+		{
+			alert:    "ChannelHealthDegraded",
+			severity: "info",
+			forValue: "5m",
+			contains: []string{"ec_channel_health_state == 1"},
+		},
+		{
+			alert:    "ChannelHealthAlertSpike",
+			severity: "warning",
+			forValue: "5m",
+			contains: []string{"ec_channel_health_alerts_total"},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.alert, func(t *testing.T) {
+			t.Parallel()
+			rule, ok := byName[tc.alert]
+			if !ok {
+				t.Fatalf("missing alert rule %q", tc.alert)
+			}
+			if rule.For != tc.forValue {
+				t.Fatalf("%s for = %q, want %q", tc.alert, rule.For, tc.forValue)
+			}
+			if got := rule.Labels["severity"]; got != tc.severity {
+				t.Fatalf("%s severity = %q, want %q", tc.alert, got, tc.severity)
+			}
+			if strings.TrimSpace(rule.Annotations["summary"]) == "" {
+				t.Fatalf("%s summary annotation is empty", tc.alert)
+			}
+			for _, want := range tc.contains {
+				if !strings.Contains(rule.Expr, want) {
+					t.Fatalf("%s expr missing %q:\n%s", tc.alert, want, rule.Expr)
+				}
+			}
+		})
+	}
+}
+
+// TestChannelHealthDashboardCoversV341Panels ensures the v3.4.1
+// channel-health Grafana panel covers every metric the monitor
+// emits + the router dispatch outcome panel.
+func TestChannelHealthDashboardCoversV341Panels(t *testing.T) {
+	t.Parallel()
+
+	var dashboard grafanaDashboard
+	readJSON(t, "grafana/channel-health.json", &dashboard)
+
+	if dashboard.UID != "ec-channel-health-v341" {
+		t.Fatalf("dashboard uid = %q, want ec-channel-health-v341", dashboard.UID)
+	}
+
+	cases := []struct {
+		title    string
+		contains []string
+	}{
+		{title: "Channel Health -- Current State (per tenant + channel)", contains: []string{"ec_channel_health_state"}},
+		{title: "Channel Health -- Sliding-window Failure Rate (5m)", contains: []string{"ec_channel_health_failure_rate"}},
+		{title: "Channel Health -- Consecutive Failures (per channel)", contains: []string{"ec_channel_health_consecutive_failures"}},
+		{title: "Channel Health -- Alert Rate (transitions into degraded/unhealthy)", contains: []string{"ec_channel_health_alerts_total"}},
+		{title: "Channel Health -- Recovery Rate (transitions back to healthy)", contains: []string{"ec_channel_health_recoveries_total"}},
+		{title: "Channel Router -- Dispatch Outcome Throughput (5m rate)", contains: []string{"ec_channel_router_dispatches_total"}},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.title, func(t *testing.T) {
+			t.Parallel()
+			panel, ok := dashboardPanelByTitle(dashboard, tc.title)
+			if !ok {
+				t.Fatalf("missing dashboard panel %q", tc.title)
+			}
+			exprs := strings.Join(panelExpressions(panel), "\n")
+			for _, want := range tc.contains {
+				if !strings.Contains(exprs, want) {
+					t.Fatalf("panel %q missing query fragment %q:\n%s", tc.title, want, exprs)
+				}
+			}
+		})
+	}
+}
+
+func TestPrometheusLoadsChannelHealthAlertRules(t *testing.T) {
+	t.Parallel()
+	var cfg prometheusConfig
+	readYAML(t, "prometheus.yml", &cfg)
+	if !containsString(cfg.RuleFiles, "/etc/prometheus/alerts/channel-health.yml") {
+		t.Fatalf("prometheus.yml rule_files = %#v, want /etc/prometheus/alerts/channel-health.yml", cfg.RuleFiles)
+	}
+}
+
 func TestMonitoringDoesNotUseRawTenantIDAsMetricDimension(t *testing.T) {
 	t.Parallel()
 

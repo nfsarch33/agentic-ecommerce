@@ -1,0 +1,83 @@
+groups:
+  - name: agentic-ecommerce-channel-health
+    interval: 30s
+    rules:
+      - alert: ChannelHealthFailureRateHigh
+        expr: |
+          ec_channel_health_failure_rate > 0.05
+        for: 1m
+        labels:
+          severity: warning
+          subsystem: channel-router
+        annotations:
+          summary: "channel {{ $labels.channel }} failure rate above 5%"
+          description: |
+            v3.4.1 EC-4-5 channel health monitor reports the per-channel
+            adapter failure rate above the 5% threshold for tenant
+            {{ $labels.tenant_id }} on channel {{ $labels.channel }}.
+            Operator action: inspect Grafana panel
+            ec-channel-health-v341 + DLQ records for the affected
+            channel.
+
+      - alert: ChannelHealthConsecutiveFailuresHigh
+        expr: |
+          ec_channel_health_consecutive_failures >= 3
+        for: 1m
+        labels:
+          severity: warning
+          subsystem: channel-router
+        annotations:
+          summary: "channel {{ $labels.channel }} 3+ consecutive failures"
+          description: |
+            v3.4.1 EC-4-5 channel health monitor reports 3+ consecutive
+            adapter failures for tenant {{ $labels.tenant_id }} on
+            channel {{ $labels.channel }}. The router has flagged
+            this channel unhealthy. Operator action: inspect adapter
+            logs + downstream API status.
+
+      - alert: ChannelHealthUnhealthy
+        expr: |
+          ec_channel_health_state == 2
+        for: 1m
+        labels:
+          severity: critical
+          subsystem: channel-router
+        annotations:
+          summary: "channel {{ $labels.channel }} unhealthy"
+          description: |
+            v3.4.1 EC-4-5 channel health monitor classified channel
+            {{ $labels.channel }} as UNHEALTHY for tenant
+            {{ $labels.tenant_id }}. Either the failure rate exceeds
+            5% over the 5-minute sliding window OR 3+ consecutive
+            failures were observed. Auto-recovery will fire once the
+            channel returns to healthy.
+
+      - alert: ChannelHealthDegraded
+        expr: |
+          ec_channel_health_state == 1
+        for: 5m
+        labels:
+          severity: info
+          subsystem: channel-router
+        annotations:
+          summary: "channel {{ $labels.channel }} degraded"
+          description: |
+            v3.4.1 EC-4-5 channel health monitor classified channel
+            {{ $labels.channel }} as DEGRADED (failure rate above
+            half-threshold). Investigate before the channel trips
+            into the unhealthy state.
+
+      - alert: ChannelHealthAlertSpike
+        expr: |
+          (sum by (tenant_id, channel) (increase(ec_channel_health_alerts_total[15m])) or vector(0)) > 3
+        for: 5m
+        labels:
+          severity: warning
+          subsystem: channel-router
+        annotations:
+          summary: "channel {{ $labels.channel }} flapping"
+          description: |
+            v3.4.1 EC-4-5 channel health monitor recorded more than
+            3 healthy->degraded/unhealthy transitions for tenant
+            {{ $labels.tenant_id }} on channel {{ $labels.channel }}
+            in the last 15 minutes. Suspected upstream API flap.
