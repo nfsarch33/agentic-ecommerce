@@ -1,0 +1,93 @@
+{"Time":"2026-05-09T15:06:12.749339+10:00","Action":"start","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security"}
+{"Time":"2026-05-09T15:06:12.989451+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Output":"goos: darwin\n"}
+{"Time":"2026-05-09T15:06:12.989531+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Output":"goarch: arm64\n"}
+{"Time":"2026-05-09T15:06:12.989538+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Output":"pkg: github.com/nfsarch33/agentic-ecommerce/internal/security\n"}
+{"Time":"2026-05-09T15:06:12.989546+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Output":"cpu: Apple M4 Pro\n"}
+{"Time":"2026-05-09T15:06:12.989557+10:00","Action":"run","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Test":"BenchmarkVerifyAccessToken"}
+{"Time":"2026-05-09T15:06:12.989562+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Test":"BenchmarkVerifyAccessToken","Output":"=== RUN   BenchmarkVerifyAccessToken\n"}
+{"Time":"2026-05-09T15:06:12.989569+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Test":"BenchmarkVerifyAccessToken","Output":"BenchmarkVerifyAccessToken\n"}
+{"Time":"2026-05-09T15:06:14.20853+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Test":"BenchmarkVerifyAccessToken","Output":"BenchmarkVerifyAccessToken-14    \t  425857\t      2793 ns/op\t    2064 B/op\t      29 allocs/op\n"}
+{"Time":"2026-05-09T15:06:16.061061+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Output":"BenchmarkVerifyAccessToken-14    \t  364918\t      2787 ns/op\t    2064 B/op\t      29 allocs/op\n"}
+{"Time":"2026-05-09T15:06:16.061134+10:00","Action":"run","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Test":"BenchmarkMintAccessToken"}
+{"Time":"2026-05-09T15:06:16.061142+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Test":"BenchmarkMintAccessToken","Output":"=== RUN   BenchmarkMintAccessToken\n"}
+{"Time":"2026-05-09T15:06:16.061147+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Test":"BenchmarkMintAccessToken","Output":"BenchmarkMintAccessToken\n"}
+{"Time":"2026-05-09T15:06:17.282879+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Test":"BenchmarkMintAccessToken","Output":"BenchmarkMintAccessToken-14      \t  749119\t      1608 ns/op\t    2441 B/op\t      20 allocs/op\n"}
+{"Time":"2026-05-09T15:06:18.531322+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Output":"BenchmarkMintAccessToken-14      \t  745497\t      1652 ns/op\t    2441 B/op\t      20 allocs/op\n"}
+{"Time":"2026-05-09T15:06:18.53138+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Output":"PASS\n"}
+{"Time":"2026-05-09T15:06:18.53221+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Output":"ok  \tgithub.com/nfsarch33/agentic-ecommerce/internal/security\t5.783s\n"}
+{"Time":"2026-05-09T15:06:18.532235+10:00","Action":"pass","Package":"github.com/nfsarch33/agentic-ecommerce/internal/security","Elapsed":5.783}
+{"Time":"2026-05-09T15:06:18.53434+10:00","Action":"start","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital"}
+{"Time":"2026-05-09T15:06:18.786944+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Output":"goos: darwin\n"}
+{"Time":"2026-05-09T15:06:18.787018+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Output":"goarch: arm64\n"}
+{"Time":"2026-05-09T15:06:18.787029+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Output":"pkg: github.com/nfsarch33/agentic-ecommerce/internal/domain/digital\n"}
+{"Time":"2026-05-09T15:06:18.787068+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Output":"cpu: Apple M4 Pro\n"}
+{"Time":"2026-05-09T15:06:18.787078+10:00","Action":"run","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Test":"BenchmarkLicenseKeyGenerate"}
+{"Time":"2026-05-09T15:06:18.787084+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Test":"BenchmarkLicenseKeyGenerate","Output":"=== RUN   BenchmarkLicenseKeyGenerate\n"}
+{"Time":"2026-05-09T15:06:18.787099+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Test":"BenchmarkLicenseKeyGenerate","Output":"BenchmarkLicenseKeyGenerate\n"}
+{"Time":"2026-05-09T15:06:20.857365+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Test":"BenchmarkLicenseKeyGenerate","Output":"BenchmarkLicenseKeyGenerate-14    \t 1433224\t       859.5 ns/op\t     793 B/op\t      15 allocs/op\n"}
+{"Time":"2026-05-09T15:06:22.879571+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Output":"BenchmarkLicenseKeyGenerate-14    \t 1231275\t       842.6 ns/op\t     793 B/op\t      15 allocs/op\n"}
+{"Time":"2026-05-09T15:06:22.879741+10:00","Action":"run","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Test":"BenchmarkLicenseKeyValidate"}
+{"Time":"2026-05-09T15:06:22.879759+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Test":"BenchmarkLicenseKeyValidate","Output":"=== RUN   BenchmarkLicenseKeyValidate\n"}
+{"Time":"2026-05-09T15:06:22.879768+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Test":"BenchmarkLicenseKeyValidate","Output":"BenchmarkLicenseKeyValidate\n"}
+{"Time":"2026-05-09T15:06:24.610284+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Test":"BenchmarkLicenseKeyValidate","Output":"BenchmarkLicenseKeyValidate-14    \t 2194474\t       536.2 ns/op\t     785 B/op\t      13 allocs/op\n"}
+{"Time":"2026-05-09T15:06:26.358277+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Output":"BenchmarkLicenseKeyValidate-14    \t 2190910\t       544.7 ns/op\t     785 B/op\t      13 allocs/op\n"}
+{"Time":"2026-05-09T15:06:26.358316+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Output":"PASS\n"}
+{"Time":"2026-05-09T15:06:26.359063+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Output":"ok  \tgithub.com/nfsarch33/agentic-ecommerce/internal/domain/digital\t7.825s\n"}
+{"Time":"2026-05-09T15:06:26.359088+10:00","Action":"pass","Package":"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital","Elapsed":7.825}
+{"Time":"2026-05-09T15:06:26.360371+10:00","Action":"start","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing"}
+{"Time":"2026-05-09T15:06:26.614072+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing","Output":"goos: darwin\n"}
+{"Time":"2026-05-09T15:06:26.614133+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing","Output":"goarch: arm64\n"}
+{"Time":"2026-05-09T15:06:26.61414+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing","Output":"pkg: github.com/nfsarch33/agentic-ecommerce/internal/billing\n"}
+{"Time":"2026-05-09T15:06:26.614148+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing","Output":"cpu: Apple M4 Pro\n"}
+{"Time":"2026-05-09T15:06:26.614164+10:00","Action":"run","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing","Test":"BenchmarkWebhookVerify"}
+{"Time":"2026-05-09T15:06:26.614168+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing","Test":"BenchmarkWebhookVerify","Output":"=== RUN   BenchmarkWebhookVerify\n"}
+{"Time":"2026-05-09T15:06:26.614183+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing","Test":"BenchmarkWebhookVerify","Output":"BenchmarkWebhookVerify\n"}
+{"Time":"2026-05-09T15:06:28.450383+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing","Test":"BenchmarkWebhookVerify","Output":"BenchmarkWebhookVerify-14    \t 1931937\t       624.5 ns/op\t     784 B/op\t      15 allocs/op\n"}
+{"Time":"2026-05-09T15:06:30.28008+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing","Output":"BenchmarkWebhookVerify-14    \t 1911690\t       624.7 ns/op\t     784 B/op\t      15 allocs/op\n"}
+{"Time":"2026-05-09T15:06:30.280142+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing","Output":"PASS\n"}
+{"Time":"2026-05-09T15:06:30.28088+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing","Output":"ok  \tgithub.com/nfsarch33/agentic-ecommerce/internal/billing\t3.920s\n"}
+{"Time":"2026-05-09T15:06:30.280903+10:00","Action":"pass","Package":"github.com/nfsarch33/agentic-ecommerce/internal/billing","Elapsed":3.9210000000000003}
+{"Time":"2026-05-09T15:06:30.28235+10:00","Action":"start","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl"}
+{"Time":"2026-05-09T15:06:30.531023+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Output":"goos: darwin\n"}
+{"Time":"2026-05-09T15:06:30.531082+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Output":"goarch: arm64\n"}
+{"Time":"2026-05-09T15:06:30.531088+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Output":"pkg: github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl\n"}
+{"Time":"2026-05-09T15:06:30.531095+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Output":"cpu: Apple M4 Pro\n"}
+{"Time":"2026-05-09T15:06:30.531104+10:00","Action":"run","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Test":"BenchmarkIssueSignedURL"}
+{"Time":"2026-05-09T15:06:30.531107+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Test":"BenchmarkIssueSignedURL","Output":"=== RUN   BenchmarkIssueSignedURL\n"}
+{"Time":"2026-05-09T15:06:30.531111+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Test":"BenchmarkIssueSignedURL","Output":"BenchmarkIssueSignedURL\n"}
+{"Time":"2026-05-09T15:06:31.73124+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Test":"BenchmarkIssueSignedURL","Output":"BenchmarkIssueSignedURL-14     \t  535384\t      2196 ns/op\t    2184 B/op\t      45 allocs/op\n"}
+{"Time":"2026-05-09T15:06:32.96731+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Output":"BenchmarkIssueSignedURL-14     \t  553044\t      2194 ns/op\t    2184 B/op\t      45 allocs/op\n"}
+{"Time":"2026-05-09T15:06:32.967358+10:00","Action":"run","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Test":"BenchmarkVerifySignedURL"}
+{"Time":"2026-05-09T15:06:32.967366+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Test":"BenchmarkVerifySignedURL","Output":"=== RUN   BenchmarkVerifySignedURL\n"}
+{"Time":"2026-05-09T15:06:32.96737+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Test":"BenchmarkVerifySignedURL","Output":"BenchmarkVerifySignedURL\n"}
+{"Time":"2026-05-09T15:06:34.196072+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Test":"BenchmarkVerifySignedURL","Output":"BenchmarkVerifySignedURL-14    \t  707682\t      1710 ns/op\t    1504 B/op\t      29 allocs/op\n"}
+{"Time":"2026-05-09T15:06:35.45656+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Output":"BenchmarkVerifySignedURL-14    \t  702184\t      1769 ns/op\t    1504 B/op\t      29 allocs/op\n"}
+{"Time":"2026-05-09T15:06:35.456612+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Output":"PASS\n"}
+{"Time":"2026-05-09T15:06:35.457875+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Output":"ok  \tgithub.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl\t5.175s\n"}
+{"Time":"2026-05-09T15:06:35.457903+10:00","Action":"pass","Package":"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl","Elapsed":5.176}
+{"Time":"2026-05-09T15:06:35.45919+10:00","Action":"start","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media"}
+{"Time":"2026-05-09T15:06:35.710199+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media","Output":"goos: darwin\n"}
+{"Time":"2026-05-09T15:06:35.710271+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media","Output":"goarch: arm64\n"}
+{"Time":"2026-05-09T15:06:35.710278+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media","Output":"pkg: github.com/nfsarch33/agentic-ecommerce/internal/media\n"}
+{"Time":"2026-05-09T15:06:35.710287+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media","Output":"cpu: Apple M4 Pro\n"}
+{"Time":"2026-05-09T15:06:35.710295+10:00","Action":"run","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media","Test":"BenchmarkMediaValidation"}
+{"Time":"2026-05-09T15:06:35.7103+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media","Test":"BenchmarkMediaValidation","Output":"=== RUN   BenchmarkMediaValidation\n"}
+{"Time":"2026-05-09T15:06:35.710304+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media","Test":"BenchmarkMediaValidation","Output":"BenchmarkMediaValidation\n"}
+{"Time":"2026-05-09T15:06:37.750637+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media","Test":"BenchmarkMediaValidation","Output":"BenchmarkMediaValidation-14    \t 1454109\t       828.5 ns/op\t     664 B/op\t       5 allocs/op\n"}
+{"Time":"2026-05-09T15:06:39.789729+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media","Output":"BenchmarkMediaValidation-14    \t 1416037\t       834.6 ns/op\t     664 B/op\t       5 allocs/op\n"}
+{"Time":"2026-05-09T15:06:39.789779+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media","Output":"PASS\n"}
+{"Time":"2026-05-09T15:06:39.790607+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media","Output":"ok  \tgithub.com/nfsarch33/agentic-ecommerce/internal/media\t4.331s\n"}
+{"Time":"2026-05-09T15:06:39.790631+10:00","Action":"pass","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media","Elapsed":4.331}
+{"Time":"2026-05-09T15:06:39.791806+10:00","Action":"start","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"}
+{"Time":"2026-05-09T15:06:40.044404+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence","Output":"goos: darwin\n"}
+{"Time":"2026-05-09T15:06:40.044477+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence","Output":"goarch: arm64\n"}
+{"Time":"2026-05-09T15:06:40.044482+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence","Output":"pkg: github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence\n"}
+{"Time":"2026-05-09T15:06:40.04449+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence","Output":"cpu: Apple M4 Pro\n"}
+{"Time":"2026-05-09T15:06:40.044513+10:00","Action":"run","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence","Test":"BenchmarkMediaQAValidate"}
+{"Time":"2026-05-09T15:06:40.044517+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence","Test":"BenchmarkMediaQAValidate","Output":"=== RUN   BenchmarkMediaQAValidate\n"}
+{"Time":"2026-05-09T15:06:40.044523+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence","Test":"BenchmarkMediaQAValidate","Output":"BenchmarkMediaQAValidate\n"}
+{"Time":"2026-05-09T15:06:41.963789+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence","Test":"BenchmarkMediaQAValidate","Output":"BenchmarkMediaQAValidate-14    \t 1699333\t       708.8 ns/op\t     272 B/op\t       5 allocs/op\n"}
+{"Time":"2026-05-09T15:06:43.876415+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence","Output":"BenchmarkMediaQAValidate-14    \t 1675492\t       709.0 ns/op\t     272 B/op\t       5 allocs/op\n"}
+{"Time":"2026-05-09T15:06:43.876478+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence","Output":"PASS\n"}
+{"Time":"2026-05-09T15:06:43.877548+10:00","Action":"output","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence","Output":"ok  \tgithub.com/nfsarch33/agentic-ecommerce/internal/media/intelligence\t4.086s\n"}
+{"Time":"2026-05-09T15:06:43.877568+10:00","Action":"pass","Package":"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence","Elapsed":4.086}
