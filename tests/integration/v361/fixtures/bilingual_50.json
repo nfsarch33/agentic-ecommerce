@@ -1,0 +1,403 @@
+[
+  {
+    "expected_intent": "refund_request",
+    "expected_language": "en",
+    "expected_min_confidence": 0.9,
+    "expected_sentiment": "negative",
+    "id": "en-refund-1",
+    "text": "I want a refund for my last order, this is unacceptable."
+  },
+  {
+    "expected_intent": "refund_request",
+    "expected_language": "en",
+    "expected_min_confidence": 0.9,
+    "expected_sentiment": "negative",
+    "id": "en-refund-2",
+    "text": "Please process a chargeback on order 1234."
+  },
+  {
+    "expected_intent": "refund_request",
+    "expected_language": "en",
+    "expected_min_confidence": 0.9,
+    "expected_sentiment": "urgent",
+    "id": "en-refund-3-urgent",
+    "text": "I need a refund ASAP, my money back now."
+  },
+  {
+    "expected_intent": "order_status",
+    "expected_language": "en",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "en-order-1",
+    "text": "What is my order status please?"
+  },
+  {
+    "expected_intent": "order_status",
+    "expected_language": "en",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "en-order-2",
+    "text": "Order #5678 has not updated, please check."
+  },
+  {
+    "expected_intent": "product_question",
+    "expected_language": "en",
+    "expected_min_confidence": 0.7,
+    "expected_sentiment": "neutral",
+    "id": "en-product-1",
+    "text": "Does this fit a US size 10?"
+  },
+  {
+    "expected_intent": "product_question",
+    "expected_language": "en",
+    "expected_min_confidence": 0.7,
+    "expected_sentiment": "neutral",
+    "id": "en-product-2",
+    "text": "What colour options are available?"
+  },
+  {
+    "expected_intent": "shipping_query",
+    "expected_language": "en",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "en-shipping-1",
+    "text": "When will my package arrive at the depot?"
+  },
+  {
+    "expected_intent": "shipping_query",
+    "expected_language": "en",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "en-shipping-2",
+    "text": "Tracking number for delivery please."
+  },
+  {
+    "expected_intent": "shipping_query",
+    "expected_language": "en",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "en-shipping-3",
+    "text": "Where is my order shipping from?"
+  },
+  {
+    "expected_intent": "complaint",
+    "expected_language": "en",
+    "expected_min_confidence": 0.82,
+    "expected_sentiment": "negative",
+    "id": "en-complaint-1",
+    "text": "My package never arrived and you ignored my email."
+  },
+  {
+    "expected_intent": "complaint",
+    "expected_language": "en",
+    "expected_min_confidence": 0.82,
+    "expected_sentiment": "urgent",
+    "id": "en-complaint-2-urgent",
+    "text": "URGENT! Item arrived broke and is unacceptable."
+  },
+  {
+    "expected_intent": "complaint",
+    "expected_language": "en",
+    "expected_min_confidence": 0.82,
+    "expected_sentiment": "negative",
+    "id": "en-complaint-3",
+    "text": "Worst purchase, terrible quality control."
+  },
+  {
+    "expected_intent": "compliment",
+    "expected_language": "en",
+    "expected_min_confidence": 0.85,
+    "expected_sentiment": "positive",
+    "id": "en-compliment-1",
+    "text": "I love this product, it is amazing!"
+  },
+  {
+    "expected_intent": "compliment",
+    "expected_language": "en",
+    "expected_min_confidence": 0.85,
+    "expected_sentiment": "positive",
+    "id": "en-compliment-2",
+    "text": "Excellent service, best purchase ever."
+  },
+  {
+    "expected_intent": "general_enquiry",
+    "expected_language": "en",
+    "expected_min_confidence": 0.6,
+    "expected_sentiment": "neutral",
+    "id": "en-general-1",
+    "text": "Hello, I have a question for you."
+  },
+  {
+    "expected_intent": "general_enquiry",
+    "expected_language": "en",
+    "expected_min_confidence": 0.6,
+    "expected_sentiment": "neutral",
+    "id": "en-general-2",
+    "text": "Hi can I ask about your store?"
+  },
+  {
+    "expected_intent": "general_enquiry",
+    "expected_language": "en",
+    "expected_min_confidence": 0.6,
+    "expected_sentiment": "neutral",
+    "id": "en-general-3",
+    "text": "Just an enquiry about hours."
+  },
+  {
+    "expected_intent": "spam",
+    "expected_language": "en",
+    "expected_min_confidence": 0.95,
+    "expected_sentiment": "neutral",
+    "id": "en-spam-1",
+    "text": "Click here to win big in our guaranteed promotion!"
+  },
+  {
+    "expected_intent": "spam",
+    "expected_language": "en",
+    "expected_min_confidence": 0.95,
+    "expected_sentiment": "neutral",
+    "id": "en-spam-2",
+    "text": "Crypto deal guaranteed this week click here."
+  },
+  {
+    "expected_intent": "refund_request",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.9,
+    "expected_sentiment": "negative",
+    "id": "zh-cn-refund-1",
+    "text": "你好，我想申请退款。"
+  },
+  {
+    "expected_intent": "refund_request",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.9,
+    "expected_sentiment": "negative",
+    "id": "zh-cn-refund-2",
+    "text": "请帮我退货，谢谢。"
+  },
+  {
+    "expected_intent": "refund_request",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.9,
+    "expected_sentiment": "urgent",
+    "id": "zh-cn-refund-3-urgent",
+    "text": "急！立刻退款！"
+  },
+  {
+    "expected_intent": "order_status",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "zh-cn-order-1",
+    "text": "查询我的订单状态。"
+  },
+  {
+    "expected_intent": "order_status",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "zh-cn-order-2",
+    "text": "订单还没发货吗？"
+  },
+  {
+    "expected_intent": "order_status",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "zh-cn-order-3",
+    "text": "我的订单号是 12345。"
+  },
+  {
+    "expected_intent": "shipping_query",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "zh-cn-shipping-1",
+    "text": "什么时候到？"
+  },
+  {
+    "expected_intent": "shipping_query",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "zh-cn-shipping-2",
+    "text": "请告诉我物流信息。"
+  },
+  {
+    "expected_intent": "product_question",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.7,
+    "expected_sentiment": "neutral",
+    "id": "zh-cn-product-1",
+    "text": "颜色和规格请告知。"
+  },
+  {
+    "expected_intent": "product_question",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.7,
+    "expected_sentiment": "neutral",
+    "id": "zh-cn-product-2",
+    "text": "这个适合儿童吗？"
+  },
+  {
+    "expected_intent": "complaint",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.82,
+    "expected_sentiment": "negative",
+    "id": "zh-cn-complaint-1",
+    "text": "质量太差了！"
+  },
+  {
+    "expected_intent": "complaint",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.82,
+    "expected_sentiment": "urgent",
+    "id": "zh-cn-complaint-2-urgent",
+    "text": "紧急！我要投诉这家店。"
+  },
+  {
+    "expected_intent": "complaint",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.82,
+    "expected_sentiment": "negative",
+    "id": "zh-cn-complaint-3",
+    "text": "客服失踪，差评！"
+  },
+  {
+    "expected_intent": "compliment",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.85,
+    "expected_sentiment": "positive",
+    "id": "zh-cn-compliment-1",
+    "text": "太棒了，五星好评！"
+  },
+  {
+    "expected_intent": "compliment",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.85,
+    "expected_sentiment": "positive",
+    "id": "zh-cn-compliment-2",
+    "text": "最佳购物体验，强烈推荐。"
+  },
+  {
+    "expected_intent": "general_enquiry",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.6,
+    "expected_sentiment": "neutral",
+    "id": "zh-cn-general-1",
+    "text": "你好，在吗？"
+  },
+  {
+    "expected_intent": "general_enquiry",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.6,
+    "expected_sentiment": "neutral",
+    "id": "zh-cn-general-2",
+    "text": "请问这个产品在售吗？"
+  },
+  {
+    "expected_intent": "general_enquiry",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.6,
+    "expected_sentiment": "neutral",
+    "id": "zh-cn-general-3",
+    "text": "我想咨询一下营业时间。"
+  },
+  {
+    "expected_intent": "spam",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.95,
+    "expected_sentiment": "neutral",
+    "id": "zh-cn-spam-1",
+    "text": "立即购买限时优惠！"
+  },
+  {
+    "expected_intent": "spam",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.95,
+    "expected_sentiment": "neutral",
+    "id": "zh-cn-spam-2",
+    "text": "保证回报的加密货币投资。"
+  },
+  {
+    "expected_intent": "refund_request",
+    "expected_language": "zh-tw",
+    "expected_min_confidence": 0.9,
+    "expected_sentiment": "negative",
+    "id": "zh-tw-refund-1",
+    "text": "請幫我處理退款。"
+  },
+  {
+    "expected_intent": "refund_request",
+    "expected_language": "zh-tw",
+    "expected_min_confidence": 0.9,
+    "expected_sentiment": "urgent",
+    "id": "zh-tw-refund-2-urgent",
+    "text": "請立刻處理退款！"
+  },
+  {
+    "expected_intent": "shipping_query",
+    "expected_language": "zh-tw",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "zh-tw-shipping-1",
+    "text": "請告知運送進度。"
+  },
+  {
+    "expected_intent": "shipping_query",
+    "expected_language": "zh-tw",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "zh-tw-shipping-2",
+    "text": "運送會延遲嗎？"
+  },
+  {
+    "expected_intent": "shipping_query",
+    "expected_language": "zh-tw",
+    "expected_min_confidence": 0.78,
+    "expected_sentiment": "neutral",
+    "id": "zh-tw-shipping-3",
+    "text": "請問運送什麼時候到？"
+  },
+  {
+    "expected_intent": "general_enquiry",
+    "expected_language": "en",
+    "expected_min_confidence": 0.4,
+    "expected_sentiment": "neutral",
+    "id": "edge-emoji-spam",
+    "text": "🎉🎉🎉🎉🎉🎉🎉🎉"
+  },
+  {
+    "expected_intent": "refund_request",
+    "expected_language": "zh-cn",
+    "expected_min_confidence": 0.9,
+    "expected_sentiment": "negative",
+    "id": "edge-code-switched",
+    "text": "Hello! 你好, I want to refund 退款 my order."
+  },
+  {
+    "expected_intent": "general_enquiry",
+    "expected_language": "en",
+    "expected_min_confidence": 0.4,
+    "expected_sentiment": "neutral",
+    "id": "edge-garbled-utf8",
+    "text": "abc ÿþ garbled ÿ binary noise"
+  },
+  {
+    "expected_intent": "general_enquiry",
+    "expected_language": "en",
+    "expected_min_confidence": 0.4,
+    "expected_sentiment": "neutral",
+    "id": "edge-very-short",
+    "text": "yes"
+  },
+  {
+    "expected_intent": "compliment",
+    "expected_language": "en",
+    "expected_min_confidence": 0.85,
+    "expected_sentiment": "positive",
+    "id": "edge-very-long-compliment",
+    "text": "I absolutely love this product! It is amazing and one of the best purchases I have ever made. The quality is excellent and the service was great. I love this brand so much and will recommend it to everyone. This is the best purchase I have made all year. Amazing customer service team. I love this product so much it has changed how I shop. Best purchase ever, truly amazing in every way. The packaging was beautiful, the delivery was prompt, and the product itself exceeded my expectations. I love this and will buy again. Excellent excellent excellent excellent. Amazing amazing amazing amazing. Best best best best best best best. So happy with my purchase. Will leave a five star review on every platform. I love this product so much I am writing a very long thank you note here to express how happy I am with this purchase. Five stars all around. Best customer experience of my year. The product is amazing and so is the team behind it. I love this!"
+  }
+]
+
