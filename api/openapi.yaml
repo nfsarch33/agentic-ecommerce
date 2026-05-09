@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agentic Ecommerce Mission Control API
-  version: 2.9.0
+  version: 3.6.0
   description: |
     Public v1.x.y contract for the Agentic Ecommerce Go backend consumed by
     agentic-ecommerce-web. This spec intentionally excludes private
@@ -1821,6 +1821,186 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/analytics/gmv:
+    get:
+      summary: GMV analytics — daily rollup
+      operationId: getGMVDailyRollup
+      description: |
+        v3.6.0 EC-9-1 — daily GMV rollup over the supplied date window.
+        Reads the gmv_daily_rollup materialized view (migration 0016)
+        for the tenant resolved from the JWT (X-Tenant-Id header takes
+        precedence; tenant_id query parameter is accepted as a fallback).
+        Acceptance: p95 < 200ms over 30-day window with 10K orders/tenant.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive lower bound (RFC3339 or YYYY-MM-DD).
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound (RFC3339 or YYYY-MM-DD).
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Optional channel filter (tiktok|facebook|wc|rednote|instagram).
+        - name: tenant_id
+          in: query
+          schema:
+            type: string
+          description: Tenant ID fallback when the JWT-derived header is absent.
+      responses:
+        '200':
+          description: Daily GMV rollup with cumulative summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant_id: { type: string }
+                  from:      { type: string, format: date-time }
+                  to:        { type: string, format: date-time }
+                  channel:   { type: string }
+                  daily:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        day:           { type: string, format: date-time }
+                        gmv_aud_cents: { type: integer }
+                        order_count:   { type: integer }
+                  summary:
+                    type: object
+                    properties:
+                      gmv_aud_cents: { type: integer }
+                      order_count:   { type: integer }
+        '400':
+          description: Invalid date range or missing tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Handler closed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/analytics/gmv/by-channel:
+    get:
+      summary: GMV analytics — per-channel breakdown
+      operationId: getGMVByChannel
+      description: v3.6.0 EC-9-1 — channel-level GMV breakdown.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: from,      in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to,        in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: tenant_id, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: GMV totals per channel sorted by GMV descending.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant_id: { type: string }
+                  channels:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        channel:       { type: string }
+                        gmv_aud_cents: { type: integer }
+                        order_count:   { type: integer }
+        '400':
+          description: Invalid date range.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/analytics/gmv/by-product:
+    get:
+      summary: GMV analytics — top products
+      operationId: getGMVByProduct
+      description: v3.6.0 EC-9-1 — top-N products by GMV (default limit 20, max 100).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: from,      in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to,        in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: limit,     in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: tenant_id, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Top-N products by GMV sorted descending.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant_id: { type: string }
+                  limit:     { type: integer }
+                  products:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        product_id:    { type: string }
+                        gmv_aud_cents: { type: integer }
+                        order_count:   { type: integer }
+        '400':
+          description: Invalid date range.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/agent-activity/stream:
+    get:
+      summary: Agent activity SSE stream
+      operationId: streamAgentActivity
+      description: |
+        v3.6.0 EC-9-2 — Server-Sent Events stream of normalised agent
+        activity (pricing decisions, dropship orders, customer messages,
+        supplier cost changes). 30s heartbeat. Per-client buffer of 100
+        events; on overflow the oldest event is dropped and a `dropped`
+        event is emitted so the client can re-sync. Tenant scoping is
+        derived from the JWT-bearing X-Tenant-Id header; the tenant_id
+        query parameter is accepted only when the header is absent.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenant_id
+          in: query
+          schema:
+            type: string
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Optional channel filter.
+      responses:
+        '200':
+          description: text/event-stream — never closes; client may disconnect at any time.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE frames; events include heartbeat, dropped, and per-action types.
+        '400':
+          description: Tenant not derivable from request.
+        '503':
+          description: Handler closed.
   /api/v1/workflows/product-publish:
     post:
       summary: Start the ProductPublishWorkflow
