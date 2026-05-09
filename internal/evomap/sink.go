@@ -95,6 +95,16 @@ type KPIs struct {
 	VideoScriptQualityScoreMean  float64 `json:"video_script_quality_score_mean,omitempty"`
 	VideoAssemblyTotal           int     `json:"video_assembly_total,omitempty"`
 	VideoAssemblyFailuresTotal   int     `json:"video_assembly_failures_total,omitempty"`
+
+	// v3.5.0 EC-6 + EC-7 pricing + fulfilment seed KPIs. Additive
+	// so prior schema readers keep working. Surface from the
+	// v3.5.0 observability spine + emitted per-minute by the
+	// sampler driver.
+	SupplierCostChangesTotal           int     `json:"supplier_cost_changes_total,omitempty"`
+	PricingDecisionsTotal              int     `json:"pricing_decisions_total,omitempty"`
+	OrderAggregatorNormalisationsTotal int     `json:"order_aggregator_normalisations_total,omitempty"`
+	DropshipOrdersTotal                int     `json:"dropship_orders_total,omitempty"`
+	FXRateAgeMaxSeconds                float64 `json:"fx_rate_age_max_seconds,omitempty"`
 }
 
 // Config controls Sink construction.
@@ -283,6 +293,14 @@ type AggregateResult struct {
 	MeanVideoScriptQualityScore  float64
 	TotalVideoAssembly           int
 	TotalVideoAssemblyFailures   int
+
+	// v3.5.0 EC-6 + EC-7 pricing + fulfilment seed KPIs aggregated
+	// into the daily roll-up.
+	TotalSupplierCostChanges           int
+	TotalPricingDecisions              int
+	TotalOrderAggregatorNormalisations int
+	TotalDropshipOrders                int
+	MaxFXRateAgeSeconds                float64
 }
 
 // aggregateAccumulator carries the per-iteration running sums + sample
@@ -322,6 +340,7 @@ func Aggregate(caps []Capsule) AggregateResult {
 		accumulateEnrichment(c, &res, &acc)
 		accumulateTikTok(c, &res)
 		accumulateChannelContent(c, &res, &acc)
+		accumulatePricingFulfilment(c, &res)
 	}
 	n := float64(len(caps))
 	res.MeanThroughputRPS = acc.sumRPS / n
@@ -424,4 +443,16 @@ func accumulateChannelContent(c Capsule, res *AggregateResult, acc *aggregateAcc
 	}
 	res.TotalVideoAssembly += c.KPIs.VideoAssemblyTotal
 	res.TotalVideoAssemblyFailures += c.KPIs.VideoAssemblyFailuresTotal
+}
+
+// accumulatePricingFulfilment rolls in the v3.5.0 EC-6 + EC-7
+// pricing + fulfilment seed KPIs.
+func accumulatePricingFulfilment(c Capsule, res *AggregateResult) {
+	res.TotalSupplierCostChanges += c.KPIs.SupplierCostChangesTotal
+	res.TotalPricingDecisions += c.KPIs.PricingDecisionsTotal
+	res.TotalOrderAggregatorNormalisations += c.KPIs.OrderAggregatorNormalisationsTotal
+	res.TotalDropshipOrders += c.KPIs.DropshipOrdersTotal
+	if c.KPIs.FXRateAgeMaxSeconds > res.MaxFXRateAgeSeconds {
+		res.MaxFXRateAgeSeconds = c.KPIs.FXRateAgeMaxSeconds
+	}
 }
