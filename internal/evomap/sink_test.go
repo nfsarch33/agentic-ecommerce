@@ -153,3 +153,48 @@ func TestAggregateKPIs(t *testing.T) {
 		t.Errorf("TotalOOMAlarms=%d, want 1", got.TotalOOMAlarms)
 	}
 }
+
+// TestAggregateUIAutoHardeningKPIs is the v3.7.0 EC-10 evomap-side
+// gate. The aggregator MUST roll the new uiauto hardening KPIs
+// into the daily roll-up so the EvoLoop pipeline + Grafana panel
+// can read them.
+func TestAggregateUIAutoHardeningKPIs(t *testing.T) {
+	t.Parallel()
+	caps := []Capsule{
+		{KPIs: KPIs{
+			UIAutoSessionOpsTotal:       3,
+			OmniParserInferenceP95Ms:    140,
+			OmniParserMemoryPausesTotal: 2,
+			UIAutoRateLimitDropsTotal:   1,
+			CAPTCHADetectionsTotal:      4,
+			CAPTCHAAvgResolutionSeconds: 90,
+		}},
+		{KPIs: KPIs{
+			UIAutoSessionOpsTotal:       2,
+			OmniParserInferenceP95Ms:    220,
+			OmniParserMemoryPausesTotal: 1,
+			UIAutoRateLimitDropsTotal:   3,
+			CAPTCHADetectionsTotal:      2,
+			CAPTCHAAvgResolutionSeconds: 110,
+		}},
+	}
+	got := Aggregate(caps)
+	if got.TotalUIAutoSessionOps != 5 {
+		t.Errorf("TotalUIAutoSessionOps=%d, want 5", got.TotalUIAutoSessionOps)
+	}
+	if got.MaxOmniParserInferenceP95Ms != 220 {
+		t.Errorf("MaxOmniParserInferenceP95Ms=%f, want 220", got.MaxOmniParserInferenceP95Ms)
+	}
+	if got.TotalOmniParserMemoryPauses != 3 {
+		t.Errorf("TotalOmniParserMemoryPauses=%d, want 3", got.TotalOmniParserMemoryPauses)
+	}
+	if got.TotalUIAutoRateLimitDrops != 4 {
+		t.Errorf("TotalUIAutoRateLimitDrops=%d, want 4", got.TotalUIAutoRateLimitDrops)
+	}
+	if got.TotalCAPTCHADetections != 6 {
+		t.Errorf("TotalCAPTCHADetections=%d, want 6", got.TotalCAPTCHADetections)
+	}
+	if got.MeanCAPTCHAResolutionSeconds != 100 {
+		t.Errorf("MeanCAPTCHAResolutionSeconds=%f, want 100", got.MeanCAPTCHAResolutionSeconds)
+	}
+}

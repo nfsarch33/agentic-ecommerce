@@ -227,6 +227,36 @@ type Registry struct {
 	GMVRequestDurationSeconds   *Histogram
 	SSEActiveConnections        *Gauge
 	SSEEventsDispatchedTotal    *Counter
+
+	// v3.7.0 EC-10 uiauto hardening metrics. Cardinality budget per
+	// series:
+	//   ec_uiauto_session_ops_total{tenant_id, channel, op}
+	//     ~ tenants(10) * channels(4: rednote/tiktok/facebook/
+	//       instagram) * ops(3: save/load/delete) = 120 series.
+	//   ec_omniparser_inference_duration_seconds histogram
+	//     ~ no labels = 1 series (10 buckets in textual output).
+	//   ec_omniparser_memory_pressure_pauses_total{tenant_id}
+	//     ~ tenants(10) = 10 series.
+	//   ec_omniparser_concurrent_inflight gauge
+	//     ~ no labels = 1 series.
+	//   ec_uiauto_rate_limit_drops_total{tenant_id, channel, reason}
+	//     ~ tenants(10) * channels(4) * reasons(2: exceeded|drain)
+	//       = 80 series.
+	//   ec_captcha_detections_total{tenant_id, channel, signal}
+	//     ~ tenants(10) * channels(3) * signals(4: body|status|dom|
+	//       keyword) = 120 series upper-bound; live cap closer to
+	//       30 because most tenants only see body+status hits.
+	//   ec_captcha_resolution_duration_seconds histogram
+	//     ~ no labels = 1 series (10 buckets in textual output).
+	// Total ~ 332 additive series upper-bound for v3.7.0; well
+	// under the per-binary 10_000 cap.
+	UIAutoSessionOpsTotal              *Counter
+	OmniParserInferenceDurationSeconds *Histogram
+	OmniParserMemoryPressurePauses     *Counter
+	OmniParserConcurrentInflight       *Gauge
+	UIAutoRateLimitDropsTotal          *Counter
+	CAPTCHADetectionsTotal             *Counter
+	CAPTCHAResolutionDurationSeconds   *Histogram
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -290,6 +320,13 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.GMVRequestDurationSeconds = newHistogram(r, "ec_gmv_rollup_request_duration_seconds", "v3.6.0 EC-9-1 GMV analytics request duration histogram.", defaultDurationBuckets)
 	r.SSEActiveConnections = newGauge(r, "ec_sse_active_connections", "v3.6.0 EC-9-2 active SSE agent-activity connections by tenant.")
 	r.SSEEventsDispatchedTotal = newCounter(r, "ec_sse_events_dispatched_total", "v3.6.0 EC-9-2 SSE events dispatched by tenant + event_type.")
+	r.UIAutoSessionOpsTotal = newCounter(r, "ec_uiauto_session_ops_total", "v3.7.0 EC-10-1 uiauto session manager operations by tenant + channel + op (save|load|delete).")
+	r.OmniParserInferenceDurationSeconds = newHistogram(r, "ec_omniparser_inference_duration_seconds", "v3.7.0 EC-10-2 OmniParser VLM inference duration histogram.", defaultDurationBuckets)
+	r.OmniParserMemoryPressurePauses = newCounter(r, "ec_omniparser_memory_pressure_pauses_total", "v3.7.0 EC-10-2 memory-pressure pause events by tenant.")
+	r.OmniParserConcurrentInflight = newGauge(r, "ec_omniparser_concurrent_inflight", "v3.7.0 EC-10-2 concurrent in-flight OmniParser inference requests.")
+	r.UIAutoRateLimitDropsTotal = newCounter(r, "ec_uiauto_rate_limit_drops_total", "v3.7.0 EC-10-3 uiauto stealth rate-limit drops by tenant + channel + reason (exceeded|drain).")
+	r.CAPTCHADetectionsTotal = newCounter(r, "ec_captcha_detections_total", "v3.7.0 EC-10-4 CAPTCHA detections by tenant + channel + signal (body|status|dom|keyword).")
+	r.CAPTCHAResolutionDurationSeconds = newHistogram(r, "ec_captcha_resolution_duration_seconds", "v3.7.0 EC-10-4 CAPTCHA operator-resolution latency histogram.", defaultCAPTCHAResolutionBuckets)
 	return r
 }
 
@@ -306,6 +343,12 @@ var defaultScoreBuckets = []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
 // with finer granularity below 0.15 (the operator-approval
 // threshold) so the dashboard can render the approval-gate cliff.
 var defaultPctBuckets = []float64{0.01, 0.025, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5}
+
+// defaultCAPTCHAResolutionBuckets is used by the v3.7.0 EC-10-4
+// CAPTCHA operator-resolution latency histogram. Buckets cover
+// the [10s, 1h] range -- the SolveBudget upper bound -- so the
+// operator dashboard can spot SLO breaches before the budget fires.
+var defaultCAPTCHAResolutionBuckets = []float64{10, 30, 60, 120, 300, 600, 1200, 1800, 2400, 3600}
 
 // Handler returns the http.Handler that exposes /metrics in
 // Prometheus text format.
@@ -368,6 +411,13 @@ func (r *Registry) Handler() http.Handler {
 		r.GMVRequestDurationSeconds.write(&sb)
 		r.SSEActiveConnections.write(&sb)
 		r.SSEEventsDispatchedTotal.write(&sb)
+		r.UIAutoSessionOpsTotal.write(&sb)
+		r.OmniParserInferenceDurationSeconds.write(&sb)
+		r.OmniParserMemoryPressurePauses.write(&sb)
+		r.OmniParserConcurrentInflight.write(&sb)
+		r.UIAutoRateLimitDropsTotal.write(&sb)
+		r.CAPTCHADetectionsTotal.write(&sb)
+		r.CAPTCHAResolutionDurationSeconds.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")

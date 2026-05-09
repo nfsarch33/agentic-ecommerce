@@ -115,6 +115,17 @@ type KPIs struct {
 	MessageWebhookReceivedTotal int     `json:"message_webhook_received_total,omitempty"`
 	GMVP95LatencyMs             float64 `json:"gmv_p95_latency_ms,omitempty"`
 	SSEActiveConnectionsMax     int     `json:"sse_active_connections_max,omitempty"`
+
+	// v3.7.0 EC-10 uiauto hardening KPIs. Additive so prior schema
+	// readers keep working. Surface from the v3.7.0 observability
+	// spine (internal/metrics + internal/uiauto/{session,memguard,
+	// ratelimit,captcha}) + emitted per-minute by the sampler driver.
+	UIAutoSessionOpsTotal       int     `json:"uiauto_session_ops_total,omitempty"`
+	OmniParserInferenceP95Ms    float64 `json:"omniparser_inference_p95_ms,omitempty"`
+	OmniParserMemoryPausesTotal int     `json:"omniparser_memory_pauses_total,omitempty"`
+	UIAutoRateLimitDropsTotal   int     `json:"uiauto_rate_limit_drops_total,omitempty"`
+	CAPTCHADetectionsTotal      int     `json:"captcha_detections_total,omitempty"`
+	CAPTCHAAvgResolutionSeconds float64 `json:"captcha_avg_resolution_seconds,omitempty"`
 }
 
 // Config controls Sink construction.
@@ -318,6 +329,15 @@ type AggregateResult struct {
 	TotalMessageWebhookReceived int
 	MaxGMVP95LatencyMs          float64
 	MaxSSEActiveConnections     int
+
+	// v3.7.0 EC-10 uiauto hardening KPIs aggregated into the daily
+	// roll-up. Operator + EvoLoop dashboards pivot on these.
+	TotalUIAutoSessionOps        int
+	MaxOmniParserInferenceP95Ms  float64
+	TotalOmniParserMemoryPauses  int
+	TotalUIAutoRateLimitDrops    int
+	TotalCAPTCHADetections       int
+	MeanCAPTCHAResolutionSeconds float64
 }
 
 // aggregateAccumulator carries the per-iteration running sums + sample
@@ -325,15 +345,17 @@ type AggregateResult struct {
 // keep individual function cyclomatic complexity well under the v3.1.0
 // sentrux ceiling.
 type aggregateAccumulator struct {
-	sumRPS                    float64
-	sumErr                    float64
-	sumGC                     float64
-	sumSupplierScore          float64
-	sumEnrichmentQuality      float64
-	sumVideoScriptQuality     float64
-	supplierScoreSamples      int
-	enrichmentQualitySamples  int
-	videoScriptQualitySamples int
+	sumRPS                      float64
+	sumErr                      float64
+	sumGC                       float64
+	sumSupplierScore            float64
+	sumEnrichmentQuality        float64
+	sumVideoScriptQuality       float64
+	sumCAPTCHAResolutionSeconds float64
+	supplierScoreSamples        int
+	enrichmentQualitySamples    int
+	videoScriptQualitySamples   int
+	captchaResolutionSamples    int
 }
 
 // Aggregate computes summary KPIs across a slice of capsules.
@@ -359,6 +381,7 @@ func Aggregate(caps []Capsule) AggregateResult {
 		accumulateChannelContent(c, &res, &acc)
 		accumulatePricingFulfilment(c, &res)
 		accumulateCustomerServiceAnalytics(c, &res)
+		accumulateUIAutoHardening(c, &res, &acc)
 	}
 	n := float64(len(caps))
 	res.MeanThroughputRPS = acc.sumRPS / n
@@ -372,6 +395,9 @@ func Aggregate(caps []Capsule) AggregateResult {
 	}
 	if acc.videoScriptQualitySamples > 0 {
 		res.MeanVideoScriptQualityScore = acc.sumVideoScriptQuality / float64(acc.videoScriptQualitySamples)
+	}
+	if acc.captchaResolutionSamples > 0 {
+		res.MeanCAPTCHAResolutionSeconds = acc.sumCAPTCHAResolutionSeconds / float64(acc.captchaResolutionSamples)
 	}
 	return res
 }
@@ -486,5 +512,23 @@ func accumulateCustomerServiceAnalytics(c Capsule, res *AggregateResult) {
 	}
 	if c.KPIs.SSEActiveConnectionsMax > res.MaxSSEActiveConnections {
 		res.MaxSSEActiveConnections = c.KPIs.SSEActiveConnectionsMax
+	}
+}
+
+// accumulateUIAutoHardening rolls in the v3.7.0 EC-10 uiauto
+// hardening KPIs (session ops, OmniParser inference latency,
+// memory-pressure pauses, rate-limit drops, CAPTCHA detections,
+// CAPTCHA average resolution).
+func accumulateUIAutoHardening(c Capsule, res *AggregateResult, acc *aggregateAccumulator) {
+	res.TotalUIAutoSessionOps += c.KPIs.UIAutoSessionOpsTotal
+	if c.KPIs.OmniParserInferenceP95Ms > res.MaxOmniParserInferenceP95Ms {
+		res.MaxOmniParserInferenceP95Ms = c.KPIs.OmniParserInferenceP95Ms
+	}
+	res.TotalOmniParserMemoryPauses += c.KPIs.OmniParserMemoryPausesTotal
+	res.TotalUIAutoRateLimitDrops += c.KPIs.UIAutoRateLimitDropsTotal
+	res.TotalCAPTCHADetections += c.KPIs.CAPTCHADetectionsTotal
+	if c.KPIs.CAPTCHAAvgResolutionSeconds > 0 {
+		acc.sumCAPTCHAResolutionSeconds += c.KPIs.CAPTCHAAvgResolutionSeconds
+		acc.captchaResolutionSamples++
 	}
 }

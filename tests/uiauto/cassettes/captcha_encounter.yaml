@@ -1,0 +1,32 @@
+version: 1
+name: captcha_encounter
+description: |
+  v3.7.0 EC-10-5 sample cassette: simulated CAPTCHA encounter
+  during a uiauto flow. Used to verify EC-10-4's signal patterns
+  fire on a recorded interaction without needing live external
+  services. Hostnames are public placeholders.
+http:
+  - method: POST
+    url: https://omniparser.example.local/uiauto/rednote/post
+    request_body: |
+      {"tenant_id":"tenant-a","product_id":"prod-1"}
+    status: 403
+    headers:
+      Content-Type: text/html
+    response_body: |
+      <!doctype html>
+      <html><body>
+      <h1>Cloudflare</h1>
+      <p>Please verify you are human. Checking your browser before accessing the site.</p>
+      <iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe>
+      </body></html>
+    occurred_at: 2026-05-10T12:00:00Z
+dom_snapshots:
+  - step_label: captcha-shown
+    snapshot: |
+      <html><body>
+      <div id="captcha"></div>
+      <iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe>
+      <p>请完成人机验证</p>
+      </body></html>
+    occurred_at: 2026-05-10T12:00:00Z
