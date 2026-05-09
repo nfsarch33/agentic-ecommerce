@@ -1,0 +1,67 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: cassette.facebook.local
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers: {}
+        url: https://cassette.facebook.local/
+        method: POST
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding: []
+        trailer: {}
+        content_length: 2401
+        uncompressed: false
+        body: |
+            [{"body":"{\"id\":\"fb-batch-001\"}","code":200},{"body":"{\"id\":\"fb-batch-002\"}","code":200},{"body":"{\"id\":\"fb-batch-003\"}","code":200},{"body":"{\"id\":\"fb-batch-004\"}","code":200},{"body":"{\"id\":\"fb-batch-005\"}","code":200},{"body":"{\"id\":\"fb-batch-006\"}","code":200},{"body":"{\"id\":\"fb-batch-007\"}","code":200},{"body":"{\"id\":\"fb-batch-008\"}","code":200},{"body":"{\"id\":\"fb-batch-009\"}","code":200},{"body":"{\"id\":\"fb-batch-010\"}","code":200},{"body":"{\"id\":\"fb-batch-011\"}","code":200},{"body":"{\"id\":\"fb-batch-012\"}","code":200},{"body":"{\"id\":\"fb-batch-013\"}","code":200},{"body":"{\"id\":\"fb-batch-014\"}","code":200},{"body":"{\"id\":\"fb-batch-015\"}","code":200},{"body":"{\"id\":\"fb-batch-016\"}","code":200},{"body":"{\"id\":\"fb-batch-017\"}","code":200},{"body":"{\"id\":\"fb-batch-018\"}","code":200},{"body":"{\"id\":\"fb-batch-019\"}","code":200},{"body":"{\"id\":\"fb-batch-020\"}","code":200},{"body":"{\"id\":\"fb-batch-021\"}","code":200},{"body":"{\"id\":\"fb-batch-022\"}","code":200},{"body":"{\"id\":\"fb-batch-023\"}","code":200},{"body":"{\"id\":\"fb-batch-024\"}","code":200},{"body":"{\"id\":\"fb-batch-025\"}","code":200},{"body":"{\"id\":\"fb-batch-026\"}","code":200},{"body":"{\"id\":\"fb-batch-027\"}","code":200},{"body":"{\"id\":\"fb-batch-028\"}","code":200},{"body":"{\"id\":\"fb-batch-029\"}","code":200},{"body":"{\"id\":\"fb-batch-030\"}","code":200},{"body":"{\"id\":\"fb-batch-031\"}","code":200},{"body":"{\"id\":\"fb-batch-032\"}","code":200},{"body":"{\"id\":\"fb-batch-033\"}","code":200},{"body":"{\"id\":\"fb-batch-034\"}","code":200},{"body":"{\"id\":\"fb-batch-035\"}","code":200},{"body":"{\"id\":\"fb-batch-036\"}","code":200},{"body":"{\"id\":\"fb-batch-037\"}","code":200},{"body":"{\"id\":\"fb-batch-038\"}","code":200},{"body":"{\"id\":\"fb-batch-039\"}","code":200},{"body":"{\"id\":\"fb-batch-040\"}","code":200},{"body":"{\"id\":\"fb-batch-041\"}","code":200},{"body":"{\"id\":\"fb-batch-042\"}","code":200},{"body":"{\"id\":\"fb-batch-043\"}","code":200},{"body":"{\"id\":\"fb-batch-044\"}","code":200},{"body":"{\"id\":\"fb-batch-045\"}","code":200},{"body":"{\"id\":\"fb-batch-046\"}","code":200},{"body":"{\"id\":\"fb-batch-047\"}","code":200},{"body":"{\"id\":\"fb-batch-048\"}","code":200},{"body":"{\"id\":\"fb-batch-049\"}","code":200},{"body":"{\"id\":\"fb-batch-050\"}","code":200}]
+        headers:
+            Content-Type:
+                - application/json
+        status: 200 OK
+        code: 200
+        duration: 1ms
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: cassette.facebook.local
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers: {}
+        url: https://cassette.facebook.local/
+        method: POST
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding: []
+        trailer: {}
+        content_length: 2401
+        uncompressed: false
+        body: |
+            [{"body":"{\"id\":\"fb-batch-051\"}","code":200},{"body":"{\"id\":\"fb-batch-052\"}","code":200},{"body":"{\"id\":\"fb-batch-053\"}","code":200},{"body":"{\"id\":\"fb-batch-054\"}","code":200},{"body":"{\"id\":\"fb-batch-055\"}","code":200},{"body":"{\"id\":\"fb-batch-056\"}","code":200},{"body":"{\"id\":\"fb-batch-057\"}","code":200},{"body":"{\"id\":\"fb-batch-058\"}","code":200},{"body":"{\"id\":\"fb-batch-059\"}","code":200},{"body":"{\"id\":\"fb-batch-060\"}","code":200},{"body":"{\"id\":\"fb-batch-061\"}","code":200},{"body":"{\"id\":\"fb-batch-062\"}","code":200},{"body":"{\"id\":\"fb-batch-063\"}","code":200},{"body":"{\"id\":\"fb-batch-064\"}","code":200},{"body":"{\"id\":\"fb-batch-065\"}","code":200},{"body":"{\"id\":\"fb-batch-066\"}","code":200},{"body":"{\"id\":\"fb-batch-067\"}","code":200},{"body":"{\"id\":\"fb-batch-068\"}","code":200},{"body":"{\"id\":\"fb-batch-069\"}","code":200},{"body":"{\"id\":\"fb-batch-070\"}","code":200},{"body":"{\"id\":\"fb-batch-071\"}","code":200},{"body":"{\"id\":\"fb-batch-072\"}","code":200},{"body":"{\"id\":\"fb-batch-073\"}","code":200},{"body":"{\"id\":\"fb-batch-074\"}","code":200},{"body":"{\"id\":\"fb-batch-075\"}","code":200},{"body":"{\"id\":\"fb-batch-076\"}","code":200},{"body":"{\"id\":\"fb-batch-077\"}","code":200},{"body":"{\"id\":\"fb-batch-078\"}","code":200},{"body":"{\"id\":\"fb-batch-079\"}","code":200},{"body":"{\"id\":\"fb-batch-080\"}","code":200},{"body":"{\"id\":\"fb-batch-081\"}","code":200},{"body":"{\"id\":\"fb-batch-082\"}","code":200},{"body":"{\"id\":\"fb-batch-083\"}","code":200},{"body":"{\"id\":\"fb-batch-084\"}","code":200},{"body":"{\"id\":\"fb-batch-085\"}","code":200},{"body":"{\"id\":\"fb-batch-086\"}","code":200},{"body":"{\"id\":\"fb-batch-087\"}","code":200},{"body":"{\"id\":\"fb-batch-088\"}","code":200},{"body":"{\"id\":\"fb-batch-089\"}","code":200},{"body":"{\"id\":\"fb-batch-090\"}","code":200},{"body":"{\"id\":\"fb-batch-091\"}","code":200},{"body":"{\"id\":\"fb-batch-092\"}","code":200},{"body":"{\"id\":\"fb-batch-093\"}","code":200},{"body":"{\"id\":\"fb-batch-094\"}","code":200},{"body":"{\"id\":\"fb-batch-095\"}","code":200},{"body":"{\"id\":\"fb-batch-096\"}","code":200},{"body":"{\"id\":\"fb-batch-097\"}","code":200},{"body":"{\"id\":\"fb-batch-098\"}","code":200},{"body":"{\"id\":\"fb-batch-099\"}","code":200},{"body":"{\"id\":\"fb-batch-100\"}","code":200}]
+        headers:
+            Content-Type:
+                - application/json
+        status: 200 OK
+        code: 200
+        duration: 1ms

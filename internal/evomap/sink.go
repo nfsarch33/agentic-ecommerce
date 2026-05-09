@@ -83,6 +83,18 @@ type KPIs struct {
 	TikTokWebhookSignatureFails  int     `json:"tiktok_webhook_signature_fails,omitempty"`
 	TikTokInventorySyncTotal     int     `json:"tiktok_inventory_sync_total,omitempty"`
 	TikTokInventorySyncRollbacks int     `json:"tiktok_inventory_sync_rollbacks,omitempty"`
+
+	// v3.4.0 EC-4 + EC-5 cross-platform channel + content cluster
+	// KPIs. Additive so prior schema readers keep working.
+	FacebookAPICallsTotal        int     `json:"facebook_api_calls_total,omitempty"`
+	FacebookAPIFailuresTotal     int     `json:"facebook_api_failures_total,omitempty"`
+	ChannelRouterDispatchesTotal int     `json:"channel_router_dispatches_total,omitempty"`
+	ChannelRouterDLQTotal        int     `json:"channel_router_dlq_total,omitempty"`
+	RedNoteBridgeCallsTotal      int     `json:"rednote_bridge_calls_total,omitempty"`
+	VideoScriptGenerationsTotal  int     `json:"video_script_generations_total,omitempty"`
+	VideoScriptQualityScoreMean  float64 `json:"video_script_quality_score_mean,omitempty"`
+	VideoAssemblyTotal           int     `json:"video_assembly_total,omitempty"`
+	VideoAssemblyFailuresTotal   int     `json:"video_assembly_failures_total,omitempty"`
 }
 
 // Config controls Sink construction.
@@ -260,9 +272,41 @@ type AggregateResult struct {
 	TotalTikTokWebhookSigFailures int
 	TotalTikTokInventorySync      int
 	TotalTikTokInventoryRollbacks int
+
+	// v3.4.0 EC-4 + EC-5 KPIs aggregated into the daily roll-up.
+	TotalFacebookAPICalls        int
+	TotalFacebookAPIFailures     int
+	TotalChannelRouterDispatches int
+	TotalChannelRouterDLQ        int
+	TotalRedNoteBridgeCalls      int
+	TotalVideoScriptGenerations  int
+	MeanVideoScriptQualityScore  float64
+	TotalVideoAssembly           int
+	TotalVideoAssemblyFailures   int
+}
+
+// aggregateAccumulator carries the per-iteration running sums + sample
+// counts so the per-epoch loop body can split into focused helpers and
+// keep individual function cyclomatic complexity well under the v3.1.0
+// sentrux ceiling.
+type aggregateAccumulator struct {
+	sumRPS                    float64
+	sumErr                    float64
+	sumGC                     float64
+	sumSupplierScore          float64
+	sumEnrichmentQuality      float64
+	sumVideoScriptQuality     float64
+	supplierScoreSamples      int
+	enrichmentQualitySamples  int
+	videoScriptQualitySamples int
 }
 
 // Aggregate computes summary KPIs across a slice of capsules.
+//
+// Decomposition discipline (HARD GATE: complex_fn must NOT increase
+// from 4): the per-capsule body splits into focused helpers
+// (foundationals, sourcing, enrichment, tiktok, channel-content)
+// so this composer stays well under the cyclomatic ceiling.
 func Aggregate(caps []Capsule) AggregateResult {
 	res := AggregateResult{BinaryDistribution: map[string]int{}}
 	if len(caps) == 0 {
@@ -271,75 +315,113 @@ func Aggregate(caps []Capsule) AggregateResult {
 	res.SampleCount = len(caps)
 	res.WindowStart = caps[0].EventAt
 	res.WindowEnd = caps[0].EventAt
-	var sumRPS, sumErr, sumGC, sumSupplierScore, sumEnrichmentQuality float64
-	var supplierScoreSamples, enrichmentQualitySamples int
+	var acc aggregateAccumulator
 	for _, c := range caps {
-		sumRPS += c.KPIs.ThroughputRPS
-		sumErr += c.KPIs.ErrorRate
-		sumGC += c.KPIs.GCPauseP99Us
-		if c.KPIs.P95Ms > res.MaxP95Ms {
-			res.MaxP95Ms = c.KPIs.P95Ms
-		}
-		if c.KPIs.GoroutineCount > res.MaxGoroutineCount {
-			res.MaxGoroutineCount = c.KPIs.GoroutineCount
-		}
-		if c.KPIs.HeapInUseBytes > res.MaxHeapInUseBytes {
-			res.MaxHeapInUseBytes = c.KPIs.HeapInUseBytes
-		}
-		res.TotalOOMAlarms += c.KPIs.OOMAlarms
-		res.BinaryDistribution[c.Binary]++
-		if c.EventAt.Before(res.WindowStart) {
-			res.WindowStart = c.EventAt
-		}
-		if c.EventAt.After(res.WindowEnd) {
-			res.WindowEnd = c.EventAt
-		}
-		// v3.1.0 sourcing KPIs.
-		res.TotalSourcingRuns += c.KPIs.SourcingRunsTotal
-		res.TotalSourcingComplianceRejects += c.KPIs.SourcingComplianceRejectsTotal
-		if c.KPIs.SourcingP95Ms > res.MaxSourcingP95Ms {
-			res.MaxSourcingP95Ms = c.KPIs.SourcingP95Ms
-		}
-		if c.KPIs.SupplierScoreMean > 0 {
-			sumSupplierScore += c.KPIs.SupplierScoreMean
-			supplierScoreSamples++
-		}
-		// v3.2.0 enrichment KPIs.
-		res.TotalEnrichmentRuns += c.KPIs.EnrichmentRunsTotal
-		res.TotalEnrichmentFailures += c.KPIs.EnrichmentFailuresTotal
-		if c.KPIs.EnrichmentP95Ms > res.MaxEnrichmentP95Ms {
-			res.MaxEnrichmentP95Ms = c.KPIs.EnrichmentP95Ms
-		}
-		if c.KPIs.EnrichmentQualityScoreMean > 0 {
-			sumEnrichmentQuality += c.KPIs.EnrichmentQualityScoreMean
-			enrichmentQualitySamples++
-		}
-		res.TotalImageProcessing += c.KPIs.ImageProcessingTotal
-		res.TotalImageProcessingFailures += c.KPIs.ImageProcessingFailuresTotal
-		res.TotalTrendIngestRecords += c.KPIs.TrendIngestRecordsTotal
-		res.TotalSEOKeywordInjects += c.KPIs.SEOKeywordInjectsTotal
-		// v3.3.0 EC-3 KPIs.
-		res.TotalTikTokAPICalls += c.KPIs.TikTokAPICallsTotal
-		res.TotalTikTokAPIFailures += c.KPIs.TikTokAPIFailuresTotal
-		if c.KPIs.TikTokAPIP95Ms > res.MaxTikTokAPIP95Ms {
-			res.MaxTikTokAPIP95Ms = c.KPIs.TikTokAPIP95Ms
-		}
-		res.TotalTikTokListingPublished += c.KPIs.TikTokListingPublishedTotal
-		res.TotalTikTokListingRolledBack += c.KPIs.TikTokListingRolledBackTotal
-		res.TotalTikTokWebhookReceived += c.KPIs.TikTokWebhookReceivedTotal
-		res.TotalTikTokWebhookSigFailures += c.KPIs.TikTokWebhookSignatureFails
-		res.TotalTikTokInventorySync += c.KPIs.TikTokInventorySyncTotal
-		res.TotalTikTokInventoryRollbacks += c.KPIs.TikTokInventorySyncRollbacks
+		accumulateFoundational(c, &res, &acc)
+		accumulateSourcing(c, &res, &acc)
+		accumulateEnrichment(c, &res, &acc)
+		accumulateTikTok(c, &res)
+		accumulateChannelContent(c, &res, &acc)
 	}
 	n := float64(len(caps))
-	res.MeanThroughputRPS = sumRPS / n
-	res.MeanErrorRate = sumErr / n
-	res.MeanGCPauseP99Us = sumGC / n
-	if supplierScoreSamples > 0 {
-		res.MeanSupplierScore = sumSupplierScore / float64(supplierScoreSamples)
+	res.MeanThroughputRPS = acc.sumRPS / n
+	res.MeanErrorRate = acc.sumErr / n
+	res.MeanGCPauseP99Us = acc.sumGC / n
+	if acc.supplierScoreSamples > 0 {
+		res.MeanSupplierScore = acc.sumSupplierScore / float64(acc.supplierScoreSamples)
 	}
-	if enrichmentQualitySamples > 0 {
-		res.MeanEnrichmentQualityScore = sumEnrichmentQuality / float64(enrichmentQualitySamples)
+	if acc.enrichmentQualitySamples > 0 {
+		res.MeanEnrichmentQualityScore = acc.sumEnrichmentQuality / float64(acc.enrichmentQualitySamples)
+	}
+	if acc.videoScriptQualitySamples > 0 {
+		res.MeanVideoScriptQualityScore = acc.sumVideoScriptQuality / float64(acc.videoScriptQualitySamples)
 	}
 	return res
+}
+
+// accumulateFoundational rolls in the throughput / error / heap /
+// goroutine / window-bounds fields shared by every binary.
+func accumulateFoundational(c Capsule, res *AggregateResult, acc *aggregateAccumulator) {
+	acc.sumRPS += c.KPIs.ThroughputRPS
+	acc.sumErr += c.KPIs.ErrorRate
+	acc.sumGC += c.KPIs.GCPauseP99Us
+	if c.KPIs.P95Ms > res.MaxP95Ms {
+		res.MaxP95Ms = c.KPIs.P95Ms
+	}
+	if c.KPIs.GoroutineCount > res.MaxGoroutineCount {
+		res.MaxGoroutineCount = c.KPIs.GoroutineCount
+	}
+	if c.KPIs.HeapInUseBytes > res.MaxHeapInUseBytes {
+		res.MaxHeapInUseBytes = c.KPIs.HeapInUseBytes
+	}
+	res.TotalOOMAlarms += c.KPIs.OOMAlarms
+	res.BinaryDistribution[c.Binary]++
+	if c.EventAt.Before(res.WindowStart) {
+		res.WindowStart = c.EventAt
+	}
+	if c.EventAt.After(res.WindowEnd) {
+		res.WindowEnd = c.EventAt
+	}
+}
+
+// accumulateSourcing rolls in the v3.1.0 EC-1 China sourcing KPIs.
+func accumulateSourcing(c Capsule, res *AggregateResult, acc *aggregateAccumulator) {
+	res.TotalSourcingRuns += c.KPIs.SourcingRunsTotal
+	res.TotalSourcingComplianceRejects += c.KPIs.SourcingComplianceRejectsTotal
+	if c.KPIs.SourcingP95Ms > res.MaxSourcingP95Ms {
+		res.MaxSourcingP95Ms = c.KPIs.SourcingP95Ms
+	}
+	if c.KPIs.SupplierScoreMean > 0 {
+		acc.sumSupplierScore += c.KPIs.SupplierScoreMean
+		acc.supplierScoreSamples++
+	}
+}
+
+// accumulateEnrichment rolls in the v3.2.0 EC-2 enrichment KPIs.
+func accumulateEnrichment(c Capsule, res *AggregateResult, acc *aggregateAccumulator) {
+	res.TotalEnrichmentRuns += c.KPIs.EnrichmentRunsTotal
+	res.TotalEnrichmentFailures += c.KPIs.EnrichmentFailuresTotal
+	if c.KPIs.EnrichmentP95Ms > res.MaxEnrichmentP95Ms {
+		res.MaxEnrichmentP95Ms = c.KPIs.EnrichmentP95Ms
+	}
+	if c.KPIs.EnrichmentQualityScoreMean > 0 {
+		acc.sumEnrichmentQuality += c.KPIs.EnrichmentQualityScoreMean
+		acc.enrichmentQualitySamples++
+	}
+	res.TotalImageProcessing += c.KPIs.ImageProcessingTotal
+	res.TotalImageProcessingFailures += c.KPIs.ImageProcessingFailuresTotal
+	res.TotalTrendIngestRecords += c.KPIs.TrendIngestRecordsTotal
+	res.TotalSEOKeywordInjects += c.KPIs.SEOKeywordInjectsTotal
+}
+
+// accumulateTikTok rolls in the v3.3.0 EC-3 TikTok integration KPIs.
+func accumulateTikTok(c Capsule, res *AggregateResult) {
+	res.TotalTikTokAPICalls += c.KPIs.TikTokAPICallsTotal
+	res.TotalTikTokAPIFailures += c.KPIs.TikTokAPIFailuresTotal
+	if c.KPIs.TikTokAPIP95Ms > res.MaxTikTokAPIP95Ms {
+		res.MaxTikTokAPIP95Ms = c.KPIs.TikTokAPIP95Ms
+	}
+	res.TotalTikTokListingPublished += c.KPIs.TikTokListingPublishedTotal
+	res.TotalTikTokListingRolledBack += c.KPIs.TikTokListingRolledBackTotal
+	res.TotalTikTokWebhookReceived += c.KPIs.TikTokWebhookReceivedTotal
+	res.TotalTikTokWebhookSigFailures += c.KPIs.TikTokWebhookSignatureFails
+	res.TotalTikTokInventorySync += c.KPIs.TikTokInventorySyncTotal
+	res.TotalTikTokInventoryRollbacks += c.KPIs.TikTokInventorySyncRollbacks
+}
+
+// accumulateChannelContent rolls in the v3.4.0 EC-4 + EC-5 channel
+// router + content cluster KPIs.
+func accumulateChannelContent(c Capsule, res *AggregateResult, acc *aggregateAccumulator) {
+	res.TotalFacebookAPICalls += c.KPIs.FacebookAPICallsTotal
+	res.TotalFacebookAPIFailures += c.KPIs.FacebookAPIFailuresTotal
+	res.TotalChannelRouterDispatches += c.KPIs.ChannelRouterDispatchesTotal
+	res.TotalChannelRouterDLQ += c.KPIs.ChannelRouterDLQTotal
+	res.TotalRedNoteBridgeCalls += c.KPIs.RedNoteBridgeCallsTotal
+	res.TotalVideoScriptGenerations += c.KPIs.VideoScriptGenerationsTotal
+	if c.KPIs.VideoScriptQualityScoreMean > 0 {
+		acc.sumVideoScriptQuality += c.KPIs.VideoScriptQualityScoreMean
+		acc.videoScriptQualitySamples++
+	}
+	res.TotalVideoAssembly += c.KPIs.VideoAssemblyTotal
+	res.TotalVideoAssemblyFailures += c.KPIs.VideoAssemblyFailuresTotal
 }
