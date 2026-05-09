@@ -114,6 +114,39 @@ type Registry struct {
 	TikTokWebhookReceivedTotal   *Counter
 	TikTokInventorySyncTotal     *Counter
 	TikTokSignatureFailuresTotal *Counter
+
+	// v3.4.0 EC-4 + EC-5 cross-platform channel + content metrics.
+	// Cardinality budget per series:
+	//   ec_facebook_api_calls_total{tenant_id, endpoint, status}
+	//     ~ tenants(10) * endpoints(5: catalog.products.create/batch +
+	//       inventory.sync + commerce.orders.status + oauth) *
+	//       statuses(7) = 350 series.
+	//   ec_facebook_api_duration_seconds{endpoint}   ~ 5 series.
+	//   ec_channel_router_dispatches_total{tenant_id, channel, outcome}
+	//     ~ tenants(10) * channels(5: tiktok/facebook/rednote/
+	//       instagram/(none)) * outcomes(3: delivered/dlq/no_match)
+	//       = 150 series.
+	//   ec_channel_router_dlq_total{tenant_id, channel, reason}
+	//     ~ tenants(10) * channels(4) * reasons(4: pool_saturated,
+	//       publish_failed, transport_error, decode_failed) = 160 series.
+	//   ec_rednote_bridge_calls_total{tenant_id, status}
+	//     ~ tenants(10) * statuses(8) = 80 series.
+	//   ec_video_script_generations_total{tenant_id, platform, source}
+	//     ~ tenants(10) * platforms(4: tiktok/rednote/facebook/
+	//       instagram-reels) * sources(2: llm/template) = 80 series.
+	//   ec_video_script_quality_score{platform}      ~ 4 series.
+	//   ec_video_assembly_total{action, status}      ~ 2 actions
+	//     (stub_assemble/live_assemble) * statuses(2: ok/failed) = 4 series.
+	// Total ~ 833 additive series for v3.4.0; well under the
+	// per-binary 10_000 cap.
+	FacebookAPICallsTotal        *Counter
+	FacebookAPIDurationSeconds   *Histogram
+	ChannelRouterDispatchesTotal *Counter
+	ChannelRouterDLQTotal        *Counter
+	RedNoteBridgeCallsTotal      *Counter
+	VideoScriptGenerationsTotal  *Counter
+	VideoScriptQualityScore      *Histogram
+	VideoAssemblyTotal           *Counter
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -152,6 +185,14 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.TikTokWebhookReceivedTotal = newCounter(r, "ec_tiktok_webhook_received_total", "v3.3.0 EC-3-3 TikTok webhook events received by event_type + status.")
 	r.TikTokInventorySyncTotal = newCounter(r, "ec_tiktok_inventory_sync_total", "v3.3.0 EC-3-4 TikTok inventory sync transitions by direction + status.")
 	r.TikTokSignatureFailuresTotal = newCounter(r, "ec_tiktok_signature_failures_total", "v3.3.0 EC-3-1/EC-3-3 TikTok HMAC signature failures by reason.")
+	r.FacebookAPICallsTotal = newCounter(r, "ec_facebook_api_calls_total", "v3.4.0 EC-4-2 Facebook Graph API calls by tenant + endpoint + status.")
+	r.FacebookAPIDurationSeconds = newHistogram(r, "ec_facebook_api_duration_seconds", "v3.4.0 EC-4-2 Facebook Graph API duration by endpoint.", defaultDurationBuckets)
+	r.ChannelRouterDispatchesTotal = newCounter(r, "ec_channel_router_dispatches_total", "v3.4.0 EC-4-3 channel router dispatches by tenant + channel + outcome.")
+	r.ChannelRouterDLQTotal = newCounter(r, "ec_channel_router_dlq_total", "v3.4.0 EC-4-3 channel router DLQ enqueues by tenant + channel + reason.")
+	r.RedNoteBridgeCallsTotal = newCounter(r, "ec_rednote_bridge_calls_total", "v3.4.0 EC-4-1 RedNote omniparser bridge calls by tenant + status.")
+	r.VideoScriptGenerationsTotal = newCounter(r, "ec_video_script_generations_total", "v3.4.0 EC-5-1 video script generations by tenant + platform + source.")
+	r.VideoScriptQualityScore = newHistogram(r, "ec_video_script_quality_score", "v3.4.0 EC-5-1 video script quality score by platform (0..1).", defaultScoreBuckets)
+	r.VideoAssemblyTotal = newCounter(r, "ec_video_assembly_total", "v3.4.0 EC-5-3 video assembly operations by action + status.")
 	return r
 }
 
@@ -199,6 +240,14 @@ func (r *Registry) Handler() http.Handler {
 		r.TikTokWebhookReceivedTotal.write(&sb)
 		r.TikTokInventorySyncTotal.write(&sb)
 		r.TikTokSignatureFailuresTotal.write(&sb)
+		r.FacebookAPICallsTotal.write(&sb)
+		r.FacebookAPIDurationSeconds.write(&sb)
+		r.ChannelRouterDispatchesTotal.write(&sb)
+		r.ChannelRouterDLQTotal.write(&sb)
+		r.RedNoteBridgeCallsTotal.write(&sb)
+		r.VideoScriptGenerationsTotal.write(&sb)
+		r.VideoScriptQualityScore.write(&sb)
+		r.VideoAssemblyTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
