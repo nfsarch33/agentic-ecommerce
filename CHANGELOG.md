@@ -621,7 +621,7 @@ observability surface, and an EvoMap feed so the agent can self-tune.
   outbound webhook URLs that resolve to private (RFC 1918), loopback,
   link-local, IPv6 unique-local (fc00::/7, fd00::/8), or cloud
   metadata IPs (169.254.169.254 IMDS, 169.254.170.2 ECS task
-  metadata, 100.100.100.200 Alibaba, fd00:ec2::254 v6 IMDS). Scheme
+  metadata, `<cloud-metadata-ip>` Alibaba, fd00:ec2::254 v6 IMDS). Scheme
   allowlist: `https://` only by default; `http://` requires
   explicit `AllowInsecureHTTP` flag.
 - **DNS rebinding mitigation**: re-resolves hostname right before the
