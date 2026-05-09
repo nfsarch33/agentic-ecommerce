@@ -7,6 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
+	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
+	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 )
 
 // app.go (v2.6.1 cmd/* DI refactor): keep main.go's main() body
@@ -47,7 +51,15 @@ func mainImpl(ctx context.Context, args []string, stdout io.Writer, getenv func(
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	return runServer(ctx, logger, httpServer, srv.cfg.shutdownTimeout)
+	shutdownTimeout := srv.cfg.shutdownTimeout
+	if shutdownTimeout <= 0 {
+		shutdownTimeout = 10 * time.Second
+	}
+	mgr := lifecycle.New(logger, shutdownTimeout)
+	reg := startObservability(mgr, logger, "mc-api")
+	ecRegistry.Store(reg)
+	defer ecRegistry.Store(nil)
+	return runServerWithLifecycle(ctx, mgr, logger, httpServer)
 }
 
 // runServer drives the http.Server lifecycle: start in a goroutine,
@@ -55,12 +67,32 @@ func mainImpl(ctx context.Context, args []string, stdout io.Writer, getenv func(
 // gracefully shut down. Pure function of (ctx, logger, server,
 // timeout) so tests inject a httptest-listened *http.Server and
 // cancel the context to exercise the shutdown branch.
+//
+// v2.10.0 Story 1: the function delegates to a lifecycle.Manager via
+// runServerWithLifecycle so all binaries share one drain protocol.
 func runServer(ctx context.Context, logger *slog.Logger, server *http.Server, shutdownTimeout time.Duration) int {
+	if shutdownTimeout <= 0 {
+		shutdownTimeout = 10 * time.Second
+	}
+	mgr := lifecycle.New(logger, shutdownTimeout)
+	return runServerWithLifecycle(ctx, mgr, logger, server)
+}
+
+// runServerWithLifecycle starts an http.Server in the background and
+// closes it via the supplied lifecycle.Manager. The caller is
+// responsible for registering additional Closers + invoking
+// mgr.Shutdown when appropriate.
+func runServerWithLifecycle(ctx context.Context, mgr *lifecycle.Manager, logger *slog.Logger, server *http.Server) int {
+	mgr.Register("http-server", lifecycle.CloserFunc(func(closeCtx context.Context) error {
+		return server.Shutdown(closeCtx)
+	}))
+
 	errCh := make(chan error, 1)
 	go func() { errCh <- server.ListenAndServe() }()
 
 	select {
 	case err := <-errCh:
+		_ = mgr.Shutdown()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("mc-api.stop", "error", err)
 			return 1
@@ -68,17 +100,40 @@ func runServer(ctx context.Context, logger *slog.Logger, server *http.Server, sh
 		return 0
 	case <-ctx.Done():
 		logger.Info("mc-api.shutdown")
-		if shutdownTimeout <= 0 {
-			shutdownTimeout = 10 * time.Second
-		}
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-		if err := server.Shutdown(shutdownCtx); err != nil {
-			logger.Error("mc-api.shutdown_failed", "error", err)
+		closeErr := mgr.Shutdown()
+		// drain the listen goroutine so its error doesn't leak past return.
+		listenErr := <-errCh
+		if closeErr != nil {
+			logger.Error("mc-api.shutdown_failed", "error", closeErr)
 			return 1
+		}
+		if listenErr != nil && !errors.Is(listenErr, http.ErrServerClosed) {
+			// listen-time bind errors after shutdown are still benign because
+			// ctx fired first; report success to preserve the legacy contract.
+			logger.Info("mc-api.listen_returned", "error", listenErr)
 		}
 		return 0
 	}
+}
+
+// startObservability boots the v2.10.0 metric registry + memwatch
+// sampler and registers them with the supplied lifecycle.Manager.
+// Returns the registry so the caller can wire its handler and the
+// per-request counters.
+func startObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary string) *metrics.Registry {
+	reg := metrics.NewRegistry(binary)
+	sampler := memwatch.NewSampler(logger, memwatch.Config{
+		BinaryName:     binary,
+		SampleInterval: 5 * time.Second,
+		Sink: memwatch.SinkFunc(func(_ context.Context, s memwatch.Sample) {
+			reg.GoroutineCount.Set(float64(s.GoroutineCount), metrics.Labels{})
+			reg.HeapBytes.Set(float64(s.HeapInUseBytes), metrics.Labels{})
+		}),
+		HeapAlarmCallback: func() { reg.OOMAlarms.Inc(metrics.Labels{}) },
+	})
+	go func() { _ = sampler.Run(context.Background()) }()
+	mgr.Register("memwatch", sampler)
+	return reg
 }
 
 // getenvFn is the io-injectable variant of the package-private getenv

@@ -19,7 +19,10 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
+	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
+	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
@@ -103,6 +106,25 @@ func mainImpl(ctx context.Context, stdout io.Writer, getenv func(string) string,
 
 	w := worker.New(c, deps.TaskQueue, worker.Options{})
 	registerWorkflowsAndActivities(w, deps)
+
+	// v2.10.0 Story 1+3: bind memwatch + lifecycle Manager so heap +
+	// goroutine ceilings are monitored. Temporal owns its own InterruptCh
+	// signal handling so we run lifecycle in parallel via Shutdown after
+	// w.Run returns.
+	mgr := lifecycle.New(logger, 30*time.Second)
+	reg := metrics.NewRegistry("temporal-worker")
+	sampler := memwatch.NewSampler(logger, memwatch.Config{
+		BinaryName:     "temporal-worker",
+		SampleInterval: 5 * time.Second,
+		Sink: memwatch.SinkFunc(func(_ context.Context, s memwatch.Sample) {
+			reg.GoroutineCount.Set(float64(s.GoroutineCount), metrics.Labels{})
+			reg.HeapBytes.Set(float64(s.HeapInUseBytes), metrics.Labels{})
+		}),
+		HeapAlarmCallback: func() { reg.OOMAlarms.Inc(metrics.Labels{}) },
+	})
+	go func() { _ = sampler.Run(context.Background()) }()
+	mgr.Register("memwatch", sampler)
+	defer func() { _ = mgr.Shutdown() }()
 
 	logger.Info(
 		"temporal_worker.start",
