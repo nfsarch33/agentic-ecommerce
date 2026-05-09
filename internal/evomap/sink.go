@@ -56,6 +56,19 @@ type KPIs struct {
 	SourcingComplianceRejectsTotal int     `json:"sourcing_compliance_rejects_total,omitempty"`
 	SourcingP95Ms                  float64 `json:"sourcing_p95_ms,omitempty"`
 	SupplierScoreMean              float64 `json:"supplier_score_mean,omitempty"`
+
+	// v3.2.0 EC-2 Enrichment Pipeline KPIs. Additive fields so prior
+	// readers keep working. Stage label values mirror
+	// observability.EnrichmentStage* (description_gen, image_gen,
+	// seo_inject, wc_sync, trend_ingest).
+	EnrichmentRunsTotal          int     `json:"enrichment_runs_total,omitempty"`
+	EnrichmentFailuresTotal      int     `json:"enrichment_failures_total,omitempty"`
+	EnrichmentP95Ms              float64 `json:"enrichment_p95_ms,omitempty"`
+	EnrichmentQualityScoreMean   float64 `json:"enrichment_quality_score_mean,omitempty"`
+	ImageProcessingTotal         int     `json:"image_processing_total,omitempty"`
+	ImageProcessingFailuresTotal int     `json:"image_processing_failures_total,omitempty"`
+	TrendIngestRecordsTotal      int     `json:"trend_ingest_records_total,omitempty"`
+	SEOKeywordInjectsTotal       int     `json:"seo_keyword_injects_total,omitempty"`
 }
 
 // Config controls Sink construction.
@@ -211,6 +224,16 @@ type AggregateResult struct {
 	TotalSourcingComplianceRejects int
 	MaxSourcingP95Ms               float64
 	MeanSupplierScore              float64
+
+	// v3.2.0 EC-2 enrichment KPIs aggregated into the daily roll-up.
+	TotalEnrichmentRuns          int
+	TotalEnrichmentFailures      int
+	MaxEnrichmentP95Ms           float64
+	MeanEnrichmentQualityScore   float64
+	TotalImageProcessing         int
+	TotalImageProcessingFailures int
+	TotalTrendIngestRecords      int
+	TotalSEOKeywordInjects       int
 }
 
 // Aggregate computes summary KPIs across a slice of capsules.
@@ -222,8 +245,8 @@ func Aggregate(caps []Capsule) AggregateResult {
 	res.SampleCount = len(caps)
 	res.WindowStart = caps[0].EventAt
 	res.WindowEnd = caps[0].EventAt
-	var sumRPS, sumErr, sumGC, sumSupplierScore float64
-	var supplierScoreSamples int
+	var sumRPS, sumErr, sumGC, sumSupplierScore, sumEnrichmentQuality float64
+	var supplierScoreSamples, enrichmentQualitySamples int
 	for _, c := range caps {
 		sumRPS += c.KPIs.ThroughputRPS
 		sumErr += c.KPIs.ErrorRate
@@ -255,6 +278,20 @@ func Aggregate(caps []Capsule) AggregateResult {
 			sumSupplierScore += c.KPIs.SupplierScoreMean
 			supplierScoreSamples++
 		}
+		// v3.2.0 enrichment KPIs.
+		res.TotalEnrichmentRuns += c.KPIs.EnrichmentRunsTotal
+		res.TotalEnrichmentFailures += c.KPIs.EnrichmentFailuresTotal
+		if c.KPIs.EnrichmentP95Ms > res.MaxEnrichmentP95Ms {
+			res.MaxEnrichmentP95Ms = c.KPIs.EnrichmentP95Ms
+		}
+		if c.KPIs.EnrichmentQualityScoreMean > 0 {
+			sumEnrichmentQuality += c.KPIs.EnrichmentQualityScoreMean
+			enrichmentQualitySamples++
+		}
+		res.TotalImageProcessing += c.KPIs.ImageProcessingTotal
+		res.TotalImageProcessingFailures += c.KPIs.ImageProcessingFailuresTotal
+		res.TotalTrendIngestRecords += c.KPIs.TrendIngestRecordsTotal
+		res.TotalSEOKeywordInjects += c.KPIs.SEOKeywordInjectsTotal
 	}
 	n := float64(len(caps))
 	res.MeanThroughputRPS = sumRPS / n
@@ -262,6 +299,9 @@ func Aggregate(caps []Capsule) AggregateResult {
 	res.MeanGCPauseP99Us = sumGC / n
 	if supplierScoreSamples > 0 {
 		res.MeanSupplierScore = sumSupplierScore / float64(supplierScoreSamples)
+	}
+	if enrichmentQualitySamples > 0 {
+		res.MeanEnrichmentQualityScore = sumEnrichmentQuality / float64(enrichmentQualitySamples)
 	}
 	return res
 }
