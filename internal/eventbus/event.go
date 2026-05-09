@@ -30,6 +30,12 @@ const (
 	LicenseActivated      EventType = "license.activated"
 	LicenseRevoked        EventType = "license.revoked"
 	LicenseExpired        EventType = "license.expired"
+
+	// v3.1.0 EC-1-3 China Sourcing Agent. Fired by the sourcing agent
+	// every time it produces a `ProductSourcingProposal` for a tenant.
+	// Carries the typed SourcingProposalPayload via Event.Payload (as
+	// map[string]any for in-memory bus compatibility).
+	ProductSourcingProposed EventType = "product.sourcing.proposed"
 )
 
 type Event struct {

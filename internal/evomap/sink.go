@@ -48,6 +48,14 @@ type KPIs struct {
 	GoroutineCount int     `json:"goroutine_count"`
 	GCPauseP99Us   float64 `json:"gc_pause_p99_us"`
 	HeapInUseBytes uint64  `json:"heap_in_use_bytes"`
+
+	// v3.1.0 EC-1-3 China Sourcing Agent KPIs. Emitted as additive
+	// fields so prior schema readers keep working. Zero values are
+	// the natural default when no sourcing has run in the window.
+	SourcingRunsTotal              int     `json:"sourcing_runs_total,omitempty"`
+	SourcingComplianceRejectsTotal int     `json:"sourcing_compliance_rejects_total,omitempty"`
+	SourcingP95Ms                  float64 `json:"sourcing_p95_ms,omitempty"`
+	SupplierScoreMean              float64 `json:"supplier_score_mean,omitempty"`
 }
 
 // Config controls Sink construction.
@@ -197,6 +205,12 @@ type AggregateResult struct {
 	WindowStart        time.Time
 	WindowEnd          time.Time
 	BinaryDistribution map[string]int
+
+	// v3.1.0 EC-1-3 sourcing KPIs aggregated into the daily roll-up.
+	TotalSourcingRuns              int
+	TotalSourcingComplianceRejects int
+	MaxSourcingP95Ms               float64
+	MeanSupplierScore              float64
 }
 
 // Aggregate computes summary KPIs across a slice of capsules.
@@ -208,7 +222,8 @@ func Aggregate(caps []Capsule) AggregateResult {
 	res.SampleCount = len(caps)
 	res.WindowStart = caps[0].EventAt
 	res.WindowEnd = caps[0].EventAt
-	var sumRPS, sumErr, sumGC float64
+	var sumRPS, sumErr, sumGC, sumSupplierScore float64
+	var supplierScoreSamples int
 	for _, c := range caps {
 		sumRPS += c.KPIs.ThroughputRPS
 		sumErr += c.KPIs.ErrorRate
@@ -230,10 +245,23 @@ func Aggregate(caps []Capsule) AggregateResult {
 		if c.EventAt.After(res.WindowEnd) {
 			res.WindowEnd = c.EventAt
 		}
+		// v3.1.0 sourcing KPIs.
+		res.TotalSourcingRuns += c.KPIs.SourcingRunsTotal
+		res.TotalSourcingComplianceRejects += c.KPIs.SourcingComplianceRejectsTotal
+		if c.KPIs.SourcingP95Ms > res.MaxSourcingP95Ms {
+			res.MaxSourcingP95Ms = c.KPIs.SourcingP95Ms
+		}
+		if c.KPIs.SupplierScoreMean > 0 {
+			sumSupplierScore += c.KPIs.SupplierScoreMean
+			supplierScoreSamples++
+		}
 	}
 	n := float64(len(caps))
 	res.MeanThroughputRPS = sumRPS / n
 	res.MeanErrorRate = sumErr / n
 	res.MeanGCPauseP99Us = sumGC / n
+	if supplierScoreSamples > 0 {
+		res.MeanSupplierScore = sumSupplierScore / float64(supplierScoreSamples)
+	}
 	return res
 }
