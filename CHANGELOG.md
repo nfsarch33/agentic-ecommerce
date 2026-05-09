@@ -2,6 +2,167 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## v3.0.0 -- Production-Ready Multi-Tenant Agentic E-commerce -- 2026-05-09
+
+### Release Summary
+
+v3.0.0 closes the v2.0.1 -> v2.10.1 sprint cycle (12 production MVPs
+across 22 sprint slots, including the v2.6.1, v2.10.0, and v2.10.1
+inserted rounds). It promotes the Agentic Ecommerce backend from
+v2.0.0 (Mission Control orchestration spine) into a full multi-tenant
+SaaS-ready stack with five bounded contexts (catalog/order,
+membership, digital, marketplace, billing) plus a tenant aggregate,
+comprehensive QA, a public Plugin SDK, the `ec-cli` developer tool,
+and the v2.10.x **resilience pillar** (bounded concurrency, OOM
+detection, OpenTelemetry observability, EvoMap dual-feed,
+omniparser-bridge offload). The release ships 8 production binaries,
+~80 v1 stable REST endpoints + a v2 preview namespace, 6 Temporal
+workflows + 24 activities, 14+ tenant-keyed Postgres tables with RLS
+enforcement, 9 `ec_*` Prometheus metrics, 4 Grafana dashboards, and a
+battle-tested release-gate matrix.
+
+### Capabilities Included (v2.0.1 -> v2.10.1, by MVP merge SHA)
+
+- **v2.0.1** hardening + 83.2% coverage baseline (#63 `a315cea`)
+- **v2.1.0** `uiauto-framework` compose harness + comparison
+  generator (`cmd/uiauto-compare`) (#64 `5008e98`)
+- **v2.2.0** membership bounded context + Temporal
+  `MembershipLifecycleWorkflow` (#65 `ecc2b25`)
+- **v2.3.0** digital goods bounded context + signed-URL HMAC
+  (`internal/adapter/signedurl`) (#66 `0faae1d`)
+- **v2.4.0** marketplace plugin framework + tenant aggregate
+  (#67 `010d554`)
+- **v2.5.0** tenant self-service registration + billing hooks +
+  Stripe webhook (HMAC + replay window) (#68 `953fd86`)
+- **v2.6.0** coverage push + security fuzz harness + benchmarks for
+  hot paths (#69 `7af4d4b`)
+- **v2.6.1** `cmd/*` DI refactor + coverage lift (#70 `3ca9a6a`)
+- **v2.7.0** production marketplace + cloud scale + sentrux baseline
+  refresh (#71 `19c25e1`, #72 `c258347`)
+- **v2.7.x** secrets adapter consolidation
+  (`internal/adapter/secrets`) (#73 `69ec23f`)
+- **v2.8.0** comprehensive QA + OWASP security audit (#74 `9c26ca8`)
+- **v2.9.0** plugin SDK (`pkg/marketplace/sdk`) + `ec-cli` (7th
+  binary) + tenant onboarding workflow + A10 SSRF guard + API
+  versioning (v1 stable + v2 preview) (#75 `0e84159`)
+- **v2.10.0** resilience pillar MVP -- `internal/lifecycle` Manager,
+  `internal/workerpool` bounded Pool, `internal/memwatch` Sampler +
+  `MemCap` middleware, 9 `ec_*` Prometheus metrics, OpenTelemetry +
+  slog correlation, 4 Grafana dashboards, `internal/evomap` NDJSON
+  Sink + `cmd/evomap-rollup` (8th binary). All 5 stories TDD-first.
+  (#76 `cdad8ec`)
+- **v2.10.1** resilience validation QA -- `tests/chaos/` (4 build-tag
+  gated chaos tests) + `tests/benchmarks/v2.10-baseline.json` perf
+  baseline + `omniparser-bridge` fleet-offload service +
+  `docs/adr/adr-027-resilience-pillar.md` + `docs/observability.md`
+  + `docs/operations/runbook.md` + `docs/operations/omniparser-bridge.md`.
+  (#77 `115a931`)
+
+### Quality Gates (re-verified on canonical `main` HEAD `115a9312`)
+
+- `runx go test --repo ecommerce -- -race ./...`: PASS (64 packages
+  green, 31.9 s elapsed).
+- `runx go vet --repo ecommerce -- ./...`: clean.
+- Backend statement coverage: **84.5%** via
+  `runx go test --repo ecommerce -- -race -coverprofile=coverage.out
+  ./...` followed by `runx make build --repo ecommerce -- coverage`.
+  Above the 83% gate per ADR-026; target 85% short by 0.5pp -- gap
+  documented and accepted.
+- `runx sentrux gate --repo ecommerce`: **GREEN** -- Quality 6924,
+  Coupling 0.36, Cycles 0, God files 0, Distance from Main Sequence
+  0.32. No degradation. complex_fn unchanged at 4.
+- `runx make build --repo ecommerce`: 8 binaries built --
+  `mc-api`, `wc-sync`, `content-worker`, `agent-worker`,
+  `temporal-worker`, `uiauto-compare`, `ec-cli`, `evomap-rollup`.
+- `runx shell-leak-scan --repo ecommerce`: 0 findings (14 files
+  scanned, 610 skipped).
+- `runx make build --repo ecommerce -- govulncheck-scan`: no
+  vulnerabilities found.
+- `runx make build --repo ecommerce -- gitleaks-scan`: no leaks
+  found (~8.4 MB scanned in 347 ms).
+
+### Workflows + Activities
+
+- **6 Temporal workflows**: `ProductPublishWorkflow`,
+  `ContentGenerationWorkflow`, `MediaProcessingWorkflow`,
+  `SourcingWorkflow`, `MembershipLifecycleWorkflow`,
+  `TenantOnboardingWorkflow`.
+- **24+ activities** across content, media, sourcing, membership
+  lifecycle (`ChargeStripe`, `SendNotification`,
+  `RecordBillingEvent`), and tenant onboarding
+  (`tenant.validate_registration`, `tenant.provision_record`,
+  `tenant.seed_default_plan`, `tenant.issue_welcome_notification`,
+  `tenant.register_default_plugins`, `tenant.rollback_record`).
+
+### API Surface
+
+- **~80 v1 stable REST endpoints** (`api/openapi.yaml`); v1
+  endpoints stable through v3.x.
+- **v2 preview namespace** (`api/openapi-v2-preview.yaml`) carrying
+  `POST /api/v2/marketplace/plugins/{slug}/install`. Subject to
+  change without notice.
+- **Version routing**: path-based v2 opt-in (`/api/v2/...`) wins;
+  Accept header `application/vnd.ec.v2+json` upgrades a v1 path
+  when both surfaces exist. `WithVersionHeaders` middleware stamps
+  `X-API-Version` on every response and `X-API-Deprecation:
+  preview; semantics may change without notice` on v2 responses.
+
+### New in v2.10.x (Resilience Pillar -- production-ready)
+
+- **9 `ec_*` Prometheus metrics**: `http_requests_total`,
+  `http_duration_seconds`, `workflow_runs_total`,
+  `workflow_duration_seconds`, `workerpool_queued`,
+  `workerpool_saturation_total`, `oom_alarms_total`,
+  `goroutine_count`, `heap_bytes`. Bounded label cardinality
+  (`WithMaxSeries`) so a hot label cannot OOM the registry.
+- **4 Grafana dashboards** in
+  `monitoring/grafana/dashboards/v210/`: `ec-overview` (cross-binary
+  RED method), `ec-tenant` (per-tenant deep-dive with templated
+  `tenant_id`), `ec-workerpools` (per-pool saturation + queue depth
+  + worker count), `ec-resilience` (OOM alarms, goroutine count,
+  heap, GC pause distribution).
+- **OpenTelemetry HTTP + Temporal tracing** with `traceparent`
+  propagation across the HTTP <-> Temporal activity boundary.
+  Exporter: OTLP gRPC to `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- **Structured slog** with `trace_id`, `span_id`, `tenant_id`
+  correlation injected via `RequestLogger` middleware.
+- **EvoMap dual-feed**: NDJSON local sink
+  (`tests/metrics/evomap.ndjson`) + Prometheus Pushgateway
+  remote_write via the `metrics-bridge` runx alias.
+  `cmd/evomap-rollup` aggregates daily NDJSON into a markdown
+  capsule mirroring the existing fleet evoloop schema (verified
+  via Phase A.4 smoke: synthetic NDJSON -> capsule at
+  `~/Code/global-kb/global-memories/evoloop-capsules/ec-stack-2026-05-09.md`).
+- **omniparser-bridge offload pattern** (mirrors
+  `minimax-openai-bridge`): HMAC-SHA256 +
+  `crypto/subtle.ConstantTimeCompare`, alias-only argv, signed
+  envelope `<unix-secs>\n<path-and-args>\n<body>`. New repo
+  `nfsarch33/omniparser-bridge` (initial commit `64e35b6`).
+
+### Notes
+
+- **ADR-026** (`Code/global-kb/adrs/ADR-026-ec-stack-v3-release-decisions.md`)
+  documents v3.0.0 cross-stack release decisions: lowered backend
+  target to >=85% (gate 83%), HYBRID uiauto Tier 1 gate, Coupling
+  baseline 0.36, RLS on 14+ tenant-keyed tables, Resilience Pillar
+  v2.10.
+- **ADR-027** (in-repo at `docs/adr/adr-027-resilience-pillar.md`)
+  documents resilience pillar decisions (bounded concurrency
+  mandate, OOM ceiling enforcement, OTel adoption, EvoMap dual-feed,
+  omniparser-bridge offload).
+- **v4.0.0 roadmap preview** (10 candidate MVPs) included in
+  ADR-026: coaching bounded context, Python CCE sidecar evaluation,
+  Flutter admin mobile app, MADRL multi-agent coordination,
+  self-testing Temporal loops, uiauto Tier 2 promotion, full
+  marketplace developer ecosystem, per-tenant data residency,
+  real-time per-tenant observability, AI-driven onboarding wizard.
+- **GitHub release artefacts**: cross-compiled binaries for
+  `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`
+  across all 8 binaries (32 artefacts) with a SHA-256 manifest at
+  `bin/release/SHA256SUMS`.
+- **Frontend companion**: v3.0.0 ships in
+  `nfsarch33/agentic-ecommerce-web` with the same release tag.
+
 ## v2.10.1 Resilience Validation QA -- 2026-05-09
 
 Closes the v2.10.x resilience pillar with chaos-test scaffolding,
