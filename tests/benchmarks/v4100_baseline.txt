@@ -1,0 +1,17 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/nfsarch33/agentic-ecommerce/tests/benchmarks
+cpu: Apple M4 Pro
+BenchmarkComplianceEvaluate_ChinaImport-14    	66217551	        64.59 ns/op
+BenchmarkComplianceEvaluate_Restricted-14     	 6553318	       549.3 ns/op
+BenchmarkComplianceBatch_100Products-14       	  261237	     14698 ns/op
+BenchmarkResidencyValidation-14               	399811736	         8.924 ns/op
+BenchmarkChannelFanOut_6Channels-14           	 3969081	       981.7 ns/op
+BenchmarkSEOOptimizer_Validate-14             	 1000000	      3344 ns/op
+BenchmarkCatalogProduct_Validation-14         	 4126251	       874.0 ns/op
+BenchmarkMediaProcessor_Validate-14           	 7951029	       456.7 ns/op
+BenchmarkMarketplaceVendor_Create-14          	516735470	         7.058 ns/op
+BenchmarkEventbus_PublishSubscribe-14         	 4576579	       798.7 ns/op
+BenchmarkComplianceEngine_Evaluate-14         	  520636	      6879 ns/op
+PASS
+ok  	github.com/nfsarch33/agentic-ecommerce/tests/benchmarks	47.775s

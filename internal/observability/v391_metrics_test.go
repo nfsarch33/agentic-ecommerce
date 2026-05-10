@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/api/handler"
+	"github.com/nfsarch33/agentic-ecommerce/internal/alert"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 )
 
@@ -31,9 +31,9 @@ func TestV391Metrics_RecordOperatorAlert(t *testing.T) {
 	t.Parallel()
 	registry := metrics.NewRegistry("test")
 	v := NewV391Metrics(registry)
-	v.RecordOperatorAlert("tenant-1", handler.AlertTypeLargeRefund, handler.AlertStatusPending)
-	v.RecordOperatorAlert("tenant-1", handler.AlertTypeLargeRefund, handler.AlertStatusResolved)
-	v.RecordOperatorAlert("tenant-1", handler.AlertTypePriceChange, handler.AlertStatusAcknowledged)
+	v.RecordOperatorAlert("tenant-1", alert.TypeLargeRefund, alert.StatusPending)
+	v.RecordOperatorAlert("tenant-1", alert.TypeLargeRefund, alert.StatusResolved)
+	v.RecordOperatorAlert("tenant-1", alert.TypePriceChange, alert.StatusAcknowledged)
 	rec := metricsText(t, registry)
 	for _, want := range []string{
 		`alert_type="large_refund_pending_approval"`,
@@ -86,7 +86,7 @@ func TestV391Metrics_NilSafety(t *testing.T) {
 	var v *V391Metrics
 	v.RecordWizardStepCompleted("tenant", 1)
 	v.ObserveWizardCompletionDuration(1)
-	v.RecordOperatorAlert("tenant", handler.AlertTypeLargeRefund, handler.AlertStatusPending)
+	v.RecordOperatorAlert("tenant", alert.TypeLargeRefund, alert.StatusPending)
 	v.ObserveChannelContentQueryDuration(1)
 	v.ObserveOperatorAlertResolutionDuration(1)
 	v.RecordStubChannelCall("t", "instagram", "publish")
