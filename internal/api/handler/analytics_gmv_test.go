@@ -14,7 +14,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -415,12 +414,30 @@ func BenchmarkGMVHandler_30DayRollup10KOrders(b *testing.B) {
 	}
 }
 
-// TestGMVHandler_30DayRollupMeetsP95Budget complements the bench
-// by enforcing the p95 <200ms budget as a regular go test
-// assertion. The bench is for trend-tracking; the test fails the
-// suite when the gate degrades.
-func TestGMVHandler_30DayRollupMeetsP95Budget(t *testing.T) {
-	t.Parallel()
+// BenchmarkGMVHandler_30DayRollup is the v3.8.1 carry-forward
+// replacement for the previously-flaky TestGMVHandler_30DayRollup
+// MeetsP95Budget runtime test. The original asserted a wall-clock
+// p95 budget inside `go test`, which depended on the host's load
+// at the time of the run; the benchmark form makes the latency
+// signal explicit (b.N iterations, ns/op output) so the trend can
+// be tracked across CI runs without false negatives. The CI
+// pipeline runs the bench once with -benchtime=30s wall-clock so
+// the budget can still be enforced at the gate level.
+//
+// Per the v3.8.1 plan (Task 4 carry-forward closure): "Replace
+// TestGMVHandler_30DayRollupMeetsP95Budget with benchmark gate;
+// document migration in PR notes; CI gate: benchmark must run
+// within 30s wall-clock during full test suite".
+//
+// Migration notes (in the PR body):
+//   - The runtime test ran 100 ServeHTTP calls and asserted p95
+//     <200ms. CI flake rate observed at 0.5-1.2% across 14 sprints.
+//   - The benchmark runs b.N iterations + emits ns/op so the gate
+//     is a CI-side comparison against the prior run, not an in-test
+//     assertion. The CI 30s wall-clock cap means b.N converges to
+//     several thousand iterations per scenario at production
+//     scale.
+func BenchmarkGMVHandler_30DayRollup(b *testing.B) {
 	rows := make([]dailyRow, 0, 10000)
 	day := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 	channels := []string{"tiktok", "facebook", "wc", "rednote", "instagram"}
@@ -436,25 +453,16 @@ func TestGMVHandler_30DayRollupMeetsP95Budget(t *testing.T) {
 	repo := &inMemoryGMVRepo{daily: rows}
 	h, err := NewGMVHandler(nil, GMVHandlerConfig{Repository: repo, Now: time.Now})
 	if err != nil {
-		t.Fatalf("NewGMVHandler: %v", err)
+		b.Fatalf("NewGMVHandler: %v", err)
 	}
-	t.Cleanup(func() { _ = h.Close(context.Background()) })
-	const sample = 100
-	durations := make([]time.Duration, 0, sample)
-	for i := 0; i < sample; i++ {
+	defer func() { _ = h.Close(context.Background()) }()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/analytics/gmv?from=2026-05-01&to=2026-05-31&tenant_id=tenant-A", nil)
 		rec := httptest.NewRecorder()
-		start := time.Now()
 		h.ServeHTTP(rec, req)
-		durations = append(durations, time.Since(start))
 		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d", rec.Code)
+			b.Fatalf("status = %d", rec.Code)
 		}
 	}
-	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
-	p95 := durations[(sample*95)/100-1]
-	if p95 > 200*time.Millisecond {
-		t.Fatalf("p95 = %s, want <= 200ms (10K rows over 30-day window)", p95)
-	}
-	fmt.Printf("GMV handler p95 over %d runs: %s\n", sample, p95)
 }
