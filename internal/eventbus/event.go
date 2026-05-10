@@ -145,6 +145,23 @@ const (
 	// the EC-5-4 hashtag/caption agent subscribes to bias future
 	// generations.
 	ContentEMAUpdated EventType = "content.ema.updated"
+
+	// v3.9.1 Existing #10 -- AI onboarding wizard completion.
+	// Emitted by the onboarding handler when a tenant finalises
+	// all four wizard steps and the existing tenant_onboarding
+	// Temporal workflow has been launched.
+	TenantOnboarded EventType = "tenant.onboarded"
+
+	// v3.9.1 EC-4-4 -- channel router fan-out signal indicating
+	// the matched channel adapter is a production-ready stub
+	// (Instagram / Pinterest). Treated as a non-failure outcome
+	// so the dispatch metrics do not show false positives.
+	ChannelStatusNotYetImplemented EventType = "channel.status.not_yet_implemented"
+
+	// v3.9.1 EC-9-5 -- operator alert centre resolution event.
+	// Emitted when an operator approves or denies a pending alert
+	// via POST /api/v1/operator/alerts/{id}/resolve.
+	OperatorAlertResolved EventType = "operator.alert.resolved"
 )
 
 type Event struct {
