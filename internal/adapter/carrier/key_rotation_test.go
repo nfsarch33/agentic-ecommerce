@@ -89,6 +89,103 @@ func TestKeyRotation_UnknownKeyRejected(t *testing.T) {
 	}
 }
 
+func TestKeyRotation_CarrierNameAccessor(t *testing.T) {
+	t.Parallel()
+	kr, err := NewKeyRotator(KeyRotationConfig{
+		CarrierName: "auspost", CurrentKey: "k", TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("NewKeyRotator: %v", err)
+	}
+	if got := kr.CarrierName(); got != "auspost" {
+		t.Fatalf("CarrierName = %q, want auspost", got)
+	}
+}
+
+func TestKeyRotation_KeyAge_ZeroBeforeRotation(t *testing.T) {
+	t.Parallel()
+	kr, err := NewKeyRotator(KeyRotationConfig{
+		CarrierName: "dhl", CurrentKey: "k", TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("NewKeyRotator: %v", err)
+	}
+	if age := kr.KeyAge(); age != 0 {
+		t.Fatalf("KeyAge = %v, want 0", age)
+	}
+}
+
+func TestKeyRotation_KeyAge_AfterRotation(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
+	kr, err := NewKeyRotator(KeyRotationConfig{
+		CarrierName: "auspost", CurrentKey: "old",
+		PreviousKey: "older", PreviousSet: now,
+		TTL: 48 * time.Hour,
+		Now: func() time.Time { return now.Add(2 * time.Hour) },
+	})
+	if err != nil {
+		t.Fatalf("NewKeyRotator: %v", err)
+	}
+	age := kr.KeyAge()
+	if age != 2*time.Hour {
+		t.Fatalf("KeyAge = %v, want 2h", age)
+	}
+}
+
+func TestKeyRotation_PreviousKeyExpired_True(t *testing.T) {
+	t.Parallel()
+	set := time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)
+	kr, err := NewKeyRotator(KeyRotationConfig{
+		CarrierName: "dhl", CurrentKey: "new", PreviousKey: "old",
+		PreviousSet: set, TTL: 48 * time.Hour,
+		Now: func() time.Time { return set.Add(49 * time.Hour) },
+	})
+	if err != nil {
+		t.Fatalf("NewKeyRotator: %v", err)
+	}
+	if !kr.PreviousKeyExpired() {
+		t.Fatal("expected PreviousKeyExpired=true")
+	}
+}
+
+func TestKeyRotation_PreviousKeyExpired_False(t *testing.T) {
+	t.Parallel()
+	set := time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
+	kr, err := NewKeyRotator(KeyRotationConfig{
+		CarrierName: "dhl", CurrentKey: "new", PreviousKey: "old",
+		PreviousSet: set, TTL: 48 * time.Hour,
+		Now: func() time.Time { return set.Add(1 * time.Hour) },
+	})
+	if err != nil {
+		t.Fatalf("NewKeyRotator: %v", err)
+	}
+	if kr.PreviousKeyExpired() {
+		t.Fatal("expected PreviousKeyExpired=false")
+	}
+}
+
+func TestLoadKeyRotationTTL_Default(t *testing.T) {
+	t.Setenv(EnvKeyRotationTTL, "")
+	if got := LoadKeyRotationTTL(); got != DefaultKeyRotationTTL {
+		t.Fatalf("LoadKeyRotationTTL = %v, want %v", got, DefaultKeyRotationTTL)
+	}
+}
+
+func TestLoadKeyRotationTTL_Custom(t *testing.T) {
+	t.Setenv(EnvKeyRotationTTL, "72")
+	if got := LoadKeyRotationTTL(); got != 72*time.Hour {
+		t.Fatalf("LoadKeyRotationTTL = %v, want 72h", got)
+	}
+}
+
+func TestLoadKeyRotationTTL_Invalid(t *testing.T) {
+	t.Setenv(EnvKeyRotationTTL, "notanumber")
+	if got := LoadKeyRotationTTL(); got != DefaultKeyRotationTTL {
+		t.Fatalf("LoadKeyRotationTTL = %v, want default", got)
+	}
+}
+
 func TestKeyRotation_RotateFlow(t *testing.T) {
 	t.Parallel()
 	var mu sync.Mutex
