@@ -1,0 +1,72 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agentic-ecommerce
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: agentic-ecommerce
+    app.kubernetes.io/part-of: agentic-ecommerce
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/OWNER/agentic-ecommerce.git
+    targetRevision: HEAD
+    path: deploy/helm/agentic-ecommerce
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: global.environment
+          value: "${ARGOCD_ENV_ENVIRONMENT}"
+        - name: global.image.tag
+          value: "${ARGOCD_ENV_IMAGE_TAG}"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agentic-ecommerce
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: agentic-ecommerce
+  namespace: argocd
+spec:
+  description: Agentic E-Commerce platform
+  sourceRepos:
+    - "https://github.com/OWNER/agentic-ecommerce.git"
+  destinations:
+    - namespace: agentic-ecommerce
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
