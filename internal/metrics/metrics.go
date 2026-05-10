@@ -349,6 +349,21 @@ type Registry struct {
 	ContentEMAScore                   *Gauge
 	ContentEMAUpdatesTotal            *Counter
 	ChannelStatusUpdatesTotal         *Counter
+
+	// v4.2.0 payment foundation metrics. Cardinality budget per series:
+	//   ec_payment_charges_total{tenant_id, provider, status}
+	//     ~ tenants(10) * providers(3: stripe|alipay|wechat) *
+	//       statuses(4: succeeded|failed|declined|pending) = 120 series.
+	//   ec_payment_charge_duration_seconds{provider} histogram
+	//     ~ providers(3) = 3 series (10 buckets each).
+	//   ec_payment_refunds_total{tenant_id, provider, status}
+	//     ~ tenants(10) * providers(3) * statuses(3: succeeded|failed|
+	//       pending) = 90 series.
+	// Total ~ 213 additive series for v4.2.0; well under the
+	// per-binary 10_000 cap.
+	PaymentChargesTotal   *Counter
+	PaymentChargeDuration *Histogram
+	PaymentRefundsTotal   *Counter
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -440,6 +455,9 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.OperatorAlertsTotal = newCounter(r, "ec_operator_alerts_total", "v3.9.1 EC-9-5 operator alert lifecycle counter by tenant + alert_type + status (pending|acknowledged|resolved|expired).")
 	r.OperatorAlertsResolutionDuration = newHistogram(r, "ec_operator_alerts_resolution_duration_seconds", "v3.9.1 EC-9-5 operator alert resolution duration histogram.", defaultDurationBuckets)
 	r.StubChannelCallsTotal = newCounter(r, "ec_stub_channel_calls_total", "v3.9.1 EC-4-4 IG/Pinterest stub adapter calls by tenant + channel + op (publish|update_order_status|create_listing).")
+	r.PaymentChargesTotal = newCounter(r, "ec_payment_charges_total", "v4.2.0 payment charges by tenant_id + provider (stripe|alipay|wechat) + status (succeeded|failed|declined|pending).")
+	r.PaymentChargeDuration = newHistogram(r, "ec_payment_charge_duration_seconds", "v4.2.0 payment charge duration histogram by provider.", defaultDurationBuckets)
+	r.PaymentRefundsTotal = newCounter(r, "ec_payment_refunds_total", "v4.2.0 payment refunds by tenant_id + provider + status (succeeded|failed|pending).")
 	return r
 }
 
@@ -565,6 +583,9 @@ func (r *Registry) Handler() http.Handler {
 		r.OperatorAlertsTotal.write(&sb)
 		r.OperatorAlertsResolutionDuration.write(&sb)
 		r.StubChannelCallsTotal.write(&sb)
+		r.PaymentChargesTotal.write(&sb)
+		r.PaymentChargeDuration.write(&sb)
+		r.PaymentRefundsTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")

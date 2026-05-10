@@ -1,0 +1,149 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum by (channel, outcome) (rate(ec_channel_status_updates_total[5m]))",
+          "legendFormat": "{{channel}} / {{outcome}}"
+        }
+      ],
+      "title": "Channel Status Update Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "ec_channel_health_state",
+          "legendFormat": "{{tenant_id}} / {{channel}}"
+        }
+      ],
+      "title": "Channel Health State",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (state) (rate(ec_returns_saga_state_transitions_total[5m]))",
+          "legendFormat": "{{state}}"
+        }
+      ],
+      "title": "Returns Saga State Transitions",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (carrier, status) (rate(ec_shipping_labels_generated_total[5m]))",
+          "legendFormat": "{{carrier}} / {{status}}"
+        }
+      ],
+      "title": "Shipping Labels by Carrier + Status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "sum by (alert_type, status) (rate(ec_operator_alerts_total[5m]))",
+          "legendFormat": "{{alert_type}} / {{status}}"
+        }
+      ],
+      "title": "Operator Alerts by Type + Status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "sum by (provider, status) (rate(ec_payment_charges_total[5m]))",
+          "legendFormat": "{{provider}} / {{status}}"
+        }
+      ],
+      "title": "Payment Charges by Provider",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": [
+    "ecommerce",
+    "v350-v391",
+    "channels",
+    "payments"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "EC Channel Status \u0026 Logistics (v3.5.0-v3.9.1+v4.2.0)",
+  "uid": "ec-channel-status-v350-v391"
+}
+
