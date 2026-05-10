@@ -23,6 +23,8 @@ func runApp(ctx context.Context, args []string, deps appDeps) int {
 		return runTenant(ctx, args[2:], deps)
 	case "plugin":
 		return runPlugin(ctx, args[2:], deps)
+	case "skill":
+		return runSkill(ctx, args[2:], deps)
 	case "version", "--version", "-v":
 		return runVersion(deps)
 	case "help", "--help", "-h":
@@ -46,6 +48,8 @@ Subcommands:
   tenant create --slug --name --plan
                                   provision a tenant via the registration API
   plugin validate --path <dir>    validate a plugin's manifest and run sandbox smoke
+  skill quality-check <path>      validate a SKILL.md against quality criteria
+  skill codex-gen <path> <outdir> generate a Codex-compatible skill variant
   version                         print binary metadata
   help                            show this message
 
