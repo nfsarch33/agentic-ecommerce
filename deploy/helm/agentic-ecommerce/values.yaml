@@ -1,0 +1,123 @@
+global:
+  image:
+    registry: ghcr.io/nfsarch33
+    tag: "4.4.0"
+    pullPolicy: IfNotPresent
+
+  env:
+    EC_LOG_LEVEL: "info"
+    EC_LOG_FORMAT: "json"
+    EC_OTEL_ENABLED: "false"
+
+  postgres:
+    host: ""
+    port: "5432"
+    database: "ecommerce"
+    sslmode: "require"
+
+  redis:
+    addr: ""
+    db: "0"
+
+binaries:
+  mc-api:
+    replicas: 2
+    port: 8080
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+  wc-sync:
+    replicas: 1
+    port: 8081
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
+
+  content-worker:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
+
+  agent-worker:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
+
+  temporal-worker:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+  uiauto-compare:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
+
+  ec-cli:
+    replicas: 0
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
+
+  evomap-rollup:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
+
+hpa:
+  mcApi:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+keda:
+  enabled: false
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  pollingInterval: 15
+  cooldownPeriod: 300
+  prometheusAddress: "http://prometheus-server.monitoring.svc.cluster.local"
+  taskQueueDepthThreshold: "10"
+  fallbackReplicas: 2
+
+secrets:
+  externalSecretManager: true

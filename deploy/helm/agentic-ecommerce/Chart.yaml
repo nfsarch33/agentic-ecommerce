@@ -1,0 +1,12 @@
+apiVersion: v2
+name: agentic-ecommerce
+description: Helm chart for the Agentic E-Commerce platform
+type: application
+version: 4.4.0
+appVersion: "4.4.0"
+maintainers:
+  - name: agentic-ecommerce
+keywords:
+  - ecommerce
+  - ai-agents
+  - temporal
