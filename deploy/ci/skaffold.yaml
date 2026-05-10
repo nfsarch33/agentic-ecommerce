@@ -1,0 +1,94 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: agentic-ecommerce
+
+build:
+  artifacts:
+    - image: agentic-ecommerce/mc-api
+      docker:
+        dockerfile: Dockerfile
+        buildArgs:
+          TARGET: mc-api
+          COMMIT: "{{.GIT_COMMIT}}"
+    - image: agentic-ecommerce/wc-sync
+      docker:
+        dockerfile: Dockerfile
+        buildArgs:
+          TARGET: wc-sync
+          COMMIT: "{{.GIT_COMMIT}}"
+    - image: agentic-ecommerce/content-worker
+      docker:
+        dockerfile: Dockerfile
+        buildArgs:
+          TARGET: content-worker
+          COMMIT: "{{.GIT_COMMIT}}"
+    - image: agentic-ecommerce/carrier-bridge
+      docker:
+        dockerfile: Dockerfile
+        buildArgs:
+          TARGET: carrier-bridge
+          COMMIT: "{{.GIT_COMMIT}}"
+    - image: agentic-ecommerce/frontend
+      docker:
+        dockerfile: Dockerfile
+        buildArgs:
+          TARGET: frontend
+          COMMIT: "{{.GIT_COMMIT}}"
+    - image: agentic-ecommerce/agent-worker
+      docker:
+        dockerfile: Dockerfile
+        buildArgs:
+          TARGET: agent-worker
+          COMMIT: "{{.GIT_COMMIT}}"
+    - image: agentic-ecommerce/ec-cli
+      docker:
+        dockerfile: Dockerfile
+        buildArgs:
+          TARGET: ec-cli
+          COMMIT: "{{.GIT_COMMIT}}"
+    - image: agentic-ecommerce/temporal-worker
+      docker:
+        dockerfile: Dockerfile
+        buildArgs:
+          TARGET: temporal-worker
+          COMMIT: "{{.GIT_COMMIT}}"
+  local:
+    push: false
+    useBuildkit: true
+
+deploy:
+  helm:
+    releases:
+      - name: agentic-ecommerce
+        chartPath: deploy/helm/agentic-ecommerce
+        namespace: agentic-ecommerce
+        createNamespace: true
+        setValues:
+          global.environment: dev
+        setValueTemplates:
+          global.image.tag: "{{.GIT_COMMIT}}"
+
+portForward:
+  - resourceType: service
+    resourceName: mc-api
+    namespace: agentic-ecommerce
+    port: 8080
+    localPort: 8080
+  - resourceType: service
+    resourceName: frontend
+    namespace: agentic-ecommerce
+    port: 3000
+    localPort: 3000
+
+profiles:
+  - name: staging
+    patches:
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/global.environment
+        value: staging
+  - name: prod
+    patches:
+      - op: replace
+        path: /deploy/helm/releases/0/setValues/global.environment
+        value: prod

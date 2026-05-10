@@ -1,0 +1,234 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches:
+      - "release/*"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      cloud:
+        description: "Target cloud platform"
+        required: true
+        type: choice
+        options:
+          - gke
+          - eks
+      skip_terraform:
+        description: "Skip Terraform apply"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.ref }}-${{ inputs.environment || 'auto' }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  determine-env:
+    name: Determine target environment
+    runs-on: ubuntu-24.04
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      cloud: ${{ steps.env.outputs.cloud }}
+    steps:
+      - name: Set environment from trigger
+        id: env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "environment=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
+            echo "cloud=${{ inputs.cloud }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == refs/heads/release/dev* ]]; then
+            echo "environment=dev" >> "$GITHUB_OUTPUT"
+            echo "cloud=gke" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == refs/heads/release/staging* ]]; then
+            echo "environment=staging" >> "$GITHUB_OUTPUT"
+            echo "cloud=gke" >> "$GITHUB_OUTPUT"
+          else
+            echo "environment=dev" >> "$GITHUB_OUTPUT"
+            echo "cloud=gke" >> "$GITHUB_OUTPUT"
+          fi
+
+  go-build:
+    name: Build Go binaries
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Run tests
+        run: go test -race ./...
+
+      - name: Build all binaries
+        run: make build
+
+  docker-build:
+    name: Build and push ${{ matrix.binary }}
+    needs: [go-build, determine-env]
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        binary:
+          - mc-api
+          - wc-sync
+          - content-worker
+          - carrier-bridge
+          - frontend
+          - agent-worker
+          - ec-cli
+          - temporal-worker
+        platform:
+          - linux/amd64
+          - linux/arm64
+      fail-fast: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up QEMU for multi-platform
+        uses: docker/setup-qemu-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            TARGET=${{ matrix.binary }}
+            COMMIT=${{ github.sha }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-${{ matrix.binary }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.determine-env.outputs.environment }}-${{ matrix.binary }}
+          cache-from: type=gha,scope=${{ matrix.binary }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.binary }}
+
+  terraform-plan:
+    name: Terraform plan
+    needs: [determine-env]
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.determine-env.outputs.environment }}
+    if: ${{ !inputs.skip_terraform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform init
+        working-directory: deploy/terraform/${{ needs.determine-env.outputs.cloud }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TERRAFORM_STATE_BUCKET }}" \
+            -backend-config="prefix=agentic-ecommerce/${{ needs.determine-env.outputs.environment }}"
+
+      - name: Terraform plan
+        working-directory: deploy/terraform/${{ needs.determine-env.outputs.cloud }}
+        run: |
+          terraform plan \
+            -var="project_id=${{ secrets.EC_PROJECT_ID }}" \
+            -var="region=${{ secrets.EC_REGION }}" \
+            -var="environment=${{ needs.determine-env.outputs.environment }}" \
+            -out=tfplan
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ needs.determine-env.outputs.environment }}
+          path: deploy/terraform/${{ needs.determine-env.outputs.cloud }}/tfplan
+
+  helm-deploy:
+    name: Deploy via Helm
+    needs: [docker-build, determine-env]
+    runs-on: ubuntu-24.04
+    environment:
+      name: ${{ needs.determine-env.outputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Configure kubeconfig (GKE)
+        if: needs.determine-env.outputs.cloud == 'gke'
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: agentic-ecommerce
+          location: ${{ secrets.EC_REGION }}
+          project_id: ${{ secrets.EC_PROJECT_ID }}
+
+      - name: Configure kubeconfig (EKS)
+        if: needs.determine-env.outputs.cloud == 'eks'
+        run: |
+          aws eks update-kubeconfig \
+            --name agentic-ecommerce \
+            --region ${{ secrets.EC_REGION }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install agentic-ecommerce deploy/helm/agentic-ecommerce/ \
+            --namespace agentic-ecommerce \
+            --create-namespace \
+            --set global.environment=${{ needs.determine-env.outputs.environment }} \
+            --set global.image.registry=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set global.image.tag=${{ github.sha }} \
+            --wait \
+            --timeout 10m
+
+      - name: Health check
+        run: |
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/instance=agentic-ecommerce \
+            -n agentic-ecommerce \
+            --timeout=300s
+          echo "All pods healthy"
+
+  prod-approval:
+    name: Production approval gate
+    needs: [helm-deploy, determine-env]
+    if: needs.determine-env.outputs.environment == 'staging'
+    runs-on: ubuntu-24.04
+    environment:
+      name: prod
+    steps:
+      - name: Approved for production
+        run: echo "Production deployment approved"
