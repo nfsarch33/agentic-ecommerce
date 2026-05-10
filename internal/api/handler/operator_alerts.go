@@ -45,6 +45,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nfsarch33/agentic-ecommerce/internal/alert"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 )
 
@@ -74,38 +75,37 @@ var (
 	ErrOperatorAlertTenantMissing = errors.New("handler: operator alert tenant missing")
 )
 
-// AlertStatus enumerates the lifecycle states.
-type AlertStatus string
+// AlertStatus, AlertSeverity, AlertType are type aliases to the
+// canonical definitions in internal/alert (extracted in v4.10.0 to
+// break the observability → handler import cycle).
+type AlertStatus = alert.AlertStatus
 
 const (
-	AlertStatusPending      AlertStatus = "pending"
-	AlertStatusAcknowledged AlertStatus = "acknowledged"
-	AlertStatusResolved     AlertStatus = "resolved"
-	AlertStatusExpired      AlertStatus = "expired"
+	AlertStatusPending      = alert.StatusPending
+	AlertStatusAcknowledged = alert.StatusAcknowledged
+	AlertStatusResolved     = alert.StatusResolved
+	AlertStatusExpired      = alert.StatusExpired
 )
 
-// AlertSeverity enumerates severity levels.
-type AlertSeverity string
+type AlertSeverity = alert.AlertSeverity
 
 const (
-	AlertSeverityInfo     AlertSeverity = "info"
-	AlertSeverityWarning  AlertSeverity = "warning"
-	AlertSeverityCritical AlertSeverity = "critical"
+	AlertSeverityInfo     = alert.SeverityInfo
+	AlertSeverityWarning  = alert.SeverityWarning
+	AlertSeverityCritical = alert.SeverityCritical
 )
 
-// AlertType enumerates the eight v3.5.0 / v3.7.0 / v3.8.0 / v3.9.0
-// operator-actionable event sources the centre tracks.
-type AlertType string
+type AlertType = alert.AlertType
 
 const (
-	AlertTypeLargeRefund       AlertType = "large_refund_pending_approval"
-	AlertTypeLargeDropship     AlertType = "large_dropship_pending_approval"
-	AlertTypePriceChange       AlertType = "price_change_pending_approval"
-	AlertTypeCAPTCHADetected   AlertType = "captcha_detected"
-	AlertTypeOmniUnavailable   AlertType = "omniparser_unavailable"
-	AlertTypeRateLimitDrain    AlertType = "rate_limit_drain"
-	AlertTypeChannelStatusFail AlertType = "channel_status_update_failed"
-	AlertTypeLargeMargin       AlertType = "large_margin_alert"
+	AlertTypeLargeRefund       = alert.TypeLargeRefund
+	AlertTypeLargeDropship     = alert.TypeLargeDropship
+	AlertTypePriceChange       = alert.TypePriceChange
+	AlertTypeCAPTCHADetected   = alert.TypeCAPTCHADetected
+	AlertTypeOmniUnavailable   = alert.TypeOmniUnavailable
+	AlertTypeRateLimitDrain    = alert.TypeRateLimitDrain
+	AlertTypeChannelStatusFail = alert.TypeChannelStatusFail
+	AlertTypeLargeMargin       = alert.TypeLargeMargin
 )
 
 // DefaultAlertExpiryWindow is the default time-to-expire for a

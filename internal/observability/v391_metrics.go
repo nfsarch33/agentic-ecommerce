@@ -22,7 +22,7 @@
 package observability
 
 import (
-	"github.com/nfsarch33/agentic-ecommerce/internal/api/handler"
+	"github.com/nfsarch33/agentic-ecommerce/internal/alert"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 )
 
@@ -65,7 +65,7 @@ func (m *V391Metrics) ObserveChannelContentQueryDuration(durationSec float64) {
 }
 
 // RecordOperatorAlert implements handler.OperatorAlertMetrics.
-func (m *V391Metrics) RecordOperatorAlert(tenantID string, alertType handler.AlertType, status handler.AlertStatus) {
+func (m *V391Metrics) RecordOperatorAlert(tenantID string, alertType alert.AlertType, status alert.AlertStatus) {
 	if m == nil || m.registry == nil {
 		return
 	}

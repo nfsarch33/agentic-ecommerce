@@ -1,4 +1,7 @@
-package otel
+// Package temporal provides OTel-instrumented Temporal worker
+// interceptors. Extracted from internal/observability/otel in v4.10.0
+// to break a sentrux structural cycle with internal/workflow.
+package temporal
 
 import (
 	"context"
@@ -15,7 +18,7 @@ import (
 // linking them with parent-child relationships for end-to-end trace
 // visibility.
 func TemporalInterceptor() interceptor.WorkerInterceptor {
-	return &temporalTracer{tracer: otel.Tracer(tracerName + "/temporal")}
+	return &temporalTracer{tracer: otel.Tracer("github.com/nfsarch33/agentic-ecommerce/internal/observability/temporal")}
 }
 
 type temporalTracer struct {
