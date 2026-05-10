@@ -392,6 +392,15 @@ type Registry struct {
 	ComplianceDeletionsTotal *Counter
 	ComplianceExportsTotal   *Counter
 	ResidencyViolationsTotal *Counter
+
+	// v4.11.0 Agentrace deep-integration metrics. Populated by
+	// AgentraceAdapter during each evomap emission cycle.
+	// See RegisterAgentraceMetrics for cardinality budget (~92 series).
+	AgentraceSessionDuration  *Histogram
+	AgentraceToolCallsTotal   *Counter
+	AgentraceCostUSDTotal     *Counter
+	AgentraceBottlenecksTotal *Counter
+	AgentraceParallelismRatio *Gauge
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -492,6 +501,7 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.ComplianceDeletionsTotal = newCounter(r, "ec_compliance_deletions_total", "v4.9.0 GDPR/CCPA right-to-delete operations by tenant_id.")
 	r.ComplianceExportsTotal = newCounter(r, "ec_compliance_exports_total", "v4.9.0 GDPR Article 15 data exports by tenant_id.")
 	r.ResidencyViolationsTotal = newCounter(r, "ec_residency_violations_total", "v4.9.0 data residency violation attempts by tenant_id + from_region + to_region.")
+	RegisterAgentraceMetrics(r)
 	return r
 }
 
@@ -626,6 +636,11 @@ func (r *Registry) Handler() http.Handler {
 		r.ComplianceDeletionsTotal.write(&sb)
 		r.ComplianceExportsTotal.write(&sb)
 		r.ResidencyViolationsTotal.write(&sb)
+		r.AgentraceSessionDuration.write(&sb)
+		r.AgentraceToolCallsTotal.write(&sb)
+		r.AgentraceCostUSDTotal.write(&sb)
+		r.AgentraceBottlenecksTotal.write(&sb)
+		r.AgentraceParallelismRatio.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
