@@ -12,6 +12,14 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/carrier"
 )
 
+type stubTokenHelper string
+
+func (s stubTokenHelper) AccessToken(_ context.Context) (string, error) {
+	return string(s), nil
+}
+
+func stubToken(tok string) carrier.DHLTokenSource { return stubTokenHelper(tok) }
+
 func TestProductionAusPostConfigMissingKey(t *testing.T) {
 	t.Setenv("EC_AUSPOST_API_KEY", "")
 	t.Setenv("EC_AUSPOST_API_SECRET", "secret")
@@ -165,6 +173,175 @@ func TestDHLOAuthTokenExchangeVCR(t *testing.T) {
 	}
 	if quote.CostAUDCents != 4200 {
 		t.Fatalf("cost = %d, want 4200", quote.CostAUDCents)
+	}
+}
+
+func TestResolveAusPostBaseURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		envVal  string
+		wantURL string
+	}{
+		{name: "default (empty) is sandbox", envVal: "", wantURL: "https://digitalapi.auspost.com.au/test/shipping/v1/"},
+		{name: "explicit true is sandbox", envVal: "true", wantURL: "https://digitalapi.auspost.com.au/test/shipping/v1/"},
+		{name: "1 is sandbox", envVal: "1", wantURL: "https://digitalapi.auspost.com.au/test/shipping/v1/"},
+		{name: "false is production", envVal: "false", wantURL: "https://digitalapi.auspost.com.au/shipping/v1/"},
+		{name: "0 is production", envVal: "0", wantURL: "https://digitalapi.auspost.com.au/shipping/v1/"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("EC_AUSPOST_SANDBOX", tc.envVal)
+			got := carrier.ResolveAusPostBaseURL()
+			if got != tc.wantURL {
+				t.Fatalf("ResolveAusPostBaseURL() = %q, want %q", got, tc.wantURL)
+			}
+		})
+	}
+}
+
+func TestResolveDHLBaseURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		envVal  string
+		wantURL string
+	}{
+		{name: "default (empty) is sandbox", envVal: "", wantURL: "https://express.api.dhl.com/mydhlapi/test/"},
+		{name: "explicit true is sandbox", envVal: "true", wantURL: "https://express.api.dhl.com/mydhlapi/test/"},
+		{name: "1 is sandbox", envVal: "1", wantURL: "https://express.api.dhl.com/mydhlapi/test/"},
+		{name: "false is production", envVal: "false", wantURL: "https://express.api.dhl.com/mydhlapi/"},
+		{name: "0 is production", envVal: "0", wantURL: "https://express.api.dhl.com/mydhlapi/"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("EC_DHL_SANDBOX", tc.envVal)
+			got := carrier.ResolveDHLBaseURL()
+			if got != tc.wantURL {
+				t.Fatalf("ResolveDHLBaseURL() = %q, want %q", got, tc.wantURL)
+			}
+		})
+	}
+}
+
+func TestProductionAusPostConfig_UsesSandboxByDefault(t *testing.T) {
+	t.Setenv("EC_AUSPOST_API_KEY", "key")
+	t.Setenv("EC_AUSPOST_API_SECRET", "secret")
+	t.Setenv("EC_AUSPOST_SANDBOX", "")
+	cfg, err := carrier.ProductionAusPostConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "https://digitalapi.auspost.com.au/test/shipping/v1/"
+	if cfg.BaseURL != want {
+		t.Fatalf("BaseURL = %q, want sandbox %q", cfg.BaseURL, want)
+	}
+}
+
+func TestProductionAusPostConfig_ProductionWhenSandboxFalse(t *testing.T) {
+	t.Setenv("EC_AUSPOST_API_KEY", "key")
+	t.Setenv("EC_AUSPOST_API_SECRET", "secret")
+	t.Setenv("EC_AUSPOST_SANDBOX", "false")
+	cfg, err := carrier.ProductionAusPostConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "https://digitalapi.auspost.com.au/shipping/v1/"
+	if cfg.BaseURL != want {
+		t.Fatalf("BaseURL = %q, want production %q", cfg.BaseURL, want)
+	}
+}
+
+func TestProductionDHLConfig_UsesSandboxByDefault(t *testing.T) {
+	t.Setenv("EC_DHL_API_KEY", "key")
+	t.Setenv("EC_DHL_API_SECRET", "secret")
+	t.Setenv("EC_DHL_SANDBOX", "")
+	cfg, err := carrier.ProductionDHLConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "https://express.api.dhl.com/mydhlapi/test/"
+	if cfg.BaseURL != want {
+		t.Fatalf("BaseURL = %q, want sandbox %q", cfg.BaseURL, want)
+	}
+}
+
+func TestProductionDHLConfig_ProductionWhenSandboxFalse(t *testing.T) {
+	t.Setenv("EC_DHL_API_KEY", "key")
+	t.Setenv("EC_DHL_API_SECRET", "secret")
+	t.Setenv("EC_DHL_SANDBOX", "false")
+	cfg, err := carrier.ProductionDHLConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "https://express.api.dhl.com/mydhlapi/"
+	if cfg.BaseURL != want {
+		t.Fatalf("BaseURL = %q, want production %q", cfg.BaseURL, want)
+	}
+}
+
+func TestAusPostSandboxLabelVCR(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"tracking_number": "AP-SB-001",
+			"label_pdf_url":   "https://ap-sandbox/labels/sb-001.pdf",
+			"cost_aud_cents":  895,
+			"eta_days":        5,
+		})
+	}))
+	defer srv.Close()
+
+	client, err := carrier.NewAusPostClient(carrier.AusPostConfig{
+		BaseURL:   srv.URL,
+		APIKey:    "sandbox-key",
+		APISecret: "sandbox-secret",
+		Now:       func() time.Time { return time.Unix(1000, 0).UTC() },
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	label, err := client.CreateLabel(context.Background(), carrier.LabelRequest{
+		TenantID: "t1", OrderID: "ord-sb", DestPost: "3000", DestCountry: "AU", WeightGrams: 250,
+	})
+	if err != nil {
+		t.Fatalf("create label: %v", err)
+	}
+	if label.TrackingNumber != "AP-SB-001" {
+		t.Fatalf("tracking = %q, want AP-SB-001", label.TrackingNumber)
+	}
+	if label.CostAUDCents != 895 {
+		t.Fatalf("cost = %d, want 895", label.CostAUDCents)
+	}
+}
+
+func TestDHLSandboxQuoteVCR(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if auth != "Bearer sandbox-token" {
+			t.Fatalf("Authorization = %q, want Bearer sandbox-token", auth)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"cost_aud_cents": 3150,
+			"eta_days":       2,
+		})
+	}))
+	defer srv.Close()
+
+	client, err := carrier.NewDHLClient(carrier.DHLConfig{
+		BaseURL:     srv.URL,
+		TokenSource: stubToken("sandbox-token"),
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	q, err := client.Quote(context.Background(), carrier.QuoteRequest{
+		TenantID: "t1", DestPost: "2000", DestCountry: "AU", WeightGrams: 1200,
+	})
+	if err != nil {
+		t.Fatalf("quote: %v", err)
+	}
+	if q.CostAUDCents != 3150 {
+		t.Fatalf("cost = %d, want 3150", q.CostAUDCents)
 	}
 }
 
