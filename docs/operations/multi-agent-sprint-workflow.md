@@ -1,5 +1,7 @@
 # Multi-Agent Sprint Workflow
 
+> Last verified: 2026-05-11
+
 How the worktree hardening (v4.15.0) integrates with the EC stack sprint cadence.
 
 ## Sprint Pair Lifecycle

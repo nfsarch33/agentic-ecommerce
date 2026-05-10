@@ -1,5 +1,7 @@
 # omniparser-bridge -- ecommerce stack integration
 
+> Last verified: 2026-05-11
+
 The OmniParser visual UI parser is too heavy to run on a MacBook
 (needs a GPU + Python environment). The fleet host `wsl1` runs the
 real OmniParser worker; MacBook agents reach it through the signed

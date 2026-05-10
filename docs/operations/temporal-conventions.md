@@ -1,5 +1,7 @@
 # Temporal Workflow Conventions
 
+> Last verified: 2026-05-11
+
 Standardized in v5.4.0. All Temporal workflows and activities in
 `internal/workflow/` follow these patterns.
 

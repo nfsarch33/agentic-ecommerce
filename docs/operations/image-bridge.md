@@ -1,5 +1,7 @@
 # image-bridge operator setup (deferred from v3.2.0)
 
+> Last verified: 2026-05-11
+
 **Owner:** ec-stack v3.2.x  
 **Sprint context:** v3.2.0 EC-2-2 ships background removal via the
 deterministic `StubBackgroundRemover` shipped in
