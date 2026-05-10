@@ -62,7 +62,7 @@ func NewWeChatAdapter(cfg WeChatAdapterConfig) (*WeChatAdapter, error) {
 	}
 	apiURL := cfg.APIURL
 	if apiURL == "" {
-		apiURL = "https://api.mch.weixin.qq.com"
+		apiURL = ResolveWeChatAPIURL()
 	}
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
@@ -73,6 +73,21 @@ func NewWeChatAdapter(cfg WeChatAdapterConfig) (*WeChatAdapter, error) {
 		apiKeyV3: []byte(apiKeyV3), certSerial: certSerial,
 		apiURL: apiURL, httpClient: httpClient,
 	}, nil
+}
+
+const (
+	wechatProductionURL = "https://api.mch.weixin.qq.com"
+	wechatSandboxURL    = "https://api.mch.weixin.qq.com/sandboxnew"
+)
+
+// ResolveWeChatAPIURL returns the sandbox or production URL based
+// on the EC_WECHAT_SANDBOX env var (default: sandbox).
+func ResolveWeChatAPIURL() string {
+	v := os.Getenv("EC_WECHAT_SANDBOX")
+	if v == "" || v == "true" || v == "1" {
+		return wechatSandboxURL
+	}
+	return wechatProductionURL
 }
 
 func validateWeChatConfig(appID, mchID, apiKey string) error {

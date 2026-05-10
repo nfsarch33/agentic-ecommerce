@@ -54,31 +54,57 @@ func (l *RedisTokenBucket) Allow(ctx context.Context, key string) (RateLimitDeci
 	if key == "" {
 		key = "anonymous"
 	}
+	rw, closer, err := l.dialRedis(ctx)
+	if err != nil {
+		return RateLimitDecision{}, err
+	}
+	defer closer()
+	if err := l.selectDB(rw); err != nil {
+		return RateLimitDecision{}, err
+	}
+	return l.evalBucketScript(rw, key)
+}
+
+func (l *RedisTokenBucket) dialRedis(ctx context.Context) (*bufio.ReadWriter, func(), error) {
 	dialCtx := ctx
 	var cancel context.CancelFunc
 	if _, ok := ctx.Deadline(); !ok {
 		dialCtx, cancel = context.WithTimeout(ctx, l.operationTimeout)
-		defer cancel()
 	}
 	conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", l.addr)
 	if err != nil {
-		return RateLimitDecision{}, err
+		if cancel != nil {
+			cancel()
+		}
+		return nil, nil, err
 	}
-	defer conn.Close()
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(deadline)
 	} else {
 		_ = conn.SetDeadline(time.Now().Add(l.operationTimeout))
 	}
-	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
-	if l.db != "" && l.db != "0" {
-		if err := redisWriteCommand(rw, "SELECT", l.db); err != nil {
-			return RateLimitDecision{}, err
-		}
-		if _, err := redisReadValue(rw.Reader); err != nil {
-			return RateLimitDecision{}, err
+	closer := func() {
+		conn.Close()
+		if cancel != nil {
+			cancel()
 		}
 	}
+	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+	return rw, closer, nil
+}
+
+func (l *RedisTokenBucket) selectDB(rw *bufio.ReadWriter) error {
+	if l.db == "" || l.db == "0" {
+		return nil
+	}
+	if err := redisWriteCommand(rw, "SELECT", l.db); err != nil {
+		return err
+	}
+	_, err := redisReadValue(rw.Reader)
+	return err
+}
+
+func (l *RedisTokenBucket) evalBucketScript(rw *bufio.ReadWriter, key string) (RateLimitDecision, error) {
 	script := redisTokenBucketScript()
 	nowMillis := strconv.FormatInt(l.now().UTC().UnixMilli(), 10)
 	refillMillis := strconv.FormatInt(l.refillInterval.Milliseconds(), 10)
@@ -86,6 +112,10 @@ func (l *RedisTokenBucket) Allow(ctx context.Context, key string) (RateLimitDeci
 	if err := redisWriteCommand(rw, "EVAL", script, "1", "rate:"+key, strconv.Itoa(l.capacity), refillMillis, nowMillis, ttlMillis); err != nil {
 		return RateLimitDecision{}, err
 	}
+	return parseRateLimitResponse(rw)
+}
+
+func parseRateLimitResponse(rw *bufio.ReadWriter) (RateLimitDecision, error) {
 	value, err := redisReadValue(rw.Reader)
 	if err != nil {
 		return RateLimitDecision{}, err

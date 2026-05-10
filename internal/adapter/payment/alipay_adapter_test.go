@@ -210,6 +210,48 @@ func TestAlipayGetStatus_EmptyPaymentID(t *testing.T) {
 	assert.ErrorIs(t, err, port.ErrPaymentNotFound)
 }
 
+func TestResolveAlipayGatewayURL_Sandbox(t *testing.T) {
+	tests := []struct {
+		name    string
+		envVal  string
+		wantURL string
+	}{
+		{"empty defaults to sandbox", "", "https://openapi-sandbox.dl.alipaydev.com/gateway.do"},
+		{"true is sandbox", "true", "https://openapi-sandbox.dl.alipaydev.com/gateway.do"},
+		{"1 is sandbox", "1", "https://openapi-sandbox.dl.alipaydev.com/gateway.do"},
+		{"false is production", "false", "https://openapi.alipay.com/gateway.do"},
+		{"0 is production", "0", "https://openapi.alipay.com/gateway.do"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("EC_ALIPAY_SANDBOX", tc.envVal)
+			got := payment.ResolveAlipayGatewayURL()
+			assert.Equal(t, tc.wantURL, got)
+		})
+	}
+}
+
+func TestNewAlipayAdapter_UsesSandboxURLByDefault(t *testing.T) {
+	t.Setenv("EC_ALIPAY_SANDBOX", "true")
+	privPath, pubPath := generateTestRSAKeys(t)
+	srv := alipayTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"alipay_trade_create_response": map[string]string{
+				"code": "10000", "trade_no": "sandbox_trade", "out_trade_no": "order-sb",
+			},
+		})
+	})
+	a, err := payment.NewAlipayAdapter(payment.AlipayAdapterConfig{
+		AppID: "test_app", PrivateKeyPath: privPath, PublicKeyPath: pubPath,
+		GatewayURL: srv.URL,
+	})
+	require.NoError(t, err)
+	res, err := a.Charge(context.Background(), "t1", "order-sb",
+		port.Money{Amount: 100, Currency: "CNY"}, port.PaymentMethodAlipay)
+	require.NoError(t, err)
+	assert.Equal(t, "order-sb", res.PaymentID)
+}
+
 func init() {
 	_ = fmt.Sprintf
 }
