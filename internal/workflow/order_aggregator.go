@@ -310,19 +310,19 @@ func (a *OrderAggregatorActivities) recordNormalisation(o OrderNormalised, statu
 // Cyclomatic stays at 5.
 func validateChannelOrderInput(in ChannelOrderInput) error {
 	if strings.TrimSpace(in.TenantID) == "" {
-		return fmt.Errorf("order_aggregator: tenant_id required")
+		return ErrOrderTenantRequired
 	}
 	if strings.TrimSpace(in.Channel) == "" {
-		return fmt.Errorf("order_aggregator: channel required")
+		return ErrOrderChannelRequired
 	}
 	if strings.TrimSpace(in.ExternalOrderID) == "" {
-		return fmt.Errorf("order_aggregator: external_order_id required")
+		return ErrOrderExternalIDMissing
 	}
 	if len(in.Items) == 0 {
-		return fmt.Errorf("order_aggregator: at least one line item required")
+		return ErrOrderNoLineItems
 	}
 	if in.OccurredAt.IsZero() {
-		return fmt.Errorf("order_aggregator: occurred_at required")
+		return ErrOrderOccurredAtMissing
 	}
 	return nil
 }
