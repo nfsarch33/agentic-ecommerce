@@ -375,16 +375,16 @@ func (c *Coordinator) guard() error {
 // cyclomatic stays at 4 (one branch per invariant).
 func validateDecision(d AgentDecision) error {
 	if strings.TrimSpace(d.AgentName) == "" {
-		return fmt.Errorf("agent_name required")
+		return ErrAgentNameRequired
 	}
 	if strings.TrimSpace(d.TenantID) == "" {
-		return fmt.Errorf("tenant_id required")
+		return ErrTenantIDRequired
 	}
 	if strings.TrimSpace(d.SKU) == "" {
-		return fmt.Errorf("sku required")
+		return ErrSKURequired
 	}
 	if strings.TrimSpace(string(d.Action)) == "" {
-		return fmt.Errorf("action required")
+		return ErrActionRequired
 	}
 	return nil
 }
