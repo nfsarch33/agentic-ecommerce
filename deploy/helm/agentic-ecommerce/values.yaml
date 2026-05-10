@@ -119,5 +119,11 @@ keda:
   taskQueueDepthThreshold: "10"
   fallbackReplicas: 2
 
+gcp:
+  projectId: ""
+
+podSecurity:
+  enabled: true
+
 secrets:
   externalSecretManager: true
