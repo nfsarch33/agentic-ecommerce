@@ -289,6 +289,37 @@ type Registry struct {
 	ReturnsRefundAmountAUDCents      *Histogram
 	ROIQueryDurationSeconds          *Histogram
 	WorkflowReplayAssertionsTotal    *Counter
+
+	// v3.9.0 EC-6-4 + EC-6-5 + EC-5-2 + EC-5-4 + EC-5-5 + carry-forward
+	// metrics. Cardinality budget per series:
+	//   ec_competitor_prices_observed_total{tenant_id, channel, undercut}
+	//     ~ tenants(10) * channels(4) * undercut(2) = 80 series.
+	//   ec_margin_dashboard_request_duration_seconds histogram
+	//     ~ no labels = 1 series (10 buckets in textual output).
+	//   ec_content_calendar_entries_total{tenant_id, channel, status}
+	//     ~ tenants(10) * channels(5) * statuses(5) = 250 series upper-bound;
+	//       plan estimate ~150 series with realistic status distribution.
+	//   ec_content_calendar_publishing_duration_seconds histogram
+	//     ~ tenants(10) * channels(5) = 50 series (10 buckets each).
+	//   ec_hashtag_caption_generations_total{tenant_id, channel, outcome}
+	//     ~ tenants(10) * channels(4) * outcomes(2: llm|rule) = 80 series.
+	//   ec_content_ema_score{tenant_id, channel, content_type}
+	//     ~ tenants(10) * channels(4) * content_types(2) = 80 series upper-bound;
+	//       plan estimate ~60 series (most tenants only use 1-2 content types).
+	//   ec_content_ema_updates_total{tenant_id, channel}
+	//     ~ tenants(10) * channels(5) = 50 series.
+	//   ec_channel_status_updates_total{tenant_id, channel, outcome}
+	//     ~ tenants(10) * channels(4) * outcomes(2: ok|failed) = 80 series.
+	// Total ~ 520-650 additive series for v3.9.0; well under the
+	// per-binary 10_000 cap. Plan estimate ~520 series.
+	CompetitorPricesObservedTotal     *Counter
+	MarginDashboardRequestDuration    *Histogram
+	ContentCalendarEntriesTotal       *Counter
+	ContentCalendarPublishingDuration *Histogram
+	HashtagCaptionGenerationsTotal    *Counter
+	ContentEMAScore                   *Gauge
+	ContentEMAUpdatesTotal            *Counter
+	ChannelStatusUpdatesTotal         *Counter
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -366,6 +397,14 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.ReturnsRefundAmountAUDCents = newHistogram(r, "ec_returns_refund_amount_aud_cents", "v3.8.0 EC-7-5 refund amount histogram (AUD cents) by tenant.", defaultRefundCentsBuckets)
 	r.ROIQueryDurationSeconds = newHistogram(r, "ec_roi_query_duration_seconds", "v3.8.0 EC-9-3 ROI query duration histogram by route (heatmap|dead_stock|by_channel).", defaultDurationBuckets)
 	r.WorkflowReplayAssertionsTotal = newCounter(r, "ec_workflow_replay_assertions_total", "v3.8.0 Existing #5 self-testing replay harness assertions by workflow_name + outcome (pass|non_determinism|fixture_load_failed).")
+	r.CompetitorPricesObservedTotal = newCounter(r, "ec_competitor_prices_observed_total", "v3.9.0 EC-6-4 competitor price observations by tenant_id + channel + undercut (true|false).")
+	r.MarginDashboardRequestDuration = newHistogram(r, "ec_margin_dashboard_request_duration_seconds", "v3.9.0 EC-6-5 margin dashboard request duration histogram.", defaultDurationBuckets)
+	r.ContentCalendarEntriesTotal = newCounter(r, "ec_content_calendar_entries_total", "v3.9.0 EC-5-2 content calendar entry lifecycle transitions by tenant + channel + status.")
+	r.ContentCalendarPublishingDuration = newHistogram(r, "ec_content_calendar_publishing_duration_seconds", "v3.9.0 EC-5-2 content calendar publishing duration histogram by tenant + channel.", defaultDurationBuckets)
+	r.HashtagCaptionGenerationsTotal = newCounter(r, "ec_hashtag_caption_generations_total", "v3.9.0 EC-5-4 hashtag/caption generations by tenant + channel + outcome (llm|rule).")
+	r.ContentEMAScore = newGauge(r, "ec_content_ema_score", "v3.9.0 EC-5-5 content performance EMA score by tenant + channel + content_type.")
+	r.ContentEMAUpdatesTotal = newCounter(r, "ec_content_ema_updates_total", "v3.9.0 EC-5-5 content performance EMA updates by tenant + channel.")
+	r.ChannelStatusUpdatesTotal = newCounter(r, "ec_channel_status_updates_total", "v3.9.0 carry-forward closure -- ChannelStatusUpdater outcomes by tenant + channel + outcome (ok|failed).")
 	return r
 }
 
@@ -477,6 +516,14 @@ func (r *Registry) Handler() http.Handler {
 		r.ReturnsRefundAmountAUDCents.write(&sb)
 		r.ROIQueryDurationSeconds.write(&sb)
 		r.WorkflowReplayAssertionsTotal.write(&sb)
+		r.CompetitorPricesObservedTotal.write(&sb)
+		r.MarginDashboardRequestDuration.write(&sb)
+		r.ContentCalendarEntriesTotal.write(&sb)
+		r.ContentCalendarPublishingDuration.write(&sb)
+		r.HashtagCaptionGenerationsTotal.write(&sb)
+		r.ContentEMAScore.write(&sb)
+		r.ContentEMAUpdatesTotal.write(&sb)
+		r.ChannelStatusUpdatesTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
