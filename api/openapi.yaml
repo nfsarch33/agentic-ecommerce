@@ -1821,6 +1821,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/payments:
+    get:
+      summary: List payments
+      operationId: listPayments
+      description: |
+        v4.3.0 — paginated list of payments for a tenant, filterable by
+        status and provider. Sorted by created_at descending.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tenant_id
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, succeeded, failed, refunded] }
+        - name: provider
+          in: query
+          schema: { type: string, enum: [stripe, alipay, wechat, paypal] }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 200 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: Paginated payment list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsListResponse'
+        '400':
+          description: Invalid filter parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/analytics/gmv:
     get:
       summary: GMV analytics — daily rollup
@@ -5660,3 +5698,26 @@ components:
         rollups:
           type: array
           items: { $ref: '#/components/schemas/BillingUsageRollup' }
+    PaymentRow:
+      type: object
+      required: [payment_id, tenant_id, order_id, provider, status, amount_cents, currency, created_at]
+      properties:
+        payment_id: { type: string }
+        tenant_id: { type: string }
+        order_id: { type: string }
+        provider: { type: string, enum: [stripe, alipay, wechat, paypal] }
+        status: { type: string, enum: [pending, succeeded, failed, refunded] }
+        amount_cents: { type: integer, format: int64 }
+        currency: { type: string }
+        created_at: { type: string, format: date-time }
+    PaymentsListResponse:
+      type: object
+      required: [tenant_id, payments, total, limit, offset]
+      properties:
+        tenant_id: { type: string }
+        payments:
+          type: array
+          items: { $ref: '#/components/schemas/PaymentRow' }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
