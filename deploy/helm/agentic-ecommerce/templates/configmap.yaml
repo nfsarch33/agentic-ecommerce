@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agentic-ecommerce.fullname" . }}-config
+  labels:
+    {{- include "agentic-ecommerce.labels" . | nindent 4 }}
+data:
+  EC_LOG_LEVEL: {{ .Values.global.env.EC_LOG_LEVEL | quote }}
+  EC_LOG_FORMAT: {{ .Values.global.env.EC_LOG_FORMAT | quote }}
+  EC_OTEL_ENABLED: {{ .Values.global.env.EC_OTEL_ENABLED | quote }}
+  ECOMMERCE_DB_HOST: {{ .Values.global.postgres.host | quote }}
+  ECOMMERCE_DB_PORT: {{ .Values.global.postgres.port | quote }}
+  ECOMMERCE_DB_NAME: {{ .Values.global.postgres.database | quote }}
+  ECOMMERCE_DB_SSLMODE: {{ .Values.global.postgres.sslmode | quote }}
+  ECOMMERCE_REDIS_ADDR: {{ .Values.global.redis.addr | quote }}
+  ECOMMERCE_REDIS_DB: {{ .Values.global.redis.db | quote }}

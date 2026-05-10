@@ -1,0 +1,23 @@
+{{- if .Values.hpa.mcApi.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "agentic-ecommerce.fullname" . }}-mc-api
+  labels:
+    {{- include "agentic-ecommerce.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mc-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "agentic-ecommerce.fullname" . }}-mc-api
+  minReplicas: {{ .Values.hpa.mcApi.minReplicas }}
+  maxReplicas: {{ .Values.hpa.mcApi.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.hpa.mcApi.targetCPUUtilizationPercentage }}
+{{- end }}

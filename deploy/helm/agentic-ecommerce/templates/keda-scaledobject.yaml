@@ -1,0 +1,27 @@
+{{- if .Values.keda | default dict | dig "enabled" false }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "agentic-ecommerce.fullname" . }}-temporal-worker
+  labels:
+    {{- include "agentic-ecommerce.labels" . | nindent 4 }}
+    app.kubernetes.io/component: temporal-worker
+spec:
+  scaleTargetRef:
+    name: {{ include "agentic-ecommerce.fullname" . }}-temporal-worker
+  minReplicaCount: {{ .Values.keda.minReplicaCount | default 1 }}
+  maxReplicaCount: {{ .Values.keda.maxReplicaCount | default 10 }}
+  pollingInterval: {{ .Values.keda.pollingInterval | default 15 }}
+  cooldownPeriod: {{ .Values.keda.cooldownPeriod | default 300 }}
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.keda.prometheusAddress | default "http://prometheus-server.monitoring.svc.cluster.local" }}
+        metricName: temporal_task_queue_depth
+        query: |
+          sum(temporal_task_schedule_to_start_latency_count{task_queue="agentic-ecommerce"})
+        threshold: {{ .Values.keda.taskQueueDepthThreshold | default "10" | quote }}
+  fallback:
+    failureThreshold: 3
+    replicas: {{ .Values.keda.fallbackReplicas | default 2 }}
+{{- end }}
