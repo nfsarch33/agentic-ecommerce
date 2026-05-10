@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agentic Ecommerce Mission Control API
-  version: 3.6.0
+  version: 4.8.0
   description: |
     Public v1.x.y contract for the Agentic Ecommerce Go backend consumed by
     agentic-ecommerce-web. This spec intentionally excludes private
@@ -5721,3 +5721,115 @@ components:
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }
+
+    # v4.8.0 Admin Mobile API schemas.
+    AdminSummary:
+      type: object
+      required: [active_orders, gmv_today_aud_cents, pending_alerts, channel_health]
+      properties:
+        active_orders: { type: integer, format: int64 }
+        gmv_today_aud_cents: { type: integer, format: int64 }
+        pending_alerts: { type: integer }
+        channel_health:
+          type: array
+          items: { $ref: '#/components/schemas/AdminChannelStatus' }
+    AdminChannelStatus:
+      type: object
+      required: [channel, status]
+      properties:
+        channel: { type: string }
+        status: { type: string, enum: [healthy, degraded, down] }
+    AdminOrderRow:
+      type: object
+      required: [order_id, status, total_cents, channel, created_at]
+      properties:
+        order_id: { type: string }
+        status: { type: string }
+        total_cents: { type: integer, format: int64 }
+        channel: { type: string }
+        created_at: { type: string, format: date-time }
+    PaginationMeta:
+      type: object
+      required: [page, limit, total]
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+    PaginationLinks:
+      type: object
+      properties:
+        next: { type: string, nullable: true }
+        prev: { type: string, nullable: true }
+    AdminSummaryResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/AdminSummary' }
+    AdminOrdersResponse:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AdminOrderRow' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+        links: { $ref: '#/components/schemas/PaginationLinks' }
+    AdminAlertActionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          properties:
+            alert_id: { type: string }
+            action: { type: string, enum: [approve, deny, snooze] }
+            status: { type: string }
+    AdminChannelsResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AdminChannelStatus' }
+
+    # v4.8.0 Coaching schemas.
+    CoachingTipRequest:
+      type: object
+      required: [context]
+      properties:
+        context: { type: string, enum: [onboarding, pricing_strategy, channel_optimization, inventory_management] }
+        current_metrics:
+          type: object
+          additionalProperties: { type: number }
+    CoachingTipResponse:
+      type: object
+      required: [tip, confidence, source, context]
+      properties:
+        tip: { type: string }
+        confidence: { type: number }
+        source: { type: string, enum: [llm, rule] }
+        context: { type: string }
+
+    # v4.8.0 Marketplace schemas.
+    VendorResponse:
+      type: object
+      required: [vendor_id, tenant_id, name, contact_email, status, commission_rate_bps, joined_at]
+      properties:
+        vendor_id: { type: string }
+        tenant_id: { type: string }
+        name: { type: string }
+        contact_email: { type: string }
+        status: { type: string, enum: [active, suspended, deactivated] }
+        commission_rate_bps: { type: integer }
+        joined_at: { type: string, format: date-time }
+    CommissionReportResponse:
+      type: object
+      required: [vendor_id, tenant_id, total_commission_cents, total_payout_cents, period_start, period_end]
+      properties:
+        vendor_id: { type: string }
+        tenant_id: { type: string }
+        total_orders_cents: { type: integer, format: int64 }
+        total_commission_cents: { type: integer, format: int64 }
+        total_payout_cents: { type: integer, format: int64 }
+        period_start: { type: string, format: date-time }
+        period_end: { type: string, format: date-time }
