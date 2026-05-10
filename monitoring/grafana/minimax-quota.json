@@ -1,0 +1,209 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "rate(ec_minimax_requests_total{key_alias=~\"$key_alias\"}[5m])",
+          "legendFormat": "key={{key_alias}} status={{status}}"
+        }
+      ],
+      "title": "MiniMax Request Rate per Key",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "increase(ec_minimax_failover_events_total[5m])",
+          "legendFormat": "from={{from_key}} to={{to_key}}"
+        }
+      ],
+      "title": "MiniMax Failover Timeline",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 600
+              },
+              {
+                "color": "red",
+                "value": 3000
+              }
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "ec_minimax_key_cooldown_remaining_seconds",
+          "legendFormat": "key={{key_alias}}"
+        }
+      ],
+      "title": "MiniMax Quota Status (Cooldown Remaining)",
+      "type": "gauge"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(ec_minimax_request_duration_seconds_bucket{key_alias=~\"$key_alias\"}[5m]))",
+          "legendFormat": "p50 key={{key_alias}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(ec_minimax_request_duration_seconds_bucket{key_alias=~\"$key_alias\"}[5m]))",
+          "legendFormat": "p95 key={{key_alias}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(ec_minimax_request_duration_seconds_bucket{key_alias=~\"$key_alias\"}[5m]))",
+          "legendFormat": "p99 key={{key_alias}}"
+        }
+      ],
+      "title": "MiniMax Request Latency (p50/p95/p99)",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "dark-yellow",
+                  "text": "Standby"
+                },
+                "1": {
+                  "color": "dark-green",
+                  "text": "Active"
+                }
+              },
+              "type": "value"
+            }
+          ]
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "ec_minimax_active_key{key_alias=~\"$key_alias\"}",
+          "legendFormat": "key={{key_alias}}"
+        }
+      ],
+      "title": "MiniMax Active Key Indicator",
+      "type": "stat"
+    }
+  ],
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "minimax",
+    "llm",
+    "quota",
+    "v4.13.0"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "includeAll": true,
+        "multi": true,
+        "name": "key_alias",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "text": "1",
+            "value": "1"
+          },
+          {
+            "text": "2",
+            "value": "2"
+          }
+        ],
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "MiniMax Quota Dashboard",
+  "uid": "minimax-quota-v4130",
+  "version": 1
+}
+
