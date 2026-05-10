@@ -380,6 +380,18 @@ type Registry struct {
 	CoordResolutionsTotal          *Counter
 	CoordRewardSignalsTotal        *Counter
 	TenantDashboardRequestDuration *Histogram
+
+	// v4.9.0 compliance + residency metrics. Cardinality budget:
+	//   ec_compliance_deletions_total{tenant_id}  ~ tenants(10) = 10 series.
+	//   ec_compliance_exports_total{tenant_id}    ~ tenants(10) = 10 series.
+	//   ec_residency_violations_total{tenant_id, from_region, to_region}
+	//     ~ tenants(10) * regions(4) * regions(4) = 160 upper-bound;
+	//       in practice ~20 series (violations are rare).
+	// Total ~ 40 additive series for v4.9.0; well under the
+	// per-binary 10_000 cap.
+	ComplianceDeletionsTotal *Counter
+	ComplianceExportsTotal   *Counter
+	ResidencyViolationsTotal *Counter
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -477,6 +489,9 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.CoordResolutionsTotal = newCounter(r, "ec_coord_resolutions_total", "v4.7.0 MADRL coordination resolutions by tenant_id + resolution_type (weighted_priority|constraint_override).")
 	r.CoordRewardSignalsTotal = newCounter(r, "ec_coord_reward_signals_total", "v4.7.0 MADRL reward signals emitted by tenant_id + agent_id.")
 	r.TenantDashboardRequestDuration = newHistogram(r, "ec_tenant_dashboard_request_duration_seconds", "v4.7.0 per-tenant dashboard request duration histogram.", defaultDurationBuckets)
+	r.ComplianceDeletionsTotal = newCounter(r, "ec_compliance_deletions_total", "v4.9.0 GDPR/CCPA right-to-delete operations by tenant_id.")
+	r.ComplianceExportsTotal = newCounter(r, "ec_compliance_exports_total", "v4.9.0 GDPR Article 15 data exports by tenant_id.")
+	r.ResidencyViolationsTotal = newCounter(r, "ec_residency_violations_total", "v4.9.0 data residency violation attempts by tenant_id + from_region + to_region.")
 	return r
 }
 
@@ -608,6 +623,9 @@ func (r *Registry) Handler() http.Handler {
 		r.CoordResolutionsTotal.write(&sb)
 		r.CoordRewardSignalsTotal.write(&sb)
 		r.TenantDashboardRequestDuration.write(&sb)
+		r.ComplianceDeletionsTotal.write(&sb)
+		r.ComplianceExportsTotal.write(&sb)
+		r.ResidencyViolationsTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
