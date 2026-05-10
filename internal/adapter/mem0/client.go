@@ -1,19 +1,19 @@
 // Package mem0 provides a thin HTTP client for the mem0 memory API,
 // wrapped with circuit-breaker resilience from internal/resilience.
+// Refactored in v5.3.0 to use internal/httpclient for base transport.
 package mem0
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/nfsarch33/agentic-ecommerce/internal/httpclient"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 	"github.com/nfsarch33/agentic-ecommerce/internal/resilience"
 )
@@ -53,9 +53,10 @@ func ConfigFromEnv() Config {
 }
 
 // Client is the mem0 API client with circuit-breaker protection.
+// v5.3.0: uses internal/httpclient for shared transport.
 type Client struct {
 	cfg     Config
-	http    *http.Client
+	hc      *httpclient.Client
 	breaker *resilience.CircuitBreaker
 	logger  *slog.Logger
 	reg     *metrics.Registry
@@ -71,11 +72,20 @@ func NewClient(
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Client{
-		cfg: cfg,
-		http: &http.Client{
-			Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second,
+	endpoint := cfg.Endpoint
+	if endpoint == "" {
+		endpoint = "http://localhost:8080"
+	}
+	hc, _ := httpclient.New(httpclient.Config{
+		BaseURL: endpoint,
+		Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second,
+		RequestHooks: []httpclient.RequestHook{
+			httpclient.JSONRequestHook(),
 		},
+	})
+	return &Client{
+		cfg:     cfg,
+		hc:      hc,
 		breaker: cb,
 		logger:  logger,
 		reg:     reg,
@@ -101,7 +111,14 @@ func (c *Client) Store(
 			"user_id":  key,
 			"metadata": metadata,
 		}
-		return c.post(ctx, "/v1/memories/", body)
+		_, status, err := c.hc.PostJSON(ctx, "/v1/memories/", body)
+		if err != nil {
+			return err
+		}
+		if status >= 400 {
+			return fmt.Errorf("mem0 POST %d", status)
+		}
+		return nil
 	})
 	c.observe("store", statusLabel(err), time.Since(start))
 	if err != nil {
@@ -135,9 +152,12 @@ func (c *Client) Search(
 			"query": query,
 			"limit": limit,
 		}
-		resp, err := c.doPost(ctx, "/v1/memories/search/", body)
+		resp, status, err := c.hc.PostJSON(ctx, "/v1/memories/search/", body)
 		if err != nil {
 			return err
+		}
+		if status >= 400 {
+			return fmt.Errorf("mem0 search %d: %s", status, resp)
 		}
 		return json.Unmarshal(resp, &results)
 	})
@@ -160,18 +180,13 @@ func (c *Client) Delete(ctx context.Context, key string) error {
 	}
 	start := time.Now()
 	err := c.breaker.Do(ctx, func(ctx context.Context) error {
-		url := c.cfg.Endpoint + "/v1/memories/" + key + "/"
-		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+		path := "/v1/memories/" + key + "/"
+		_, status, err := c.hc.Do(ctx, http.MethodDelete, path, nil)
 		if err != nil {
 			return err
 		}
-		resp, err := c.http.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode >= 400 {
-			return fmt.Errorf("mem0 DELETE %d", resp.StatusCode)
+		if status >= 400 {
+			return fmt.Errorf("mem0 DELETE %d", status)
 		}
 		return nil
 	})
@@ -185,40 +200,6 @@ func (c *Client) Delete(ctx context.Context, key string) error {
 		return fmt.Errorf("mem0.delete: %w", err)
 	}
 	return nil
-}
-
-func (c *Client) post(ctx context.Context, path string, body any) error {
-	_, err := c.doPost(ctx, path, body)
-	return err
-}
-
-func (c *Client) doPost(
-	ctx context.Context,
-	path string,
-	body any,
-) ([]byte, error) {
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("mem0: marshal: %w", err)
-	}
-	url := c.cfg.Endpoint + path
-	req, err := http.NewRequestWithContext(
-		ctx, http.MethodPost, url, bytes.NewReader(payload),
-	)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("mem0 %s %d: %s", path, resp.StatusCode, data)
-	}
-	return data, nil
 }
 
 func (c *Client) isCircuitOpen(err error) bool {

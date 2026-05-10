@@ -393,10 +393,7 @@ func (a *PayPalAdapter) doAuthedGet(ctx context.Context, path string) ([]byte, e
 }
 
 func classifyPayPalError(statusCode int, body []byte) error {
-	if statusCode >= 500 {
-		return fmt.Errorf("%w: status=%d", port.ErrPaymentProviderUnavailable, statusCode)
-	}
-	return fmt.Errorf("%w: status=%d body=%s", port.ErrPaymentDeclined, statusCode, string(body))
+	return ClassifyHTTPError("paypal", statusCode, body)
 }
 
 func formatPayPalAmount(amountCents int64) string {
