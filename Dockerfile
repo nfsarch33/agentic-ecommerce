@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # ---------- Stage 1: builder ----------
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26.3-alpine AS builder
 
 ARG VERSION=dev
 ARG COMMIT=unknown
