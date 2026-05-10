@@ -168,6 +168,11 @@ const (
 	PaymentCompleted       EventType = "payment.completed"
 	PaymentFailed          EventType = "payment.failed"
 	PaymentRefundRequested EventType = "payment.refund.requested"
+
+	// v4.7.0 MADRL coordination decision event. Emitted by the
+	// PricingFulfilmentCoordinator after each conflict resolution.
+	// The SSE agent activity feed (v3.6.0 EC-9-2) subscribes.
+	CoordinationDecisionResolved EventType = "coordination.decision.resolved"
 )
 
 type Event struct {
