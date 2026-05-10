@@ -1,0 +1,108 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "ec_content_ema_score",
+          "legendFormat": "{{tenant_id}} / {{channel}} / {{content_type}}"
+        }
+      ],
+      "title": "Content EMA Score by Channel",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum by (channel) (rate(ec_content_ema_updates_total[5m]))",
+          "legendFormat": "{{channel}}"
+        }
+      ],
+      "title": "Content EMA Update Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(ec_content_calendar_entries_total[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "title": "Content Calendar Entries by Status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(ec_hashtag_caption_generations_total[5m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "title": "Hashtag/Caption Generation Rate",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": [
+    "ecommerce",
+    "v390",
+    "content"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "EC Content EMA \u0026 Calendar (v3.9.0)",
+  "uid": "ec-content-ema-v390"
+}
+

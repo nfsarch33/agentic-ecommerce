@@ -1,0 +1,108 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(ec_pricing_decisions_total[5m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "title": "Pricing Decisions by Outcome",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(ec_pricing_change_pct_bucket[15m]))",
+          "legendFormat": "p95"
+        }
+      ],
+      "title": "Pricing Change % Distribution",
+      "type": "histogram"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (source, direction) (rate(ec_supplier_cost_changes_total[5m]))",
+          "legendFormat": "{{source}} {{direction}}"
+        }
+      ],
+      "title": "Supplier Cost Changes by Source",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "ec_fx_rate_age_seconds",
+          "legendFormat": "FX rate age"
+        }
+      ],
+      "title": "FX Rate Age (seconds)",
+      "type": "stat"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": [
+    "ecommerce",
+    "v350",
+    "pricing"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "EC Pricing Decisions (v3.5.0)",
+  "uid": "ec-pricing-decisions-v350"
+}
+

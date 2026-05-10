@@ -162,6 +162,12 @@ const (
 	// Emitted when an operator approves or denies a pending alert
 	// via POST /api/v1/operator/alerts/{id}/resolve.
 	OperatorAlertResolved EventType = "operator.alert.resolved"
+
+	// v4.2.0 payment saga lifecycle events. Carries the typed
+	// PaymentSagaPayload (see v420_payloads.go).
+	PaymentCompleted       EventType = "payment.completed"
+	PaymentFailed          EventType = "payment.failed"
+	PaymentRefundRequested EventType = "payment.refund.requested"
 )
 
 type Event struct {
