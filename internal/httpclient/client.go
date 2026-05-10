@@ -106,47 +106,21 @@ func (c *Client) Do(ctx context.Context, method, path string, body []byte) ([]by
 	exec := func(ctx context.Context) error {
 		var lastErr error
 		for attempt := 0; attempt <= c.maxRetries; attempt++ {
-			if attempt > 0 {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-time.After(c.retryDelay):
-				}
+			if err := c.waitRetry(ctx, attempt); err != nil {
+				return err
 			}
-			var bodyReader io.Reader
-			if body != nil {
-				bodyReader = bytes.NewReader(body)
-			}
-			url := c.baseURL + path
-			req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+			data, status, err := c.doOnce(ctx, method, path, body)
 			if err != nil {
-				return fmt.Errorf("httpclient: build request: %w", err)
-			}
-			for _, hook := range c.requestHooks {
-				if err := hook(req); err != nil {
-					return fmt.Errorf("httpclient: request hook: %w", err)
-				}
-			}
-			resp, err := c.httpClient.Do(req)
-			if err != nil {
-				lastErr = fmt.Errorf("httpclient: transport: %w", err)
+				lastErr = err
 				if attempt < c.maxRetries {
 					continue
 				}
 				return lastErr
 			}
-			for _, hook := range c.responseHooks {
-				if hookErr := hook(resp); hookErr != nil {
-					resp.Body.Close()
-					return fmt.Errorf("httpclient: response hook: %w", hookErr)
-				}
-			}
-			data, _ := io.ReadAll(io.LimitReader(resp.Body, c.maxBodyBytes))
-			resp.Body.Close()
-			statusCode = resp.StatusCode
+			statusCode = status
 			respBody = data
-			if resp.StatusCode >= 500 && attempt < c.maxRetries {
-				lastErr = fmt.Errorf("httpclient: server error status=%d", resp.StatusCode)
+			if status >= 500 && attempt < c.maxRetries {
+				lastErr = fmt.Errorf("httpclient: server error status=%d", status)
 				continue
 			}
 			return nil
@@ -164,6 +138,48 @@ func (c *Client) Do(ctx context.Context, method, path string, body []byte) ([]by
 		return nil, 0, err
 	}
 	return respBody, statusCode, nil
+}
+
+func (c *Client) waitRetry(ctx context.Context, attempt int) error {
+	if attempt == 0 {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(c.retryDelay):
+		return nil
+	}
+}
+
+func (c *Client) doOnce(ctx context.Context, method, path string, body []byte) ([]byte, int, error) {
+	var bodyReader io.Reader
+	if body != nil {
+		bodyReader = bytes.NewReader(body)
+	}
+	url := c.baseURL + path
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	if err != nil {
+		return nil, 0, fmt.Errorf("httpclient: build request: %w", err)
+	}
+	for _, hook := range c.requestHooks {
+		if err := hook(req); err != nil {
+			return nil, 0, fmt.Errorf("httpclient: request hook: %w", err)
+		}
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("httpclient: transport: %w", err)
+	}
+	for _, hook := range c.responseHooks {
+		if hookErr := hook(resp); hookErr != nil {
+			resp.Body.Close()
+			return nil, 0, fmt.Errorf("httpclient: response hook: %w", hookErr)
+		}
+	}
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, c.maxBodyBytes))
+	resp.Body.Close()
+	return data, resp.StatusCode, nil
 }
 
 // PostJSON marshals body to JSON and dispatches a POST request with
