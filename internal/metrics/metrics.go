@@ -401,6 +401,14 @@ type Registry struct {
 	AgentraceCostUSDTotal     *Counter
 	AgentraceBottlenecksTotal *Counter
 	AgentraceParallelismRatio *Gauge
+
+	// v4.13.0 MiniMax quota-aware adapter metrics.
+	// See RegisterMinimaxMetrics for cardinality budget (~38 series).
+	MinimaxRequestsTotal        *Counter
+	MinimaxRequestDuration      *Histogram
+	MinimaxActiveKey            *Gauge
+	MinimaxKeyCooldownRemaining *Gauge
+	MinimaxFailoverEventsTotal  *Counter
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -502,6 +510,7 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.ComplianceExportsTotal = newCounter(r, "ec_compliance_exports_total", "v4.9.0 GDPR Article 15 data exports by tenant_id.")
 	r.ResidencyViolationsTotal = newCounter(r, "ec_residency_violations_total", "v4.9.0 data residency violation attempts by tenant_id + from_region + to_region.")
 	RegisterAgentraceMetrics(r)
+	RegisterMinimaxMetrics(r)
 	return r
 }
 
@@ -641,6 +650,11 @@ func (r *Registry) Handler() http.Handler {
 		r.AgentraceCostUSDTotal.write(&sb)
 		r.AgentraceBottlenecksTotal.write(&sb)
 		r.AgentraceParallelismRatio.write(&sb)
+		r.MinimaxRequestsTotal.write(&sb)
+		r.MinimaxRequestDuration.write(&sb)
+		r.MinimaxActiveKey.write(&sb)
+		r.MinimaxKeyCooldownRemaining.write(&sb)
+		r.MinimaxFailoverEventsTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")

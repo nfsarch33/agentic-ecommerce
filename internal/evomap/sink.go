@@ -156,6 +156,16 @@ type KPIs struct {
 	AgentraceCostUSD            float64 `json:"agentrace_cost_usd,omitempty"`
 	AgentraceBottleneckCount    int     `json:"agentrace_bottleneck_count,omitempty"`
 	AgentraceParallelismRatio   float64 `json:"agentrace_parallelism_efficiency,omitempty"`
+
+	// v4.13.0 MiniMax quota rotation KPIs. Additive so prior schema
+	// readers keep working. Populated by MinimaxKPIs builder.
+	MinimaxRequestsKey1     int     `json:"minimax_requests_key1,omitempty"`
+	MinimaxRequestsKey2     int     `json:"minimax_requests_key2,omitempty"`
+	MinimaxFailoverCount    int     `json:"minimax_failover_count,omitempty"`
+	MinimaxAvgLatencyMsKey1 float64 `json:"minimax_avg_latency_ms_key1,omitempty"`
+	MinimaxAvgLatencyMsKey2 float64 `json:"minimax_avg_latency_ms_key2,omitempty"`
+	MinimaxQuotaExhaustKey1 int     `json:"minimax_quota_exhaust_key1,omitempty"`
+	MinimaxQuotaExhaustKey2 int     `json:"minimax_quota_exhaust_key2,omitempty"`
 }
 
 // Config controls Sink construction.
@@ -384,6 +394,16 @@ type AggregateResult struct {
 	MaxChannelContentP95Ms          float64
 	MaxOperatorAlertsPending        int
 	TotalStubChannelCalls           int
+
+	// v4.13.0 MiniMax quota rotation KPIs aggregated into the daily
+	// roll-up.
+	TotalMinimaxRequestsKey1  int
+	TotalMinimaxRequestsKey2  int
+	TotalMinimaxFailovers     int
+	TotalMinimaxQuotaExhaust1 int
+	TotalMinimaxQuotaExhaust2 int
+	MeanMinimaxLatencyMsKey1  float64
+	MeanMinimaxLatencyMsKey2  float64
 }
 
 // aggregateAccumulator carries the per-iteration running sums + sample
@@ -404,6 +424,10 @@ type aggregateAccumulator struct {
 	videoScriptQualitySamples   int
 	captchaResolutionSamples    int
 	hashtagCaptionScoreSamples  int
+	sumMinimaxLatencyKey1       float64
+	sumMinimaxLatencyKey2       float64
+	minimaxLatencyKey1Samples   int
+	minimaxLatencyKey2Samples   int
 }
 
 // Aggregate computes summary KPIs across a slice of capsules.
@@ -432,6 +456,7 @@ func Aggregate(caps []Capsule) AggregateResult {
 		accumulateUIAutoHardening(c, &res, &acc)
 		accumulateV390(c, &res, &acc)
 		accumulateV391(c, &res)
+		accumulateMinimax(c, &res, &acc)
 	}
 	n := float64(len(caps))
 	res.MeanThroughputRPS = acc.sumRPS / n
@@ -451,6 +476,12 @@ func Aggregate(caps []Capsule) AggregateResult {
 	}
 	if acc.hashtagCaptionScoreSamples > 0 {
 		res.MeanHashtagCaptionScore = acc.sumHashtagCaptionScore / float64(acc.hashtagCaptionScoreSamples)
+	}
+	if acc.minimaxLatencyKey1Samples > 0 {
+		res.MeanMinimaxLatencyMsKey1 = acc.sumMinimaxLatencyKey1 / float64(acc.minimaxLatencyKey1Samples)
+	}
+	if acc.minimaxLatencyKey2Samples > 0 {
+		res.MeanMinimaxLatencyMsKey2 = acc.sumMinimaxLatencyKey2 / float64(acc.minimaxLatencyKey2Samples)
 	}
 	return res
 }
@@ -617,4 +648,21 @@ func accumulateV390(c Capsule, res *AggregateResult, acc *aggregateAccumulator) 
 		res.MaxContentEMAScorePerChannel = c.KPIs.ContentEMAMaxScorePerChannel
 	}
 	res.TotalChannelStatusUpdates += c.KPIs.ChannelStatusUpdatesTotal
+}
+
+// accumulateMinimax rolls in the v4.13.0 MiniMax quota rotation KPIs.
+func accumulateMinimax(c Capsule, res *AggregateResult, acc *aggregateAccumulator) {
+	res.TotalMinimaxRequestsKey1 += c.KPIs.MinimaxRequestsKey1
+	res.TotalMinimaxRequestsKey2 += c.KPIs.MinimaxRequestsKey2
+	res.TotalMinimaxFailovers += c.KPIs.MinimaxFailoverCount
+	res.TotalMinimaxQuotaExhaust1 += c.KPIs.MinimaxQuotaExhaustKey1
+	res.TotalMinimaxQuotaExhaust2 += c.KPIs.MinimaxQuotaExhaustKey2
+	if c.KPIs.MinimaxAvgLatencyMsKey1 > 0 {
+		acc.sumMinimaxLatencyKey1 += c.KPIs.MinimaxAvgLatencyMsKey1
+		acc.minimaxLatencyKey1Samples++
+	}
+	if c.KPIs.MinimaxAvgLatencyMsKey2 > 0 {
+		acc.sumMinimaxLatencyKey2 += c.KPIs.MinimaxAvgLatencyMsKey2
+		acc.minimaxLatencyKey2Samples++
+	}
 }
