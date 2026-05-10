@@ -115,6 +115,36 @@ const (
 
 	// v3.8.0 EC-7-5 saga rollback event. Compensating activities ran.
 	ReturnsSagaRolledBack EventType = "return.saga.rolled_back"
+
+	// v3.9.0 EC-6-4 competitor price observation. Emitted by the
+	// competitor scraper every time it observes a competitor's
+	// price for one of the tenant's SKUs.
+	CompetitorPriceObserved EventType = "competitor.price.observed"
+
+	// v3.9.0 EC-6-4 competitor undercut detected. Emitted when the
+	// observed competitor price is more than the configurable
+	// delta threshold below the tenant's current price; the EC-6-3
+	// dynamic pricing agent subscribes to it.
+	CompetitorUndercut EventType = "competitor.price.undercut"
+
+	// v3.9.0 EC-5-2 content calendar entry scheduled. Emitted when
+	// the calendar agent accepts a new entry; the n8n scheduler
+	// subscribes to it.
+	ContentCalendarEntryScheduled EventType = "content.calendar.entry.scheduled"
+
+	// v3.9.0 EC-5-2 content calendar entry published. Emitted when
+	// the n8n scheduler reports a successful publish.
+	ContentCalendarEntryPublished EventType = "content.calendar.entry.published"
+
+	// v3.9.0 EC-5-2 content calendar entry failed. Emitted when
+	// publishing exceeded the retry budget.
+	ContentCalendarEntryFailed EventType = "content.calendar.entry.failed"
+
+	// v3.9.0 EC-5-5 content performance EMA updated. Emitted by
+	// the feedback loop after each engagement-metric ingestion;
+	// the EC-5-4 hashtag/caption agent subscribes to bias future
+	// generations.
+	ContentEMAUpdated EventType = "content.ema.updated"
 )
 
 type Event struct {
