@@ -41,16 +41,16 @@ func (s *stubAdapter) Publish(_ context.Context, p eventbus.ProductEnrichedPaylo
 
 func (s *stubAdapter) Close(_ context.Context) error { return nil }
 
-func TestIsStubChannel_RecognizesInstagramAndPinterest(t *testing.T) {
+func TestIsStubChannel_PostV460Promotion(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name string
 		want bool
 	}{
-		{"instagram", true},
-		{"pinterest", true},
-		{"INSTAGRAM", true},
-		{" pinterest ", true},
+		{"instagram", false},
+		{"pinterest", false},
+		{"INSTAGRAM", false},
+		{" pinterest ", false},
 		{"tiktok", false},
 		{"facebook", false},
 		{"rednote", false},
