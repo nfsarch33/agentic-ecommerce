@@ -8,10 +8,10 @@ func TestIsStubChannel(t *testing.T) {
 		name string
 		want bool
 	}{
-		{"instagram", true},
-		{"pinterest", true},
-		{"INSTAGRAM", true},
-		{" pinterest ", true},
+		{"instagram", false},
+		{"pinterest", false},
+		{"INSTAGRAM", false},
+		{" pinterest ", false},
 		{"tiktok", false},
 		{"facebook", false},
 		{"rednote", false},
@@ -28,12 +28,9 @@ func TestIsStubChannel(t *testing.T) {
 	}
 }
 
-func TestStubChannelNamesPopulated(t *testing.T) {
+func TestStubChannelNamesEmpty(t *testing.T) {
 	t.Parallel()
-	if _, ok := StubChannelNames["instagram"]; !ok {
-		t.Fatal("instagram missing from StubChannelNames")
-	}
-	if _, ok := StubChannelNames["pinterest"]; !ok {
-		t.Fatal("pinterest missing from StubChannelNames")
+	if len(StubChannelNames) != 0 {
+		t.Fatalf("StubChannelNames should be empty after v4.6.0 promotion, got %d entries", len(StubChannelNames))
 	}
 }
