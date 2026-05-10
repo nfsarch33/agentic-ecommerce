@@ -364,6 +364,22 @@ type Registry struct {
 	PaymentChargesTotal   *Counter
 	PaymentChargeDuration *Histogram
 	PaymentRefundsTotal   *Counter
+
+	// v4.7.0 MADRL coordination + tenant dashboard metrics.
+	// Cardinality budget per series:
+	//   ec_coord_resolutions_total{tenant_id, resolution_type}
+	//     ~ tenants(10) * types(2: weighted_priority|constraint_override)
+	//       = 20 series.
+	//   ec_coord_reward_signals_total{tenant_id, agent_id}
+	//     ~ tenants(10) * agents(3: pricing|fulfilment|content)
+	//       = 30 series.
+	//   ec_tenant_dashboard_request_duration_seconds histogram
+	//     ~ no labels = 1 series (10 buckets in textual output).
+	// Total ~ 51 additive series for v4.7.0; well under the
+	// per-binary 10_000 cap.
+	CoordResolutionsTotal          *Counter
+	CoordRewardSignalsTotal        *Counter
+	TenantDashboardRequestDuration *Histogram
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -458,6 +474,9 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.PaymentChargesTotal = newCounter(r, "ec_payment_charges_total", "v4.2.0 payment charges by tenant_id + provider (stripe|alipay|wechat) + status (succeeded|failed|declined|pending).")
 	r.PaymentChargeDuration = newHistogram(r, "ec_payment_charge_duration_seconds", "v4.2.0 payment charge duration histogram by provider.", defaultDurationBuckets)
 	r.PaymentRefundsTotal = newCounter(r, "ec_payment_refunds_total", "v4.2.0 payment refunds by tenant_id + provider + status (succeeded|failed|pending).")
+	r.CoordResolutionsTotal = newCounter(r, "ec_coord_resolutions_total", "v4.7.0 MADRL coordination resolutions by tenant_id + resolution_type (weighted_priority|constraint_override).")
+	r.CoordRewardSignalsTotal = newCounter(r, "ec_coord_reward_signals_total", "v4.7.0 MADRL reward signals emitted by tenant_id + agent_id.")
+	r.TenantDashboardRequestDuration = newHistogram(r, "ec_tenant_dashboard_request_duration_seconds", "v4.7.0 per-tenant dashboard request duration histogram.", defaultDurationBuckets)
 	return r
 }
 
@@ -586,6 +605,9 @@ func (r *Registry) Handler() http.Handler {
 		r.PaymentChargesTotal.write(&sb)
 		r.PaymentChargeDuration.write(&sb)
 		r.PaymentRefundsTotal.write(&sb)
+		r.CoordResolutionsTotal.write(&sb)
+		r.CoordRewardSignalsTotal.write(&sb)
+		r.TenantDashboardRequestDuration.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
