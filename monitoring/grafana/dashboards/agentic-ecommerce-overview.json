@@ -191,7 +191,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(agentic_ecommerce_http_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(ec_http_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95 latency",
           "refId": "A"
         }
@@ -235,7 +235,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum(rate(agentic_ecommerce_http_requests_total{code=~\"5..\"}[5m])) / clamp_min(sum(rate(agentic_ecommerce_http_requests_total[5m])), 1)",
+          "expr": "sum(rate(ec_http_requests_total{code=~\"5..\"}[5m])) / clamp_min(sum(rate(ec_http_requests_total[5m])), 1)",
           "legendFormat": "5xx error rate",
           "refId": "A"
         }
@@ -323,7 +323,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum(rate(agentic_ecommerce_agent_worker_runs_total{status=\"succeeded\"}[5m]))",
+          "expr": "sum(rate(ec_workflow_runs_total{status=\"succeeded\"}[5m]))",
           "legendFormat": "succeeded",
           "refId": "A"
         },
@@ -332,7 +332,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum(rate(agentic_ecommerce_agent_worker_runs_total{status=\"failed\"}[5m]))",
+          "expr": "sum(rate(ec_workflow_runs_total{status=\"failed\"}[5m]))",
           "legendFormat": "failed",
           "refId": "B"
         }

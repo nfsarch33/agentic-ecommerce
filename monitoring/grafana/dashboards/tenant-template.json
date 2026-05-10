@@ -45,7 +45,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum by (route) (rate(mc_api_http_requests_total{tenant_id=\"__TENANT_ID__\"}[1m]))",
+          "expr": "sum by (route) (rate(ec_http_requests_total{tenant_id=\"__TENANT_ID__\"}[1m]))",
           "legendFormat": "{{route}}",
           "refId": "A"
         }
@@ -71,7 +71,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum(rate(mc_api_http_requests_total{tenant_id=\"__TENANT_ID__\",status=~\"5..\"}[5m])) / sum(rate(mc_api_http_requests_total{tenant_id=\"__TENANT_ID__\"}[5m]))",
+          "expr": "sum(rate(ec_http_requests_total{tenant_id=\"__TENANT_ID__\",status=~\"5..\"}[5m])) / sum(rate(ec_http_requests_total{tenant_id=\"__TENANT_ID__\"}[5m]))",
           "legendFormat": "5xx error rate",
           "refId": "A"
         }
@@ -97,7 +97,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(mc_api_http_request_duration_seconds_bucket{tenant_id=\"__TENANT_ID__\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(ec_http_duration_seconds_bucket{tenant_id=\"__TENANT_ID__\"}[5m])))",
           "legendFormat": "p95 (s)",
           "refId": "A"
         }

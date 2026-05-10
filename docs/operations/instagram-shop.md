@@ -1,5 +1,7 @@
 # Instagram Shop adapter (v3.9.1 EC-4-4 stub)
 
+> Last verified: 2026-05-11
+
 ## State
 
 The v3.9.1 sprint ships a **production-ready stub** of the Instagram

@@ -1,5 +1,7 @@
 # Deployment Runbook
 
+> Last verified: 2026-05-11
+
 Step-by-step guide for deploying the Agentic E-Commerce stack to production.
 
 ## Prerequisites
@@ -65,7 +67,7 @@ kubectl get nodes
 
 ## Step 3: Database Migration
 
-Run all 35 migrations against the provisioned Postgres instance.
+Run all 36 migrations against the provisioned Postgres instance.
 
 ```bash
 # Get the database connection string from Terraform output or Secret Manager
@@ -78,7 +80,7 @@ export ECOMMERCE_DB_URL="postgres://ecommerce:<password>@<db-host>:5432/ecommerc
 ./ec-cli migrate status
 ```
 
-**Expected output**: `35 migrations applied successfully`
+**Expected output**: `36 migrations applied successfully`
 
 **Rollback**: `./ec-cli migrate down --steps 1` to undo the last migration.
 

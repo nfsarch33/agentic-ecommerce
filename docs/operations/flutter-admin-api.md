@@ -1,6 +1,8 @@
 # Flutter Admin App API Contract
 
 > v4.8.0 -- Mobile-optimized JSON API surface for the Flutter admin app.
+>
+> Last verified: 2026-05-11
 
 ## Overview
 

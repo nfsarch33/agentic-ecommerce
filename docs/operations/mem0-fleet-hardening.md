@@ -1,5 +1,7 @@
 # mem0 Operational Hardening for EC Stack
 
+> Last verified: 2026-05-11
+
 ## Overview
 
 The EC stack uses [mem0](https://github.com/mem0ai/mem0) as its memory layer for

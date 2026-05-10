@@ -1,5 +1,7 @@
 # Disaster Recovery: GKE Primary + EKS DR
 
+> Last verified: 2026-05-11
+
 ## Architecture Overview
 
 ```
