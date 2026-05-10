@@ -1,10 +1,8 @@
-// File scope: v3.8.0 typed event payloads for Epic 7 (logistics +
-// returns) + Epic 9 (ROI). All payloads follow the v3.5.0 envelope
-// pattern: typed Validate, typed asMap, typed constructor.
+// Fulfilment domain payloads: order normalisation, dropship lifecycle,
+// shipping labels/status, and returns saga.
 //
-// Reuse evidence:
-//   - Pattern mirrors v3.5.0 EC-6/EC-7 (v350_payloads.go).
-//   - Error sentinel + %w-wrap from the package convention.
+// Consolidated from v350_payloads.go (OrderNormalised, Dropship) and
+// v380_payloads.go (ShipmentLabel, ShipmentStatus, ReturnsSaga) in v5.4.0.
 package eventbus
 
 import (
@@ -13,12 +11,191 @@ import (
 	"time"
 )
 
-// ShipmentLabelGeneratedPayloadVersion is the schema version.
+// --- Order normalised (v3.5.0 EC-7-1) ---
+
+const OrderNormalisedPayloadVersion = 1
+
+type OrderNormalisedLine struct {
+	SKU       string `json:"sku"`
+	Quantity  int    `json:"quantity"`
+	UnitCents int    `json:"unit_cents"`
+	ProductID string `json:"product_id,omitempty"`
+}
+
+type OrderNormalisedPayload struct {
+	Version         int                   `json:"version"`
+	TenantID        string                `json:"tenant_id"`
+	OrderID         string                `json:"order_id"`
+	ExternalOrderID string                `json:"external_order_id"`
+	Channel         string                `json:"channel"`
+	BuyerEmail      string                `json:"buyer_email,omitempty"`
+	TotalAUDCents   int                   `json:"total_aud_cents"`
+	Currency        string                `json:"currency"`
+	Items           []OrderNormalisedLine `json:"items"`
+	Status          string                `json:"status,omitempty"`
+	ShippingCountry string                `json:"shipping_country,omitempty"`
+	OccurredAt      time.Time             `json:"occurred_at"`
+}
+
+var ErrOrderNormalisedInvalid = errors.New("invalid order normalised payload")
+
+func (p OrderNormalisedPayload) Validate() error {
+	if p.Version == 0 {
+		return fmt.Errorf("%w: version zero", ErrOrderNormalisedInvalid)
+	}
+	if p.TenantID == "" {
+		return fmt.Errorf("%w: tenant_id missing", ErrOrderNormalisedInvalid)
+	}
+	if p.OrderID == "" {
+		return fmt.Errorf("%w: order_id missing", ErrOrderNormalisedInvalid)
+	}
+	if p.ExternalOrderID == "" {
+		return fmt.Errorf("%w: external_order_id missing", ErrOrderNormalisedInvalid)
+	}
+	if p.Channel == "" {
+		return fmt.Errorf("%w: channel missing", ErrOrderNormalisedInvalid)
+	}
+	if len(p.Items) == 0 {
+		return fmt.Errorf("%w: at least one item required", ErrOrderNormalisedInvalid)
+	}
+	return nil
+}
+
+func (p OrderNormalisedPayload) asMap() map[string]any {
+	items := make([]any, 0, len(p.Items))
+	for _, line := range p.Items {
+		items = append(items, map[string]any{
+			"sku":        line.SKU,
+			"quantity":   line.Quantity,
+			"unit_cents": line.UnitCents,
+			"product_id": line.ProductID,
+		})
+	}
+	return map[string]any{
+		"version":           p.Version,
+		"tenant_id":         p.TenantID,
+		"order_id":          p.OrderID,
+		"external_order_id": p.ExternalOrderID,
+		"channel":           p.Channel,
+		"buyer_email":       p.BuyerEmail,
+		"total_aud_cents":   p.TotalAUDCents,
+		"currency":          p.Currency,
+		"items":             items,
+		"status":            p.Status,
+		"shipping_country":  p.ShippingCountry,
+		"occurred_at":       p.OccurredAt.UTC().Format(time.RFC3339Nano),
+	}
+}
+
+func NewOrderNormalisedEvent(source string, occurredAt time.Time, payload OrderNormalisedPayload) (Event, error) {
+	if payload.Version == 0 {
+		payload.Version = OrderNormalisedPayloadVersion
+	}
+	if err := payload.Validate(); err != nil {
+		return Event{}, err
+	}
+	if occurredAt.IsZero() {
+		occurredAt = time.Now().UTC()
+	}
+	if source == "" {
+		source = "workflow.order_aggregator"
+	}
+	return Event{
+		Type:      OrderNormalised,
+		TenantID:  payload.TenantID,
+		Payload:   payload.asMap(),
+		Timestamp: occurredAt.UTC(),
+		Source:    source,
+	}, nil
+}
+
+// --- Dropship order lifecycle (v3.5.0 EC-7-2) ---
+
+const DropshipOrderPayloadVersion = 1
+
+type DropshipOrderPayload struct {
+	Version         int       `json:"version"`
+	TenantID        string    `json:"tenant_id"`
+	OrderID         string    `json:"order_id"`
+	Supplier        string    `json:"supplier"`
+	SupplierOrderID string    `json:"supplier_order_id,omitempty"`
+	TotalAUDCents   int       `json:"total_aud_cents"`
+	Reason          string    `json:"reason,omitempty"`
+	OccurredAt      time.Time `json:"occurred_at"`
+}
+
+var ErrDropshipOrderPayloadInvalid = errors.New("invalid dropship order payload")
+
+func (p DropshipOrderPayload) Validate() error {
+	if p.Version == 0 {
+		return fmt.Errorf("%w: version zero", ErrDropshipOrderPayloadInvalid)
+	}
+	if p.TenantID == "" {
+		return fmt.Errorf("%w: tenant_id missing", ErrDropshipOrderPayloadInvalid)
+	}
+	if p.OrderID == "" {
+		return fmt.Errorf("%w: order_id missing", ErrDropshipOrderPayloadInvalid)
+	}
+	if p.Supplier == "" {
+		return fmt.Errorf("%w: supplier missing", ErrDropshipOrderPayloadInvalid)
+	}
+	if p.TotalAUDCents < 0 {
+		return fmt.Errorf("%w: total_aud_cents cannot be negative", ErrDropshipOrderPayloadInvalid)
+	}
+	return nil
+}
+
+func (p DropshipOrderPayload) asMap() map[string]any {
+	return map[string]any{
+		"version":           p.Version,
+		"tenant_id":         p.TenantID,
+		"order_id":          p.OrderID,
+		"supplier":          p.Supplier,
+		"supplier_order_id": p.SupplierOrderID,
+		"total_aud_cents":   p.TotalAUDCents,
+		"reason":            p.Reason,
+		"occurred_at":       p.OccurredAt.UTC().Format(time.RFC3339Nano),
+	}
+}
+
+func NewLargeDropshipOrderPendingApprovalEvent(source string, occurredAt time.Time, payload DropshipOrderPayload) (Event, error) {
+	return newDropshipEvent(LargeDropshipOrderPendingApproval, source, occurredAt, payload)
+}
+
+func NewDropshipOrderPlacedEvent(source string, occurredAt time.Time, payload DropshipOrderPayload) (Event, error) {
+	return newDropshipEvent(DropshipOrderPlaced, source, occurredAt, payload)
+}
+
+func NewDropshipOrderRolledBackEvent(source string, occurredAt time.Time, payload DropshipOrderPayload) (Event, error) {
+	return newDropshipEvent(DropshipOrderRolledBack, source, occurredAt, payload)
+}
+
+func newDropshipEvent(kind EventType, source string, occurredAt time.Time, payload DropshipOrderPayload) (Event, error) {
+	if payload.Version == 0 {
+		payload.Version = DropshipOrderPayloadVersion
+	}
+	if err := payload.Validate(); err != nil {
+		return Event{}, err
+	}
+	if occurredAt.IsZero() {
+		occurredAt = time.Now().UTC()
+	}
+	if source == "" {
+		source = "agent.fulfilment.dropship"
+	}
+	return Event{
+		Type:      kind,
+		TenantID:  payload.TenantID,
+		Payload:   payload.asMap(),
+		Timestamp: occurredAt.UTC(),
+		Source:    source,
+	}, nil
+}
+
+// --- Shipment label generated (v3.8.0 EC-7-3) ---
+
 const ShipmentLabelGeneratedPayloadVersion = 1
 
-// ShipmentLabelGeneratedPayload is the v3.8.0 EC-7-3 envelope.
-// Emitted by the shipping label generator after a carrier-issued
-// label is produced.
 type ShipmentLabelGeneratedPayload struct {
 	Version        int       `json:"version"`
 	TenantID       string    `json:"tenant_id"`
@@ -32,10 +209,8 @@ type ShipmentLabelGeneratedPayload struct {
 	OccurredAt     time.Time `json:"occurred_at"`
 }
 
-// ErrShipmentLabelGeneratedInvalid is returned by Validate.
 var ErrShipmentLabelGeneratedInvalid = errors.New("invalid shipment label generated payload")
 
-// Validate enforces required fields.
 func (p ShipmentLabelGeneratedPayload) Validate() error {
 	if p.Version == 0 {
 		return fmt.Errorf("%w: version zero", ErrShipmentLabelGeneratedInvalid)
@@ -70,7 +245,6 @@ func (p ShipmentLabelGeneratedPayload) asMap() map[string]any {
 	}
 }
 
-// NewShipmentLabelGeneratedEvent is the canonical constructor.
 func NewShipmentLabelGeneratedEvent(source string, occurredAt time.Time, payload ShipmentLabelGeneratedPayload) (Event, error) {
 	if payload.Version == 0 {
 		payload.Version = ShipmentLabelGeneratedPayloadVersion
@@ -93,27 +267,23 @@ func NewShipmentLabelGeneratedEvent(source string, occurredAt time.Time, payload
 	}, nil
 }
 
-// ShipmentStatusUpdatedPayloadVersion is the schema version.
+// --- Shipment status updated (v3.8.0 EC-7-4) ---
+
 const ShipmentStatusUpdatedPayloadVersion = 1
 
-// ShipmentStatusUpdatedPayload is the v3.8.0 EC-7-4 envelope.
-// Emitted by the carrier webhook handlers when shipment status
-// transitions.
 type ShipmentStatusUpdatedPayload struct {
 	Version        int       `json:"version"`
 	TenantID       string    `json:"tenant_id"`
 	OrderID        string    `json:"order_id"`
 	Carrier        string    `json:"carrier"`
 	TrackingNumber string    `json:"tracking_number"`
-	Status         string    `json:"status"` // shipped|in_transit|delivered|exception
+	Status         string    `json:"status"`
 	EventID        string    `json:"event_id"`
 	OccurredAt     time.Time `json:"occurred_at"`
 }
 
-// ErrShipmentStatusUpdatedInvalid is returned by Validate.
 var ErrShipmentStatusUpdatedInvalid = errors.New("invalid shipment status updated payload")
 
-// Validate enforces required fields.
 func (p ShipmentStatusUpdatedPayload) Validate() error {
 	if p.Version == 0 {
 		return fmt.Errorf("%w: version zero", ErrShipmentStatusUpdatedInvalid)
@@ -149,7 +319,6 @@ func (p ShipmentStatusUpdatedPayload) asMap() map[string]any {
 	}
 }
 
-// NewShipmentStatusUpdatedEvent is the canonical constructor.
 func NewShipmentStatusUpdatedEvent(source string, occurredAt time.Time, payload ShipmentStatusUpdatedPayload) (Event, error) {
 	if payload.Version == 0 {
 		payload.Version = ShipmentStatusUpdatedPayloadVersion
@@ -176,13 +345,10 @@ func NewShipmentStatusUpdatedEvent(source string, occurredAt time.Time, payload 
 	}, nil
 }
 
-// ReturnsSagaPayloadVersion is the schema version shared by the
-// returns lifecycle events.
+// --- Returns saga (v3.8.0 EC-7-5) ---
+
 const ReturnsSagaPayloadVersion = 1
 
-// ReturnsSagaPayload is the v3.8.0 EC-7-5 envelope. Used by every
-// returns-saga lifecycle event so the dashboard can pivot on a
-// single shape.
 type ReturnsSagaPayload struct {
 	Version           int       `json:"version"`
 	TenantID          string    `json:"tenant_id"`
@@ -191,15 +357,13 @@ type ReturnsSagaPayload struct {
 	Reason            string    `json:"reason"`
 	RefundAmountCents int       `json:"refund_amount_aud_cents"`
 	AutoApproved      bool      `json:"auto_approved"`
-	State             string    `json:"state"` // requested|approved|labelled|refunded|completed|rolled_back
+	State             string    `json:"state"`
 	RolledBackReason  string    `json:"rolled_back_reason,omitempty"`
 	OccurredAt        time.Time `json:"occurred_at"`
 }
 
-// ErrReturnsSagaPayloadInvalid is returned by Validate.
 var ErrReturnsSagaPayloadInvalid = errors.New("invalid returns saga payload")
 
-// Validate enforces required fields.
 func (p ReturnsSagaPayload) Validate() error {
 	if p.Version == 0 {
 		return fmt.Errorf("%w: version zero", ErrReturnsSagaPayloadInvalid)
@@ -237,25 +401,18 @@ func (p ReturnsSagaPayload) asMap() map[string]any {
 	}
 }
 
-// NewReturnRequestedEvent fires when a customer initiates a return.
 func NewReturnRequestedEvent(source string, occurredAt time.Time, payload ReturnsSagaPayload) (Event, error) {
 	return newReturnsSagaEvent(ReturnRequested, source, occurredAt, payload)
 }
 
-// NewLargeRefundPendingApprovalEvent fires when refund_amount >= the
-// auto-approval threshold (default A$50 = 5000 cents).
 func NewLargeRefundPendingApprovalEvent(source string, occurredAt time.Time, payload ReturnsSagaPayload) (Event, error) {
 	return newReturnsSagaEvent(LargeRefundPendingApproval, source, occurredAt, payload)
 }
 
-// NewReturnsSagaCompletedEvent fires after the full refund flow ran
-// to completion (label issued + refund processed + channel updated).
 func NewReturnsSagaCompletedEvent(source string, occurredAt time.Time, payload ReturnsSagaPayload) (Event, error) {
 	return newReturnsSagaEvent(ReturnsSagaCompleted, source, occurredAt, payload)
 }
 
-// NewReturnsSagaRolledBackEvent fires when any saga step failed and
-// the compensating activities ran.
 func NewReturnsSagaRolledBackEvent(source string, occurredAt time.Time, payload ReturnsSagaPayload) (Event, error) {
 	return newReturnsSagaEvent(ReturnsSagaRolledBack, source, occurredAt, payload)
 }
