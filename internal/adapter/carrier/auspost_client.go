@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/nfsarch33/agentic-ecommerce/internal/httpclient"
 )
 
 // DefaultAusPostTimeout is the per-call deadline applied if the caller
@@ -32,16 +34,10 @@ type AusPostConfig struct {
 }
 
 // AusPostClient is the v3.8.0 EC-7-3 Australia Post adapter.
-//
-// Endpoints called:
-//   - POST {BaseURL}/v3/shipping/quotes  -> Quote
-//   - POST {BaseURL}/v3/shipping/labels  -> CreateLabel
-//
-// Outbound HMAC: sha256(secret, "{method}\n{path}\n{body}") hex-encoded
-// in the X-AusPost-Signature header. Mirror of the v3.3.0 stdlib
-// pattern; no third-party SDK.
+// v5.3.0: uses internal/httpclient for shared transport.
 type AusPostClient struct {
 	cfg AusPostConfig
+	hc  *httpclient.Client
 }
 
 // NewAusPostClient constructs the adapter.
@@ -55,7 +51,25 @@ func NewAusPostClient(cfg AusPostConfig) (*AusPostClient, error) {
 	if cfg.Now == nil {
 		cfg.Now = func() time.Time { return time.Now().UTC() }
 	}
-	return &AusPostClient{cfg: cfg}, nil
+	apiKey := cfg.APIKey
+	apiSecret := cfg.APISecret
+	hc, err := httpclient.New(httpclient.Config{
+		BaseURL:    cfg.BaseURL,
+		Timeout:    DefaultAusPostTimeout,
+		HTTPClient: cfg.HTTPClient,
+		RequestHooks: []httpclient.RequestHook{
+			httpclient.JSONRequestHook(),
+			func(req *http.Request) error {
+				req.Header.Set("X-AusPost-Key", apiKey)
+				return nil
+			},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: AusPost httpclient: %v", ErrCarrierClientUnconfigured, err)
+	}
+	_ = apiSecret
+	return &AusPostClient{cfg: cfg, hc: hc}, nil
 }
 
 // Name returns the carrier identifier. Stable across runs so metric
