@@ -202,14 +202,14 @@ func TestGrafanaDashboardCoversV080ObservabilityViews(t *testing.T) {
 			title: "API p95 Latency",
 			contains: []string{
 				"histogram_quantile",
-				"agentic_ecommerce_http_request_duration_seconds_bucket",
+				"ec_http_duration_seconds_bucket",
 			},
 		},
 		{
 			name:  "api error rate",
 			title: "API 5xx Error Rate",
 			contains: []string{
-				"agentic_ecommerce_http_requests_total{code=~\"5..\"}",
+				"ec_http_requests_total{code=~\"5..\"}",
 			},
 		},
 		{
@@ -230,8 +230,8 @@ func TestGrafanaDashboardCoversV080ObservabilityViews(t *testing.T) {
 			name:  "agent runs",
 			title: "Agent Runs Success vs Failure",
 			contains: []string{
-				"agentic_ecommerce_agent_worker_runs_total{status=\"succeeded\"}",
-				"agentic_ecommerce_agent_worker_runs_total{status=\"failed\"}",
+				"ec_workflow_runs_total{status=\"succeeded\"}",
+				"ec_workflow_runs_total{status=\"failed\"}",
 			},
 		},
 		{
