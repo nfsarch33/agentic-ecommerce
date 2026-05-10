@@ -1,0 +1,291 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "description": "Percentage of assertions where uiauto and Playwright agree (target \u003e= 90%)",
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.8
+              },
+              {
+                "color": "green",
+                "value": 0.9
+              }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "ec_uiauto_comparison_agreement_rate",
+          "legendFormat": "Agreement Rate"
+        }
+      ],
+      "title": "Accuracy Agreement Rate",
+      "type": "gauge"
+    },
+    {
+      "description": "Average scenario duration: uiauto vs Playwright",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "uiauto"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Playwright"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "ec_uiauto_comparison_speed_ms{tool=\"uiauto\"}",
+          "legendFormat": "uiauto"
+        },
+        {
+          "expr": "ec_uiauto_comparison_speed_ms{tool=\"playwright\"}",
+          "legendFormat": "Playwright"
+        }
+      ],
+      "title": "Speed Comparison (avg ms per scenario)",
+      "type": "barchart"
+    },
+    {
+      "description": "Pass rate heatmap: per-scenario per-tool assertion accuracy",
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "ec_uiauto_comparison_scenario_pass_rate{tool=~\"$tool\", scenario=~\"$scenario\"}",
+          "legendFormat": "{{tool}} / {{scenario}}"
+        }
+      ],
+      "title": "Accuracy per Tool per Scenario",
+      "type": "heatmap"
+    },
+    {
+      "description": "Agreement rate over time (target \u003e= 90%)",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.9
+              }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "ec_uiauto_comparison_agreement_rate",
+          "legendFormat": "Agreement Rate"
+        }
+      ],
+      "title": "Historical Agreement Rate Trend",
+      "type": "timeseries"
+    },
+    {
+      "description": "Scenario-level timing for each tool",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "ec_uiauto_comparison_scenario_duration_ms{tool=~\"$tool\", scenario=~\"$scenario\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{tool}} / {{scenario}}"
+        }
+      ],
+      "title": "Per-Scenario Duration (ms)",
+      "type": "table"
+    }
+  ],
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "uiauto",
+    "playwright",
+    "comparison",
+    "v4.14.0"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "includeAll": true,
+        "multi": true,
+        "name": "tool",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "text": "uiauto",
+            "value": "uiauto"
+          },
+          {
+            "text": "playwright",
+            "value": "playwright"
+          }
+        ],
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "includeAll": true,
+        "multi": true,
+        "name": "scenario",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "text": "product-listing",
+            "value": "product-listing"
+          },
+          {
+            "text": "onboarding-wizard",
+            "value": "onboarding-wizard"
+          },
+          {
+            "text": "payment-dashboard",
+            "value": "payment-dashboard"
+          },
+          {
+            "text": "agent-activity-feed",
+            "value": "agent-activity-feed"
+          },
+          {
+            "text": "operator-alerts",
+            "value": "operator-alerts"
+          }
+        ],
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "uiauto vs Playwright Comparison",
+  "uid": "uiauto-comparison-v4140",
+  "version": 1
+}
+

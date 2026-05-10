@@ -409,6 +409,14 @@ type Registry struct {
 	MinimaxActiveKey            *Gauge
 	MinimaxKeyCooldownRemaining *Gauge
 	MinimaxFailoverEventsTotal  *Counter
+
+	// v4.14.0 uiauto-vs-Playwright comparison harness metrics.
+	// See RegisterComparisonMetrics for cardinality budget (~25 series).
+	ComparisonAccuracy           *Gauge
+	ComparisonSpeedMs            *Gauge
+	ComparisonAgreementRate      *Gauge
+	ComparisonScenarioDurationMs *Gauge
+	ComparisonScenarioPassRate   *Gauge
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -511,6 +519,7 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.ResidencyViolationsTotal = newCounter(r, "ec_residency_violations_total", "v4.9.0 data residency violation attempts by tenant_id + from_region + to_region.")
 	RegisterAgentraceMetrics(r)
 	RegisterMinimaxMetrics(r)
+	RegisterComparisonMetrics(r)
 	return r
 }
 
@@ -655,6 +664,11 @@ func (r *Registry) Handler() http.Handler {
 		r.MinimaxActiveKey.write(&sb)
 		r.MinimaxKeyCooldownRemaining.write(&sb)
 		r.MinimaxFailoverEventsTotal.write(&sb)
+		r.ComparisonAccuracy.write(&sb)
+		r.ComparisonSpeedMs.write(&sb)
+		r.ComparisonAgreementRate.write(&sb)
+		r.ComparisonScenarioDurationMs.write(&sb)
+		r.ComparisonScenarioPassRate.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
