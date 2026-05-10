@@ -87,6 +87,34 @@ const (
 	// every supplier adapter failed AND the customer-side
 	// fulfillment trigger was rolled back.
 	DropshipOrderRolledBack EventType = "dropship.order.rolled_back"
+
+	// v3.8.0 EC-7-3 carrier label issued. Emitted by the shipping
+	// label generator after a carrier-side CreateLabel succeeded.
+	ShipmentLabelGenerated EventType = "shipment.label.generated"
+
+	// v3.8.0 EC-7-4 carrier shipment status transitions. Emitted by
+	// the AusPost / DHL webhook handlers after HMAC verify-then-parse.
+	ShipmentStatusUpdated EventType = "shipment.status.updated"
+
+	// v3.8.0 EC-7-4 final delivered transition. Distinct event type
+	// so the EC-7-5 returns saga can subscribe directly without
+	// filtering on payload status.
+	OrderDelivered EventType = "order.delivered"
+
+	// v3.8.0 EC-7-5 customer-initiated return. Carries
+	// ReturnsSagaPayload.
+	ReturnRequested EventType = "return.requested"
+
+	// v3.8.0 EC-7-5 large refund operator approval gate event.
+	// Emitted when refund_amount >= the configured threshold
+	// (default A$50).
+	LargeRefundPendingApproval EventType = "return.large_refund_pending_approval"
+
+	// v3.8.0 EC-7-5 saga completion event. All saga steps ran.
+	ReturnsSagaCompleted EventType = "return.saga.completed"
+
+	// v3.8.0 EC-7-5 saga rollback event. Compensating activities ran.
+	ReturnsSagaRolledBack EventType = "return.saga.rolled_back"
 )
 
 type Event struct {
