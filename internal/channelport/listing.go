@@ -15,14 +15,11 @@ import (
 	"time"
 )
 
-// StubChannelNames lists the channel names that are
-// production-ready stubs today (Instagram + Pinterest). The router
-// pivots dispatchOne on this set to emit
-// ChannelStatusNotYetImplemented without DLQ-enqueueing.
-var StubChannelNames = map[string]struct{}{
-	"instagram": {},
-	"pinterest": {},
-}
+// StubChannelNames lists channel names that are still stubs.
+// v4.6.0: Instagram + Pinterest promoted to full adapters; set now empty.
+// Kept as an exported symbol for backward compatibility with callers
+// that check IsStubChannel before dispatching.
+var StubChannelNames = map[string]struct{}{}
 
 // IsStubChannel returns true if the channel name has a stub adapter
 // today. Cheap; pure; no allocations on the hot path.
