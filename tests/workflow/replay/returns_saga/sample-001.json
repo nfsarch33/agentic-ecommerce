@@ -1,0 +1,37 @@
+{
+  "events": [
+    {
+      "eventId": "1",
+      "eventType": "WorkflowExecutionStarted"
+    },
+    {
+      "eventId": "2",
+      "eventType": "WorkflowTaskScheduled"
+    },
+    {
+      "eventId": "3",
+      "eventType": "WorkflowTaskCompleted"
+    },
+    {
+      "eventId": "4",
+      "eventType": "ActivityTaskScheduled"
+    },
+    {
+      "eventId": "5",
+      "eventType": "ActivityTaskCompleted"
+    },
+    {
+      "eventId": "6",
+      "eventType": "ActivityTaskScheduled"
+    },
+    {
+      "eventId": "7",
+      "eventType": "ActivityTaskCompleted"
+    },
+    {
+      "eventId": "8",
+      "eventType": "WorkflowExecutionCompleted"
+    }
+  ]
+}
+
