@@ -1,0 +1,21 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/nfsarch33/agentic-ecommerce/tests/benchmarks
+cpu: Apple M4 Pro
+BenchmarkV550_ComplianceEvaluate_ChinaImport-14    	21984580	        54.17 ns/op	       0 B/op	       0 allocs/op
+BenchmarkV550_ComplianceEvaluate_Restricted-14     	 2142368	       556.3 ns/op	     352 B/op	      10 allocs/op
+BenchmarkV550_ComplianceBatch_100Products-14       	   81913	     14720 ns/op	   24811 B/op	     106 allocs/op
+BenchmarkV550_ResidencyValidation-14               	133974176	         8.799 ns/op	       0 B/op	       0 allocs/op
+BenchmarkV550_ChannelFanOut_6Channels-14           	  952610	      1198 ns/op	    1898 B/op	      11 allocs/op
+BenchmarkV550_SEOOptimizer_Validate-14             	  353238	      3359 ns/op	     533 B/op	      18 allocs/op
+BenchmarkV550_CatalogProduct_Validation-14         	 1359674	       882.9 ns/op	     130 B/op	       6 allocs/op
+BenchmarkV550_MediaProcessor_Validate-14           	 2366595	       516.6 ns/op	     144 B/op	       2 allocs/op
+BenchmarkV550_MarketplaceVendor_Create-14          	178056931	         6.710 ns/op	       0 B/op	       0 allocs/op
+BenchmarkV550_Eventbus_PublishSubscribe-14         	 1506778	       798.1 ns/op	    1844 B/op	      10 allocs/op
+BenchmarkV550_ComplianceEngine_Evaluate-14         	  166038	      7055 ns/op	    3172 B/op	      41 allocs/op
+BenchmarkV550_PGPoolConfigLoad-14                  	10171951	       123.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkV550_RedisPipelineBatch10-14              	 1292457	       946.3 ns/op	    2648 B/op	       8 allocs/op
+BenchmarkV550_RedisSingleCall10-14                 	  397827	      3047 ns/op	   11840 B/op	      40 allocs/op
+BenchmarkV550_PaymentSagaWorkflow-14               	683747210	         1.788 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/nfsarch33/agentic-ecommerce/tests/benchmarks	25.325s
