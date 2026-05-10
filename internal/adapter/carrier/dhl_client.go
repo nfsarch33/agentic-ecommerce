@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nfsarch33/agentic-ecommerce/internal/httpclient"
 )
 
 // DefaultDHLTimeout is the per-call deadline applied if the caller
@@ -88,9 +90,11 @@ type DHLConfig struct {
 }
 
 // DHLClient is the v3.8.0 EC-7-3 DHL Express adapter.
+// v5.3.0: uses internal/httpclient for shared transport.
 type DHLClient struct {
 	cfg    DHLConfig
 	tokens DHLTokenSource
+	hc     *httpclient.Client
 }
 
 // NewDHLClient constructs the adapter. Either TokenSource OR
@@ -118,7 +122,18 @@ func NewDHLClient(cfg DHLConfig) (*DHLClient, error) {
 			clientSec:  cfg.ClientSecret,
 		}
 	}
-	return &DHLClient{cfg: cfg, tokens: tokens}, nil
+	hc, err := httpclient.New(httpclient.Config{
+		BaseURL:    cfg.BaseURL,
+		Timeout:    DefaultDHLTimeout,
+		HTTPClient: cfg.HTTPClient,
+		RequestHooks: []httpclient.RequestHook{
+			httpclient.JSONRequestHook(),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: DHL httpclient: %v", ErrCarrierClientUnconfigured, err)
+	}
+	return &DHLClient{cfg: cfg, tokens: tokens, hc: hc}, nil
 }
 
 // Name returns the carrier identifier.

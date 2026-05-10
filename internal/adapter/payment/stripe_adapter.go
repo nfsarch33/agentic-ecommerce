@@ -146,10 +146,7 @@ func classifyStripeError(statusCode int, body []byte) error {
 	case "insufficient_funds":
 		return fmt.Errorf("%w: %s", port.ErrInsufficientFunds, string(body))
 	}
-	if statusCode >= 500 {
-		return fmt.Errorf("%w: status=%d", port.ErrPaymentProviderUnavailable, statusCode)
-	}
-	return fmt.Errorf("%w: status=%d body=%s", port.ErrPaymentDeclined, statusCode, string(body))
+	return ClassifyHTTPError("stripe", statusCode, body)
 }
 
 // Refund delegates to the existing v4.1.0 billing.StripeRefunder.

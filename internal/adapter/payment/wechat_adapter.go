@@ -189,10 +189,7 @@ func parseWeChatChargeResponse(body []byte, orderID string, amount port.Money) (
 }
 
 func classifyWeChatError(statusCode int, body []byte) error {
-	if statusCode >= 500 {
-		return fmt.Errorf("%w: status=%d", port.ErrPaymentProviderUnavailable, statusCode)
-	}
-	return fmt.Errorf("%w: status=%d body=%s", port.ErrPaymentDeclined, statusCode, string(body))
+	return ClassifyHTTPError("wechat", statusCode, body)
 }
 
 // Refund issues a refund via WeChat Pay API v3.
