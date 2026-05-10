@@ -1,0 +1,40 @@
+groups:
+  - name: oom-prevention
+    rules:
+      - alert: HeapInuseAbove80Pct
+        expr: |
+          go_memstats_heap_inuse_bytes / go_memstats_heap_sys_bytes > 0.80
+        for: 2m
+        labels:
+          severity: warning
+          domain: infrastructure
+        annotations:
+          summary: "Heap in-use exceeds 80% ceiling"
+          description: >-
+            {{ $labels.instance }} heap in-use is {{ $value | humanizePercentage }}
+            of heap sys. Risk of OOM if allocation rate continues.
+
+      - alert: GoroutineCountHigh
+        expr: go_goroutines > 40000
+        for: 1m
+        labels:
+          severity: warning
+          domain: infrastructure
+        annotations:
+          summary: "Goroutine count exceeds 40K"
+          description: >-
+            {{ $labels.instance }} has {{ $value }} goroutines.
+            Possible goroutine leak or backpressure buildup.
+
+      - alert: MemwatchPausesFrequent
+        expr: |
+          rate(go_gc_duration_seconds_count[5m]) > 5
+        for: 3m
+        labels:
+          severity: warning
+          domain: infrastructure
+        annotations:
+          summary: "GC pauses exceed 5/min"
+          description: >-
+            {{ $labels.instance }} GC is running {{ $value | humanize }}/sec.
+            Excessive GC pressure may degrade p99 latency.

@@ -1,0 +1,30 @@
+groups:
+  - name: captcha-detection
+    rules:
+      - alert: CaptchaDetectionsHigh
+        expr: |
+          rate(ec_captcha_detections_total[1h]) * 3600 > 3
+        for: 5m
+        labels:
+          severity: warning
+          domain: scraping
+        annotations:
+          summary: "CAPTCHA detections >3/hour per channel"
+          description: >-
+            {{ $labels.channel }} on {{ $labels.tenant_id }} hit
+            {{ $value | humanize }} CAPTCHAs in the last hour.
+            The scraper may be rate-limited or blocked.
+
+      - alert: CaptchaResolutionTimeoutHigh
+        expr: |
+          increase(ec_captcha_resolution_timeout_total[24h]) > 2
+        for: 30m
+        labels:
+          severity: warning
+          domain: scraping
+        annotations:
+          summary: "CAPTCHA resolution timeout >2/day"
+          description: >-
+            {{ $labels.channel }} had {{ $value }} CAPTCHA resolution
+            timeouts in the last 24h. Manual intervention or proxy
+            rotation may be needed.

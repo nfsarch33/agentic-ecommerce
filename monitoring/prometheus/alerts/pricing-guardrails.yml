@@ -1,0 +1,29 @@
+groups:
+  - name: pricing-guardrails
+    rules:
+      - alert: PricingGuardrailBlocksHigh
+        expr: |
+          rate(ec_pricing_guardrail_blocks_total[1h]) * 3600 > 10
+        for: 5m
+        labels:
+          severity: warning
+          domain: pricing
+        annotations:
+          summary: "Pricing agent guardrail blocks >10/hour"
+          description: >-
+            {{ $labels.tenant_id }} triggered {{ $value | humanize }}
+            guardrail blocks in the last hour. The pricing agent may be
+            proposing out-of-bounds changes.
+
+      - alert: MarginBelowFloorConsecutive
+        expr: |
+          ec_pricing_margin_below_floor_consecutive > 5
+        for: 10m
+        labels:
+          severity: critical
+          domain: pricing
+        annotations:
+          summary: "Margin below floor for >5 consecutive checks"
+          description: >-
+            {{ $labels.tenant_id }} has had {{ $value }} consecutive
+            margin-below-floor observations. Operator intervention required.
