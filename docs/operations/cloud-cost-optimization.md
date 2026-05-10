@@ -1,5 +1,7 @@
 # Cloud Cost Optimization Guide
 
+> Last verified: 2026-05-11
+
 Cost analysis and optimization strategies for running the Agentic E-Commerce stack
 across GKE Autopilot, EKS, and OCI.
 

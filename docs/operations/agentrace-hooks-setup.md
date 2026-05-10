@@ -1,6 +1,8 @@
 # Agentrace Hooks Setup
 
 > v4.11.0 — Production wiring for Cursor hooks → Agentrace → EvoMap → EvoLoop pipeline.
+>
+> Last verified: 2026-05-11
 
 ## Overview
 

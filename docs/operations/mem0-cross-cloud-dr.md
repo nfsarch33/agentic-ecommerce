@@ -1,5 +1,7 @@
 # mem0 Cross-Cloud Disaster Recovery Plan
 
+> Last verified: 2026-05-11
+
 ## Overview
 
 This document describes the disaster recovery (DR) strategy for the mem0 memory

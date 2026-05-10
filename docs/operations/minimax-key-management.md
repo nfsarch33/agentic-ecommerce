@@ -1,5 +1,7 @@
 # MiniMax API Key Management
 
+> Last verified: 2026-05-11
+
 ## Overview
 
 The EC stack uses MiniMax for LLM-powered content generation (description_gen, video script, hashtag/caption, coaching tips, AI payment advisor). Two API keys provide quota redundancy via automatic failover.

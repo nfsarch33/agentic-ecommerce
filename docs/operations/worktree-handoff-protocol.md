@@ -1,5 +1,7 @@
 # Worktree Handoff Protocol
 
+> Last verified: 2026-05-11
+
 Formal protocol for transferring worktree ownership between parallel Cursor agents operating on the same `agentic-ecommerce` repository (or any runx-managed repo).
 
 ## Context

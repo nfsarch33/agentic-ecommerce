@@ -1,5 +1,7 @@
 # video-bridge operator setup (deferred from v3.4.0)
 
+> Last verified: 2026-05-11
+
 **Owner:** ec-stack v3.4.x  
 **Sprint context:** v3.4.0 EC-5-3 ships the deterministic
 `StubVideoAssembler` in `internal/media/video_assembler.go` so the

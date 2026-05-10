@@ -1,5 +1,7 @@
 # Skill Inventory Audit v4.16.0
 
+> Last verified: 2026-05-11
+
 Generated: 2026-05-11 | Sprint: v4.16.0 | Scope: Agent skill ecosystem health
 
 ## Summary

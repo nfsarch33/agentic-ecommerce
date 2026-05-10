@@ -1,5 +1,7 @@
 # Operations runbook (v2.10.1+)
 
+> Last verified: 2026-05-11
+
 This runbook documents the response procedures for the failure
 modes that the v2.10.x resilience pillar can detect and report on.
 It is the canonical operator-facing companion to
@@ -114,7 +116,7 @@ all repos use `runx make build/install --repo <alias>` which sets
 `tests/benchmarks/v2.10-toolchain.json`.
 
 If `go test ./...` errors with
-`go.mod requires go >= 1.25.10 (running go 1.24.11; GOTOOLCHAIN=local)`,
+`go.mod requires go >= 1.26.3 (running go 1.25.x; GOTOOLCHAIN=local)`,
 either set `GOTOOLCHAIN=auto GOSUMDB=sum.golang.org` in the calling
 shell or route through `runx make test --repo ecommerce`.
 
