@@ -1,0 +1,12 @@
+apiVersion: v2
+name: qdrant
+description: Helm chart for Qdrant vector DB (EC stack mem0 backend)
+type: application
+version: 0.1.0
+appVersion: "1.13.6"
+maintainers:
+  - name: agentic-ecommerce
+keywords:
+  - qdrant
+  - vector-db
+  - mem0

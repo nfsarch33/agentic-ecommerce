@@ -1,0 +1,28 @@
+replicaCount: 1
+
+image:
+  repository: qdrant/qdrant
+  tag: "v1.13.6"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  httpPort: 6333
+  grpcPort: 6334
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1"
+    memory: "2Gi"
+
+persistence:
+  enabled: true
+  storageClass: ""
+  size: 20Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

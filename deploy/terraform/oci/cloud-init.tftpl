@@ -1,0 +1,11 @@
+#!/bin/bash
+set -euo pipefail
+
+apt-get update -y
+apt-get install -y docker.io docker-compose-plugin curl
+systemctl enable docker
+systemctl start docker
+
+# Placeholder: deploy mem0 + Qdrant via docker compose.
+# The actual compose file is deployed separately via the ops runbook.
+echo "Cloud-init complete. mem0 port: ${mem0_port}, Qdrant port: ${qdrant_port}" | tee /var/log/ec-cloud-init.log
