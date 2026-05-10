@@ -21,7 +21,6 @@ package workflow
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/api/handler"
 	"go.temporal.io/sdk/client"
@@ -67,10 +66,10 @@ func NewOnboardingWizardLauncher(c TemporalWorkflowExecutor, taskQueue string) *
 // Cyclomatic 4.
 func (l *OnboardingWizardLauncher) Launch(ctx context.Context, w handler.OnboardingWizard) error {
 	if l == nil || l.client == nil {
-		return fmt.Errorf("onboarding wizard launcher unconfigured")
+		return ErrLauncherUnconfigured
 	}
 	if w.Identity == nil {
-		return fmt.Errorf("wizard identity required for launch")
+		return ErrWizardIdentityNil
 	}
 	input := TenantOnboardingInput{
 		RegistrationID: w.WizardID,

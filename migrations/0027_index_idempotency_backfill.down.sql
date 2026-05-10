@@ -1,0 +1,4 @@
+-- v4.1.1 IC-2 — rollback index idempotency backfill.
+-- This is a no-op since 0027 only re-creates existing indexes with
+-- IF NOT EXISTS. The original indexes from 0001 remain.
+-- Intentionally empty.
