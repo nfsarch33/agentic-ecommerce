@@ -1,0 +1,18 @@
+# Qdrant vector DB configuration for EC mem0 deployment.
+# Mounted into the Qdrant container at /qdrant/config/production.yaml.
+
+storage:
+  storage_path: /qdrant/storage
+  snapshots_path: /qdrant/snapshots
+  on_disk_payload: true
+
+service:
+  grpc_port: 6334
+  http_port: 6333
+  enable_tls: false
+
+collection:
+  replication_factor: 1
+  write_consistency_factor: 1
+
+log_level: INFO

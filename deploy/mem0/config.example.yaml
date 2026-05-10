@@ -1,0 +1,33 @@
+# mem0 configuration template for EC stack.
+# Copy to config.yaml and fill in real values.
+# NEVER commit config.yaml — only this template is tracked.
+
+version: "1.0"
+
+vector_store:
+  provider: qdrant
+  config:
+    # Qdrant endpoint — populated by EC_MEM0_QDRANT_URL or docker-compose networking.
+    url: "${EC_MEM0_QDRANT_URL:-http://qdrant:6333}"
+    collection_name: "ec_memory"
+    embedding_model_dims: 1536
+
+llm:
+  provider: openai
+  config:
+    # API key injected via EC_MEM0_LLM_API_KEY env var at runtime.
+    api_key: "${EC_MEM0_LLM_API_KEY}"
+    model: "gpt-4o-mini"
+
+embedder:
+  provider: openai
+  config:
+    api_key: "${EC_MEM0_LLM_API_KEY}"
+    model: "text-embedding-3-small"
+
+graph_store:
+  provider: none
+
+server:
+  host: "0.0.0.0"
+  port: 8080
