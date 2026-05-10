@@ -1,20 +1,8 @@
-// File scope: v3.6.0 EC-8-3 typed event payloads for the inbound
-// customer messaging pipeline.
+// Customer messaging domain payloads.
 //
-// Three events surface from the messaging webhook layer:
-//
-//   - CustomerMessageReceived            -- fires after HMAC verify +
-//     idempotency check + envelope decode (the inbound side has
-//     definitively accepted the message).
-//   - CustomerMessageReplied             -- fires after the EC-8-2
-//     responder produced an auto_replied or suggested response and
-//     the channel adapter SendMessage call succeeded.
-//   - CustomerMessageEscalatedToOperator -- fires when the responder
-//     routed to the operator queue (low confidence, no FAQ match,
-//     or the channel send failed).
-//
-// All three events follow the v3.5.0 typed-payload envelope pattern
-// (Validate + asMap + canonical constructor).
+// Consolidated from customer_message.go in v5.4.0. The original file
+// is retained as a thin backward-compat import target (no payload
+// definitions remain there).
 package eventbus
 
 import (
@@ -23,29 +11,8 @@ import (
 	"time"
 )
 
-// EC-8-3 event types. Declared additive to the existing block in
-// event.go so prior consumers stay source-compatible.
-const (
-	// CustomerMessageReceived fires once the inbound webhook
-	// definitively accepted a message (HMAC verified + idempotency
-	// check passed + envelope decoded).
-	CustomerMessageReceived EventType = "customer.message.received"
-
-	// CustomerMessageReplied fires once the EC-8-2 responder + the
-	// channel adapter SendMessage succeeded.
-	CustomerMessageReplied EventType = "customer.message.replied"
-
-	// CustomerMessageEscalatedToOperator fires when the responder
-	// routed the inbound message to the operator queue.
-	CustomerMessageEscalatedToOperator EventType = "customer.message.escalated_to_operator"
-)
-
-// CustomerMessagePayloadVersion is the schema version of the
-// customer message payload family. Bump on breaking change.
 const CustomerMessagePayloadVersion = 1
 
-// CustomerMessagePayload is the EC-8-3 envelope shipped inside
-// Event.Payload for every customer.message.* event.
 type CustomerMessagePayload struct {
 	Version           int       `json:"version"`
 	TenantID          string    `json:"tenant_id"`
@@ -64,10 +31,8 @@ type CustomerMessagePayload struct {
 	OccurredAt        time.Time `json:"occurred_at"`
 }
 
-// ErrCustomerMessagePayloadInvalid is the sentinel for missing fields.
 var ErrCustomerMessagePayloadInvalid = errors.New("invalid customer message payload")
 
-// Validate enforces required identity fields.
 func (p CustomerMessagePayload) Validate() error {
 	if p.Version == 0 {
 		return fmt.Errorf("%w: version zero", ErrCustomerMessagePayloadInvalid)
@@ -104,20 +69,14 @@ func (p CustomerMessagePayload) asMap() map[string]any {
 	}
 }
 
-// NewCustomerMessageReceivedEvent is the canonical constructor for
-// the inbound-accepted event.
 func NewCustomerMessageReceivedEvent(source string, occurredAt time.Time, payload CustomerMessagePayload) (Event, error) {
 	return newCustomerMessageEvent(CustomerMessageReceived, source, occurredAt, payload, "webhook.messaging.received")
 }
 
-// NewCustomerMessageRepliedEvent is the canonical constructor for
-// the auto-reply success event.
 func NewCustomerMessageRepliedEvent(source string, occurredAt time.Time, payload CustomerMessagePayload) (Event, error) {
 	return newCustomerMessageEvent(CustomerMessageReplied, source, occurredAt, payload, "webhook.messaging.replied")
 }
 
-// NewCustomerMessageEscalatedEvent is the canonical constructor for
-// the operator-escalation event.
 func NewCustomerMessageEscalatedEvent(source string, occurredAt time.Time, payload CustomerMessagePayload) (Event, error) {
 	return newCustomerMessageEvent(CustomerMessageEscalatedToOperator, source, occurredAt, payload, "webhook.messaging.escalated")
 }

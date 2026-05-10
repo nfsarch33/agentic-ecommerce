@@ -6,18 +6,6 @@ import (
 	"time"
 )
 
-// Billing bounded context event type constants. The event types
-// follow the same dotted lower_case shape as membership.* and
-// digital.* so plugin manifests can subscribe with a single naming
-// convention.
-const (
-	SubscriptionCreated  EventType = "subscription.created"
-	SubscriptionUpdated  EventType = "subscription.updated"
-	SubscriptionCanceled EventType = "subscription.canceled"
-	InvoicePaid          EventType = "invoice.paid"
-	InvoiceFailed        EventType = "invoice.failed"
-)
-
 // BillingPayloadVersion is the schema version of BillingPayload. Bump
 // only on a breaking change to the field set; subscribers gate on
 // this value before consuming the payload.
