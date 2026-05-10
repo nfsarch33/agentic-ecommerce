@@ -38,4 +38,13 @@ var (
 
 	// ErrRouterClosed is returned by HandleEvent after Close.
 	ErrRouterClosed = errors.New("router: closed")
+
+	// ErrChannelNotYetImplemented is the per-channel marker the
+	// v3.9.1 EC-4-4 router-side recognition uses to flag a stub
+	// adapter call. Returned in ChannelDispatchResult.Cause for
+	// stub channels (Instagram + Pinterest) so callers can branch
+	// without parsing strings. The router emits the typed
+	// ChannelStatusNotYetImplementedEvent rather than enqueueing
+	// the call into the DLQ.
+	ErrChannelNotYetImplemented = errors.New("router: channel not yet implemented (stub)")
 )

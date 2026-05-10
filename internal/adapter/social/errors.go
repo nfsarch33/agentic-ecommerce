@@ -78,3 +78,14 @@ var (
 	// is missing entirely.
 	ErrTikTokMissingSignature = errors.New("tiktok: webhook signature missing")
 )
+
+// v3.9.1 EC-4-4 stub-channel sentinel. Returned by the Instagram +
+// Pinterest stub adapters until full integration lands in v4.1.x.
+// Callers branch via errors.Is so the channel router can pivot to
+// emit ChannelStatusNotYetImplementedEvent rather than enqueue the
+// stub call into the DLQ.
+var (
+	// ErrChannelNotImplemented is returned by stub adapter methods.
+	// Wrapped with the channel name + op so dashboards can pivot.
+	ErrChannelNotImplemented = errors.New("channel: not implemented yet (stub)")
+)

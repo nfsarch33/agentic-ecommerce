@@ -290,6 +290,35 @@ type Registry struct {
 	ROIQueryDurationSeconds          *Histogram
 	WorkflowReplayAssertionsTotal    *Counter
 
+	// v3.9.1 Existing #10 + EC-9-4 + EC-9-5 + EC-4-4 metrics.
+	// Cardinality budget per series:
+	//   ec_onboarding_wizard_steps_completed_total{tenant_id, step}
+	//     ~ tenants(10) * steps(4) = 40 series. Plan estimate ~50.
+	//   ec_onboarding_wizard_completion_duration_seconds histogram
+	//     ~ no labels = 1 series (10 buckets in textual output).
+	//   ec_channel_content_query_duration_seconds histogram
+	//     ~ no labels = 1 series (10 buckets in textual output).
+	//   ec_operator_alerts_total{tenant_id, alert_type, status}
+	//     ~ tenants(10) * alert_types(8) * statuses(4: pending|
+	//       acknowledged|resolved|expired) = 320 series upper-bound;
+	//       plan estimate ~150 series with realistic alert_type
+	//       distribution + sweeper expirations.
+	//   ec_operator_alerts_resolution_duration_seconds histogram
+	//     ~ no labels = 1 series (10 buckets in textual output).
+	//   ec_stub_channel_calls_total{tenant_id, channel, op}
+	//     ~ tenants(10) * channels(2: instagram|pinterest) *
+	//       ops(3: publish|update_order_status|create_listing)
+	//       = 60 series upper-bound; plan estimate ~40 once
+	//       production stubs swap in v4.1.x.
+	// Total ~ 250 additive series for v3.9.1; well under the
+	// per-binary 10_000 cap.
+	OnboardingWizardStepsCompleted     *Counter
+	OnboardingWizardCompletionDuration *Histogram
+	ChannelContentQueryDuration        *Histogram
+	OperatorAlertsTotal                *Counter
+	OperatorAlertsResolutionDuration   *Histogram
+	StubChannelCallsTotal              *Counter
+
 	// v3.9.0 EC-6-4 + EC-6-5 + EC-5-2 + EC-5-4 + EC-5-5 + carry-forward
 	// metrics. Cardinality budget per series:
 	//   ec_competitor_prices_observed_total{tenant_id, channel, undercut}
@@ -405,6 +434,12 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	r.ContentEMAScore = newGauge(r, "ec_content_ema_score", "v3.9.0 EC-5-5 content performance EMA score by tenant + channel + content_type.")
 	r.ContentEMAUpdatesTotal = newCounter(r, "ec_content_ema_updates_total", "v3.9.0 EC-5-5 content performance EMA updates by tenant + channel.")
 	r.ChannelStatusUpdatesTotal = newCounter(r, "ec_channel_status_updates_total", "v3.9.0 carry-forward closure -- ChannelStatusUpdater outcomes by tenant + channel + outcome (ok|failed).")
+	r.OnboardingWizardStepsCompleted = newCounter(r, "ec_onboarding_wizard_steps_completed_total", "v3.9.1 Existing #10 onboarding wizard step completions by tenant + step (1..4).")
+	r.OnboardingWizardCompletionDuration = newHistogram(r, "ec_onboarding_wizard_completion_duration_seconds", "v3.9.1 Existing #10 onboarding wizard end-to-end completion duration histogram.", defaultDurationBuckets)
+	r.ChannelContentQueryDuration = newHistogram(r, "ec_channel_content_query_duration_seconds", "v3.9.1 EC-9-4 channel content analytics request duration histogram.", defaultDurationBuckets)
+	r.OperatorAlertsTotal = newCounter(r, "ec_operator_alerts_total", "v3.9.1 EC-9-5 operator alert lifecycle counter by tenant + alert_type + status (pending|acknowledged|resolved|expired).")
+	r.OperatorAlertsResolutionDuration = newHistogram(r, "ec_operator_alerts_resolution_duration_seconds", "v3.9.1 EC-9-5 operator alert resolution duration histogram.", defaultDurationBuckets)
+	r.StubChannelCallsTotal = newCounter(r, "ec_stub_channel_calls_total", "v3.9.1 EC-4-4 IG/Pinterest stub adapter calls by tenant + channel + op (publish|update_order_status|create_listing).")
 	return r
 }
 
@@ -524,6 +559,12 @@ func (r *Registry) Handler() http.Handler {
 		r.ContentEMAScore.write(&sb)
 		r.ContentEMAUpdatesTotal.write(&sb)
 		r.ChannelStatusUpdatesTotal.write(&sb)
+		r.OnboardingWizardStepsCompleted.write(&sb)
+		r.OnboardingWizardCompletionDuration.write(&sb)
+		r.ChannelContentQueryDuration.write(&sb)
+		r.OperatorAlertsTotal.write(&sb)
+		r.OperatorAlertsResolutionDuration.write(&sb)
+		r.StubChannelCallsTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")

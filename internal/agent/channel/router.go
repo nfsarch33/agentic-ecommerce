@@ -45,6 +45,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nfsarch33/agentic-ecommerce/internal/channelport"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
 )
@@ -252,16 +253,28 @@ func (r *ChannelRouter) dispatchAll(ctx context.Context, payload eventbus.Produc
 		return fmt.Errorf("%w: tenant=%s product=%s", ErrNoMatchingChannel, payload.TenantID, payload.ProductID)
 	}
 	results := r.fanOut(ctx, matched, payload)
-	failed := 0
-	for _, res := range results {
-		if !errors.Is(res.Cause, ErrChannelDelivered) {
-			failed++
-		}
-	}
+	failed := countFailed(results)
 	if failed > 0 {
 		return fmt.Errorf("%w: %d/%d channels failed (tenant=%s product=%s)", ErrChannelDLQ, failed, len(results), payload.TenantID, payload.ProductID)
 	}
 	return nil
+}
+
+// countFailed returns the number of dispatch results that did not
+// resolve to a "delivered" or "not_yet_implemented" outcome. Pure;
+// no allocations. Cyclomatic 3.
+func countFailed(results []ChannelDispatchResult) int {
+	failed := 0
+	for _, res := range results {
+		if errors.Is(res.Cause, ErrChannelDelivered) {
+			continue
+		}
+		if errors.Is(res.Cause, ErrChannelNotYetImplemented) {
+			continue
+		}
+		failed++
+	}
+	return failed
 }
 
 // collectMatched walks the configured channel descriptors and keeps
@@ -308,19 +321,61 @@ func (r *ChannelRouter) fanOut(ctx context.Context, matched []ChannelDescriptor,
 
 // dispatchOne publishes to a single channel, recording metrics and
 // pushing to DLQ on failure. Always returns a populated result.
+//
+// v3.9.1 EC-4-4: stub channels (Instagram + Pinterest) surface
+// ErrChannelNotImplemented today; the router recognises the typed
+// sentinel and emits ChannelStatusNotYetImplemented as a
+// non-failure outcome (no DLQ, no delivered metric -- a dedicated
+// "not_yet_implemented" outcome label keeps dashboards honest).
+// Decomposition: the stub-recognition path stays in a tiny helper
+// (cyclomatic 2) so dispatchOne stays under cyclomatic 6.
 func (r *ChannelRouter) dispatchOne(parent context.Context, ch ChannelDescriptor, payload eventbus.ProductEnrichedPayload) ChannelDispatchResult {
 	ctx, cancel := context.WithTimeout(parent, r.cfg.DispatchTimeout)
 	defer cancel()
 	name := ch.Adapter.Name()
-	if err := ch.Adapter.Publish(ctx, payload); err != nil {
-		r.log.Warn("channel.router.publish_failed", "tenant_id", payload.TenantID, "product_id", payload.ProductID, "channel", name, "error", err)
-		r.recordDispatch(name, "dlq")
-		r.enqueueDLQ(parent, payload, name, err)
-		r.recordDLQ(name, "publish_failed")
-		return ChannelDispatchResult{Channel: name, Outcome: "dlq", Cause: fmt.Errorf("%w: channel=%s: %w", ErrChannelDLQ, name, err)}
+	err := ch.Adapter.Publish(ctx, payload)
+	if err == nil {
+		r.recordDispatch(name, "delivered")
+		return ChannelDispatchResult{Channel: name, Outcome: "delivered", Cause: ErrChannelDelivered}
 	}
-	r.recordDispatch(name, "delivered")
-	return ChannelDispatchResult{Channel: name, Outcome: "delivered", Cause: ErrChannelDelivered}
+	if r.handleStubNotImplemented(parent, payload, name, err) {
+		return ChannelDispatchResult{Channel: name, Outcome: "not_yet_implemented", Cause: ErrChannelNotYetImplemented}
+	}
+	r.log.Warn("channel.router.publish_failed", "tenant_id", payload.TenantID, "product_id", payload.ProductID, "channel", name, "error", err)
+	r.recordDispatch(name, "dlq")
+	r.enqueueDLQ(parent, payload, name, err)
+	r.recordDLQ(name, "publish_failed")
+	return ChannelDispatchResult{Channel: name, Outcome: "dlq", Cause: fmt.Errorf("%w: channel=%s: %w", ErrChannelDLQ, name, err)}
+}
+
+// handleStubNotImplemented surfaces the v3.9.1 EC-4-4 stub-channel
+// recognition. Returns true when the dispatch was treated as a stub
+// outcome (no DLQ); false otherwise. Cyclomatic 2.
+func (r *ChannelRouter) handleStubNotImplemented(parent context.Context, payload eventbus.ProductEnrichedPayload, name string, err error) bool {
+	if !errors.Is(err, ErrChannelNotYetImplemented) && !channelport.IsStubChannel(name) {
+		return false
+	}
+	r.recordDispatch(name, "not_yet_implemented")
+	if r.cfg.Publisher == nil {
+		return true
+	}
+	evt, evtErr := eventbus.NewChannelStatusNotYetImplementedEvent("channel.router", r.now(), eventbus.ChannelStatusNotYetImplementedPayload{
+		Version:    eventbus.ChannelStatusNotYetImplementedPayloadVersion,
+		TenantID:   payload.TenantID,
+		Channel:    name,
+		Op:         "publish",
+		ProductID:  payload.ProductID,
+		Reason:     err.Error(),
+		OccurredAt: r.now(),
+	})
+	if evtErr != nil {
+		r.log.Warn("channel.router.stub_event_failed", "tenant_id", payload.TenantID, "channel", name, "error", evtErr)
+		return true
+	}
+	if pubErr := r.cfg.Publisher.Publish(parent, evt); pubErr != nil {
+		r.log.Warn("channel.router.stub_publish_failed", "tenant_id", payload.TenantID, "channel", name, "error", pubErr)
+	}
+	return true
 }
 
 // enqueueDLQ writes a DLQRecord; failures are logged but do not
