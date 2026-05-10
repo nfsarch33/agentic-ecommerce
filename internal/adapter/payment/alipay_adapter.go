@@ -41,6 +41,21 @@ type AlipayAdapterConfig struct {
 	HTTPClient     *http.Client
 }
 
+const (
+	alipayProductionURL = "https://openapi.alipay.com/gateway.do"
+	alipaySandboxURL    = "https://openapi-sandbox.dl.alipaydev.com/gateway.do"
+)
+
+// ResolveAlipayGatewayURL returns the sandbox or production URL based
+// on the EC_ALIPAY_SANDBOX env var (default: sandbox).
+func ResolveAlipayGatewayURL() string {
+	v := os.Getenv("EC_ALIPAY_SANDBOX")
+	if v == "" || v == "true" || v == "1" {
+		return alipaySandboxURL
+	}
+	return alipayProductionURL
+}
+
 // NewAlipayAdapter builds an Alipay adapter from env/config.
 func NewAlipayAdapter(cfg AlipayAdapterConfig) (*AlipayAdapter, error) {
 	appID := cfg.AppID
@@ -60,7 +75,7 @@ func NewAlipayAdapter(cfg AlipayAdapterConfig) (*AlipayAdapter, error) {
 	}
 	gatewayURL := cfg.GatewayURL
 	if gatewayURL == "" {
-		gatewayURL = "https://openapi.alipay.com/gateway.do"
+		gatewayURL = ResolveAlipayGatewayURL()
 	}
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {

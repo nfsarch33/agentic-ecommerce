@@ -179,3 +179,42 @@ func TestWeChatGetStatus_EmptyPaymentID(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, port.ErrPaymentNotFound)
 }
+
+func TestResolveWeChatAPIURL_Sandbox(t *testing.T) {
+	tests := []struct {
+		name    string
+		envVal  string
+		wantURL string
+	}{
+		{"empty defaults to sandbox", "", "https://api.mch.weixin.qq.com/sandboxnew"},
+		{"true is sandbox", "true", "https://api.mch.weixin.qq.com/sandboxnew"},
+		{"1 is sandbox", "1", "https://api.mch.weixin.qq.com/sandboxnew"},
+		{"false is production", "false", "https://api.mch.weixin.qq.com"},
+		{"0 is production", "0", "https://api.mch.weixin.qq.com"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("EC_WECHAT_SANDBOX", tc.envVal)
+			got := payment.ResolveWeChatAPIURL()
+			assert.Equal(t, tc.wantURL, got)
+		})
+	}
+}
+
+func TestNewWeChatAdapter_UsesSandboxURLByDefault(t *testing.T) {
+	t.Setenv("EC_WECHAT_SANDBOX", "true")
+	srv := wechatTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"prepay_id": "wx_sb_prepay", "code_url": "weixin://wxpay/bizpayurl?pr=sb",
+		})
+	})
+	a, err := payment.NewWeChatAdapter(payment.WeChatAdapterConfig{
+		AppID: "wx_sb", MchID: "mch_sb", APIKeyV3: testWeChatAPIKeyV3,
+		CertSerial: "cert_sb", APIURL: srv.URL,
+	})
+	require.NoError(t, err)
+	res, err := a.Charge(context.Background(), "t1", "order-sb",
+		port.Money{Amount: 100, Currency: "CNY"}, port.PaymentMethodWeChat)
+	require.NoError(t, err)
+	assert.Equal(t, "order-sb", res.PaymentID)
+}
