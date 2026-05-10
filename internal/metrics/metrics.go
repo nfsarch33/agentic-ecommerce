@@ -427,6 +427,17 @@ type Registry struct {
 	// Total ~ 20 additive series for v4.17.0.
 	Mem0Requests *Counter
 	Mem0Duration *Histogram
+
+	// v5.5.0 Postgres connection pool metrics. Cardinality budget:
+	//   ec_pg_pool_open_connections gauge ~ 1 series.
+	//   ec_pg_pool_idle_connections gauge ~ 1 series.
+	//   ec_pg_pool_wait_total counter ~ 1 series.
+	//   ec_pg_pool_wait_duration_seconds histogram ~ 1 series + buckets.
+	// Total ~ 4 additive series for v5.5.0 (+ ~10 bucket lines).
+	PGPoolOpenConnections *Gauge
+	PGPoolIdleConnections *Gauge
+	PGPoolWaitTotal       *Counter
+	PGPoolWaitDuration    *Histogram
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -531,6 +542,7 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	RegisterMinimaxMetrics(r)
 	RegisterComparisonMetrics(r)
 	registerMem0Metrics(r)
+	registerPGPoolMetrics(r)
 	return r
 }
 
@@ -682,6 +694,10 @@ func (r *Registry) Handler() http.Handler {
 		r.ComparisonScenarioPassRate.write(&sb)
 		r.Mem0Requests.write(&sb)
 		r.Mem0Duration.write(&sb)
+		r.PGPoolOpenConnections.write(&sb)
+		r.PGPoolIdleConnections.write(&sb)
+		r.PGPoolWaitTotal.write(&sb)
+		r.PGPoolWaitDuration.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
