@@ -1,13 +1,14 @@
-// File scope: v3.9.1 EC-4-4 Pinterest stub adapter RED tests.
-//
-// Mirrors the Instagram stub tests; both adapters share the same
-// behaviour contract today (Name + UpdateOrderStatus + CreateListing
-// returning ErrChannelNotImplemented within 10ms).
 package social
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -16,89 +17,134 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 )
 
-func TestPinterestStub_NameReturnsPinterest(t *testing.T) {
-	t.Parallel()
-	a, err := NewPinterestStubAdapter(nil, "tenant-v391")
-	if err != nil {
-		t.Fatalf("NewPinterestStubAdapter: %v", err)
-	}
-	t.Cleanup(func() { _ = a.Close(context.Background()) })
-	if got := a.Name(); got != PinterestChannelName {
-		t.Fatalf("Name=%q want=%q", got, PinterestChannelName)
-	}
-	if got := a.ChannelName(); got != PinterestChannelName {
-		t.Fatalf("ChannelName=%q want=%q", got, PinterestChannelName)
-	}
+func newTestPinServer(t *testing.T, statusCode int, body any) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(statusCode)
+		if body != nil {
+			_ = json.NewEncoder(w).Encode(body)
+		}
+	}))
 }
 
-func TestPinterestStub_UpdateOrderStatusReturnsNotImplemented(t *testing.T) {
-	t.Parallel()
-	a, err := NewPinterestStubAdapter(nil, "tenant-v391")
-	if err != nil {
-		t.Fatalf("NewPinterestStubAdapter: %v", err)
-	}
-	t.Cleanup(func() { _ = a.Close(context.Background()) })
-	start := time.Now()
-	err = a.UpdateOrderStatus(context.Background(), fulfilment.ChannelStatusUpdate{
-		TenantID:        "tenant-v391",
-		ExternalOrderID: "pin-order-1",
+func newTestPinAdapter(t *testing.T, serverURL string) *PinterestAdapter {
+	t.Helper()
+	secret := "pinterest-secret-at-least-32-bytes!!"
+	a, err := NewPinterestAdapter(nil, "tenant-v460", PinterestConfig{
+		AppID:       "pin-app-id",
+		AppSecret:   secret,
+		AccessToken: "pin-access-token",
+		BaseURL:     serverURL,
+		Now:         func() time.Time { return time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC) },
 	})
-	dur := time.Since(start)
-	if !errors.Is(err, ErrChannelNotImplemented) {
-		t.Fatalf("UpdateOrderStatus err=%v want ErrChannelNotImplemented", err)
+	if err != nil {
+		t.Fatalf("NewPinterestAdapter: %v", err)
 	}
-	if dur > 10*time.Millisecond {
-		t.Fatalf("stub UpdateOrderStatus took %s; want <10ms", dur)
+	t.Cleanup(func() { _ = a.Close(context.Background()) })
+	return a
+}
+
+func TestPinterest_CatalogFeed(t *testing.T) {
+	t.Parallel()
+	srv := newTestPinServer(t, http.StatusOK, map[string]string{"id": "pin-1"})
+	defer srv.Close()
+	a := newTestPinAdapter(t, srv.URL)
+
+	err := a.Publish(context.Background(), eventbus.ProductEnrichedPayload{
+		Version:      1,
+		TenantID:     "tenant-v460",
+		ProductID:    "sku-1",
+		EnglishTitle: "Pinterest Product",
+		PriceCents:   3500,
+		Currency:     "AUD",
+		StockUnits:   5,
+	})
+	if err != nil {
+		t.Fatalf("Publish: %v", err)
 	}
 }
 
-func TestPinterestStub_CreateListingReturnsNotImplemented(t *testing.T) {
+func TestPinterest_ProductPin(t *testing.T) {
 	t.Parallel()
-	a, err := NewPinterestStubAdapter(nil, "tenant-v391")
+	srv := newTestPinServer(t, http.StatusOK, nil)
+	defer srv.Close()
+	a := newTestPinAdapter(t, srv.URL)
+
+	err := a.CreateListing(context.Background(), channelport.ListingRequest{
+		TenantID:      "tenant-v460",
+		ProductID:     "sku-2",
+		Channel:       PinterestChannelName,
+		Title:         "Pin Product",
+		PriceAUDCents: 2999,
+	})
 	if err != nil {
-		t.Fatalf("NewPinterestStubAdapter: %v", err)
+		t.Fatalf("CreateListing: %v", err)
 	}
-	t.Cleanup(func() { _ = a.Close(context.Background()) })
-	start := time.Now()
-	err = a.CreateListing(context.Background(), channelport.ListingRequest{
-		TenantID:      "tenant-v391",
+}
+
+func TestPinterest_OrderTracking(t *testing.T) {
+	t.Parallel()
+	srv := newTestPinServer(t, http.StatusOK, nil)
+	defer srv.Close()
+	a := newTestPinAdapter(t, srv.URL)
+
+	err := a.UpdateOrderStatus(context.Background(), fulfilment.ChannelStatusUpdate{
+		TenantID:        "tenant-v460",
+		ExternalOrderID: "pin-order-1",
+		Status:          "shipped",
+		TrackingNumber:  "PTK-001",
+	})
+	if err != nil {
+		t.Fatalf("UpdateOrderStatus: %v", err)
+	}
+}
+
+func TestPinterest_WebhookVerify(t *testing.T) {
+	t.Parallel()
+	secret := "pinterest-secret-at-least-32-bytes!!"
+	a := newTestPinAdapter(t, "http://unused")
+	a.cfg.AppSecret = secret
+
+	payload := []byte(`{"event":"order.created"}`)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(payload)
+	sig := hex.EncodeToString(mac.Sum(nil))
+
+	if err := a.VerifyWebhook(sig, payload); err != nil {
+		t.Fatalf("VerifyWebhook: %v", err)
+	}
+}
+
+func TestPinterest_WebhookRejectBadSig(t *testing.T) {
+	t.Parallel()
+	a := newTestPinAdapter(t, "http://unused")
+
+	payload := []byte(`{"event":"order.created"}`)
+	if err := a.VerifyWebhook("badbadbadbad", payload); !errors.Is(err, ErrPinterestSignatureBad) {
+		t.Fatalf("expected ErrPinterestSignatureBad, got: %v", err)
+	}
+}
+
+func TestPinterest_StubToFullMigration(t *testing.T) {
+	t.Parallel()
+	srv := newTestPinServer(t, http.StatusOK, nil)
+	defer srv.Close()
+	a := newTestPinAdapter(t, srv.URL)
+
+	if a.Name() != PinterestChannelName {
+		t.Fatalf("Name=%q want=%q", a.Name(), PinterestChannelName)
+	}
+	err := a.CreateListing(context.Background(), channelport.ListingRequest{
+		TenantID:      "tenant-v460",
 		ProductID:     "sku-1",
 		Channel:       PinterestChannelName,
-		Title:         "Sample Pinterest pin",
-		PriceAUDCents: 5500,
+		Title:         "Pin Product",
+		PriceAUDCents: 2999,
 	})
-	dur := time.Since(start)
-	if !errors.Is(err, ErrChannelNotImplemented) {
-		t.Fatalf("CreateListing err=%v want ErrChannelNotImplemented", err)
-	}
-	if dur > 10*time.Millisecond {
-		t.Fatalf("stub CreateListing took %s; want <10ms", dur)
-	}
-}
-
-func TestPinterestStub_PublishReturnsNotImplemented(t *testing.T) {
-	t.Parallel()
-	a, err := NewPinterestStubAdapter(nil, "tenant-v391")
 	if err != nil {
-		t.Fatalf("NewPinterestStubAdapter: %v", err)
+		t.Fatalf("CreateListing should succeed: %v", err)
 	}
-	t.Cleanup(func() { _ = a.Close(context.Background()) })
-	payload := eventbus.ProductEnrichedPayload{
-		Version:      eventbus.ProductEnrichedPayloadVersion,
-		TenantID:     "tenant-v391",
-		ProductID:    "sku-1",
-		EnglishTitle: "Sample pin",
-		PriceCents:   5500,
-		Currency:     "AUD",
-	}
-	if err := a.Publish(context.Background(), payload); !errors.Is(err, ErrChannelNotImplemented) {
-		t.Fatalf("Publish err=%v want ErrChannelNotImplemented", err)
-	}
-}
-
-func TestPinterestStub_RequiresTenantID(t *testing.T) {
-	t.Parallel()
-	if _, err := NewPinterestStubAdapter(nil, ""); err == nil {
-		t.Fatal("expected error for empty tenant_id")
+	if errors.Is(err, ErrChannelNotImplemented) {
+		t.Fatal("production adapter must not return ErrChannelNotImplemented")
 	}
 }
