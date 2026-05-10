@@ -146,6 +146,16 @@ type KPIs struct {
 	ChannelContentP95Ms             float64 `json:"channel_content_p95_ms,omitempty"`
 	OperatorAlertsPendingTotal      int     `json:"operator_alerts_pending_total,omitempty"`
 	StubChannelCallsTotal           int     `json:"stub_channel_calls_total,omitempty"`
+
+	// v4.11.0 Agentrace deep-integration KPIs. Additive so prior
+	// schema readers keep working. Populated by AgentraceAdapter
+	// from cursor-tools agentrace loopback (HTTP) or JSONL fallback.
+	AgentraceAvailable          bool    `json:"agentrace_available,omitempty"`
+	AgentraceSessionDurationSec float64 `json:"agentrace_session_duration_seconds,omitempty"`
+	AgentraceToolCallCount      int     `json:"agentrace_tool_call_count,omitempty"`
+	AgentraceCostUSD            float64 `json:"agentrace_cost_usd,omitempty"`
+	AgentraceBottleneckCount    int     `json:"agentrace_bottleneck_count,omitempty"`
+	AgentraceParallelismRatio   float64 `json:"agentrace_parallelism_efficiency,omitempty"`
 }
 
 // Config controls Sink construction.
