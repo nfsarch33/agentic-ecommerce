@@ -139,24 +139,33 @@ func (m *TokenManager) VerifyAccessToken(token string) (AccessClaims, error) {
 	if len(parts) != 3 {
 		return AccessClaims{}, ErrInvalidToken
 	}
+	if err := m.verifyTokenSignature(parts); err != nil {
+		return AccessClaims{}, err
+	}
+	return m.decodeAndValidateClaims(parts)
+}
+
+func (m *TokenManager) verifyTokenSignature(parts []string) error {
 	signingInput := parts[0] + "." + parts[1]
 	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil {
-		return AccessClaims{}, ErrInvalidToken
+		return ErrInvalidToken
 	}
 	expected := m.mac([]byte(signingInput))
 	if subtle.ConstantTimeCompare(signature, expected) != 1 {
-		return AccessClaims{}, ErrInvalidToken
+		return ErrInvalidToken
 	}
-
 	var header jwtHeader
 	if err := decodeSegment(parts[0], &header); err != nil {
-		return AccessClaims{}, ErrInvalidToken
+		return ErrInvalidToken
 	}
 	if header.Algorithm != "HS256" || header.Type != "JWT" {
-		return AccessClaims{}, ErrInvalidToken
+		return ErrInvalidToken
 	}
+	return nil
+}
 
+func (m *TokenManager) decodeAndValidateClaims(parts []string) (AccessClaims, error) {
 	var raw jwtClaims
 	if err := decodeSegment(parts[1], &raw); err != nil {
 		return AccessClaims{}, ErrInvalidToken
