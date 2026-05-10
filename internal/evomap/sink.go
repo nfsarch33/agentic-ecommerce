@@ -138,6 +138,14 @@ type KPIs struct {
 	HashtagCaptionAvgScore           float64 `json:"hashtag_caption_avg_score,omitempty"`
 	ContentEMAMaxScorePerChannel     float64 `json:"content_ema_max_score_per_channel,omitempty"`
 	ChannelStatusUpdatesTotal        int     `json:"channel_status_updates_total,omitempty"`
+
+	// v3.9.1 Existing #10 + EC-9-4 + EC-9-5 + EC-4-4 KPIs. Additive
+	// so prior schema readers keep working. Surface from the v3.9.1
+	// observability spine (internal/observability/v391_metrics.go).
+	OnboardingWizardsCompletedTotal int     `json:"onboarding_wizards_completed_total,omitempty"`
+	ChannelContentP95Ms             float64 `json:"channel_content_p95_ms,omitempty"`
+	OperatorAlertsPendingTotal      int     `json:"operator_alerts_pending_total,omitempty"`
+	StubChannelCallsTotal           int     `json:"stub_channel_calls_total,omitempty"`
 }
 
 // Config controls Sink construction.
@@ -359,6 +367,13 @@ type AggregateResult struct {
 	MeanHashtagCaptionScore           float64
 	MaxContentEMAScorePerChannel      float64
 	TotalChannelStatusUpdates         int
+
+	// v3.9.1 Existing #10 + EC-9-4 + EC-9-5 + EC-4-4 KPIs aggregated
+	// into the daily roll-up.
+	TotalOnboardingWizardsCompleted int
+	MaxChannelContentP95Ms          float64
+	MaxOperatorAlertsPending        int
+	TotalStubChannelCalls           int
 }
 
 // aggregateAccumulator carries the per-iteration running sums + sample
@@ -406,6 +421,7 @@ func Aggregate(caps []Capsule) AggregateResult {
 		accumulateCustomerServiceAnalytics(c, &res)
 		accumulateUIAutoHardening(c, &res, &acc)
 		accumulateV390(c, &res, &acc)
+		accumulateV391(c, &res)
 	}
 	n := float64(len(caps))
 	res.MeanThroughputRPS = acc.sumRPS / n
@@ -558,6 +574,19 @@ func accumulateUIAutoHardening(c Capsule, res *AggregateResult, acc *aggregateAc
 		acc.sumCAPTCHAResolutionSeconds += c.KPIs.CAPTCHAAvgResolutionSeconds
 		acc.captchaResolutionSamples++
 	}
+}
+
+// accumulateV391 rolls in the v3.9.1 Existing #10 + EC-9-4 + EC-9-5
+// + EC-4-4 KPIs. Cyclomatic 4.
+func accumulateV391(c Capsule, res *AggregateResult) {
+	res.TotalOnboardingWizardsCompleted += c.KPIs.OnboardingWizardsCompletedTotal
+	if c.KPIs.ChannelContentP95Ms > res.MaxChannelContentP95Ms {
+		res.MaxChannelContentP95Ms = c.KPIs.ChannelContentP95Ms
+	}
+	if c.KPIs.OperatorAlertsPendingTotal > res.MaxOperatorAlertsPending {
+		res.MaxOperatorAlertsPending = c.KPIs.OperatorAlertsPendingTotal
+	}
+	res.TotalStubChannelCalls += c.KPIs.StubChannelCallsTotal
 }
 
 // accumulateV390 rolls in the v3.9.0 EC-6-4 + EC-6-5 + EC-5-2 +
