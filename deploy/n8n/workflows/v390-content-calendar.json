@@ -1,0 +1,169 @@
+{
+  "active": false,
+  "connections": {
+    "Calendar Tick": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "List Upcoming Entries",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Dispatch Publish": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Acknowledge Calendar Tick",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Filter Due": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Dispatch Publish",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "List Upcoming Entries": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Filter Due",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "v390 Content Calendar - Scheduled Publisher",
+  "nodes": [
+    {
+      "id": "calendar-tick-001",
+      "name": "Calendar Tick",
+      "notes": "Polls every 5 minutes for due calendar entries. Triggered automatically when n8n is running.",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "id": "calendar-list-002",
+      "name": "List Upcoming Entries",
+      "notes": "Set AGENTIC_ECOMMERCE_API_URL in the n8n container environment. Do not commit production hostnames.",
+      "parameters": {
+        "method": "GET",
+        "options": {
+          "timeout": 5000
+        },
+        "url": "={{$env.AGENTIC_ECOMMERCE_API_URL}}/api/v1/content/calendar/upcoming?limit=20"
+      },
+      "position": [
+        520,
+        300
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2
+    },
+    {
+      "id": "calendar-filter-003",
+      "name": "Filter Due",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "calendar-due-cond",
+              "leftValue": "={{Date.parse($json.scheduled_at)}}",
+              "operator": {
+                "operation": "lte",
+                "type": "number"
+              },
+              "rightValue": "={{Date.now()}}"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        820,
+        300
+      ],
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "calendar-publish-004",
+      "name": "Dispatch Publish",
+      "parameters": {
+        "contentType": "json",
+        "jsonBody": "={\"entry_id\": $json.id, \"channel\": $json.channel, \"content_type\": $json.content_type, \"payload_ref\": $json.payload_ref}",
+        "method": "POST",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "={{$env.AGENTIC_ECOMMERCE_API_URL}}/api/v1/content/calendar/publish"
+      },
+      "position": [
+        1120,
+        300
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2
+    },
+    {
+      "id": "calendar-ack-005",
+      "name": "Acknowledge Calendar Tick",
+      "parameters": {
+        "options": {},
+        "respondWith": "json",
+        "responseBody": "={\"ok\": true, \"workflow\": \"v390-content-calendar-scheduled-publisher\"}"
+      },
+      "position": [
+        1420,
+        300
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false
+  },
+  "versionId": "v390-content-calendar-1"
+}
+

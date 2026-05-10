@@ -126,6 +126,18 @@ type KPIs struct {
 	UIAutoRateLimitDropsTotal   int     `json:"uiauto_rate_limit_drops_total,omitempty"`
 	CAPTCHADetectionsTotal      int     `json:"captcha_detections_total,omitempty"`
 	CAPTCHAAvgResolutionSeconds float64 `json:"captcha_avg_resolution_seconds,omitempty"`
+
+	// v3.9.0 EC-6-4 + EC-6-5 + EC-5-2 + EC-5-4 + EC-5-5 +
+	// carry-forward KPIs. Additive so prior schema readers keep
+	// working. Surface from the v3.9.0 observability spine
+	// (internal/observability/v390_metrics.go) + emitted per-minute
+	// by the sampler driver.
+	CompetitorUndercutsDetectedTotal int     `json:"competitor_undercuts_detected_total,omitempty"`
+	MarginDashboardP95Ms             float64 `json:"margin_dashboard_p95_ms,omitempty"`
+	ContentCalendarPublishingP95Ms   float64 `json:"content_calendar_publishing_p95_ms,omitempty"`
+	HashtagCaptionAvgScore           float64 `json:"hashtag_caption_avg_score,omitempty"`
+	ContentEMAMaxScorePerChannel     float64 `json:"content_ema_max_score_per_channel,omitempty"`
+	ChannelStatusUpdatesTotal        int     `json:"channel_status_updates_total,omitempty"`
 }
 
 // Config controls Sink construction.
@@ -338,6 +350,15 @@ type AggregateResult struct {
 	TotalUIAutoRateLimitDrops    int
 	TotalCAPTCHADetections       int
 	MeanCAPTCHAResolutionSeconds float64
+
+	// v3.9.0 EC-6-4 + EC-6-5 + EC-5-2 + EC-5-4 + EC-5-5 +
+	// carry-forward KPIs aggregated into the daily roll-up.
+	TotalCompetitorUndercutsDetected  int
+	MaxMarginDashboardP95Ms           float64
+	MaxContentCalendarPublishingP95Ms float64
+	MeanHashtagCaptionScore           float64
+	MaxContentEMAScorePerChannel      float64
+	TotalChannelStatusUpdates         int
 }
 
 // aggregateAccumulator carries the per-iteration running sums + sample
@@ -352,10 +373,12 @@ type aggregateAccumulator struct {
 	sumEnrichmentQuality        float64
 	sumVideoScriptQuality       float64
 	sumCAPTCHAResolutionSeconds float64
+	sumHashtagCaptionScore      float64
 	supplierScoreSamples        int
 	enrichmentQualitySamples    int
 	videoScriptQualitySamples   int
 	captchaResolutionSamples    int
+	hashtagCaptionScoreSamples  int
 }
 
 // Aggregate computes summary KPIs across a slice of capsules.
@@ -382,6 +405,7 @@ func Aggregate(caps []Capsule) AggregateResult {
 		accumulatePricingFulfilment(c, &res)
 		accumulateCustomerServiceAnalytics(c, &res)
 		accumulateUIAutoHardening(c, &res, &acc)
+		accumulateV390(c, &res, &acc)
 	}
 	n := float64(len(caps))
 	res.MeanThroughputRPS = acc.sumRPS / n
@@ -398,6 +422,9 @@ func Aggregate(caps []Capsule) AggregateResult {
 	}
 	if acc.captchaResolutionSamples > 0 {
 		res.MeanCAPTCHAResolutionSeconds = acc.sumCAPTCHAResolutionSeconds / float64(acc.captchaResolutionSamples)
+	}
+	if acc.hashtagCaptionScoreSamples > 0 {
+		res.MeanHashtagCaptionScore = acc.sumHashtagCaptionScore / float64(acc.hashtagCaptionScoreSamples)
 	}
 	return res
 }
@@ -531,4 +558,24 @@ func accumulateUIAutoHardening(c Capsule, res *AggregateResult, acc *aggregateAc
 		acc.sumCAPTCHAResolutionSeconds += c.KPIs.CAPTCHAAvgResolutionSeconds
 		acc.captchaResolutionSamples++
 	}
+}
+
+// accumulateV390 rolls in the v3.9.0 EC-6-4 + EC-6-5 + EC-5-2 +
+// EC-5-4 + EC-5-5 + carry-forward KPIs.
+func accumulateV390(c Capsule, res *AggregateResult, acc *aggregateAccumulator) {
+	res.TotalCompetitorUndercutsDetected += c.KPIs.CompetitorUndercutsDetectedTotal
+	if c.KPIs.MarginDashboardP95Ms > res.MaxMarginDashboardP95Ms {
+		res.MaxMarginDashboardP95Ms = c.KPIs.MarginDashboardP95Ms
+	}
+	if c.KPIs.ContentCalendarPublishingP95Ms > res.MaxContentCalendarPublishingP95Ms {
+		res.MaxContentCalendarPublishingP95Ms = c.KPIs.ContentCalendarPublishingP95Ms
+	}
+	if c.KPIs.HashtagCaptionAvgScore > 0 {
+		acc.sumHashtagCaptionScore += c.KPIs.HashtagCaptionAvgScore
+		acc.hashtagCaptionScoreSamples++
+	}
+	if c.KPIs.ContentEMAMaxScorePerChannel > res.MaxContentEMAScorePerChannel {
+		res.MaxContentEMAScorePerChannel = c.KPIs.ContentEMAMaxScorePerChannel
+	}
+	res.TotalChannelStatusUpdates += c.KPIs.ChannelStatusUpdatesTotal
 }
