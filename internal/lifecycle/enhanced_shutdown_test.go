@@ -29,8 +29,8 @@ func TestEnhancedShutdown_AllPhasesComplete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	for i, e := range executed {
-		if !e.Load() {
+	for i := range executed {
+		if !executed[i].Load() {
 			t.Fatalf("phase %d not executed", i)
 		}
 	}

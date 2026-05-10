@@ -417,6 +417,16 @@ type Registry struct {
 	ComparisonAgreementRate      *Gauge
 	ComparisonScenarioDurationMs *Gauge
 	ComparisonScenarioPassRate   *Gauge
+
+	// v4.17.0 mem0 memory-layer client metrics.
+	// Cardinality budget:
+	//   ec_mem0_requests_total{op, status}
+	//     ~ ops(3: store/search/delete) * statuses(4: ok/error/
+	//       circuit_open/disabled) = 12 series.
+	//   ec_mem0_request_duration_seconds{op} ~ 3 series + buckets.
+	// Total ~ 20 additive series for v4.17.0.
+	Mem0Requests *Counter
+	Mem0Duration *Histogram
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -520,6 +530,7 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	RegisterAgentraceMetrics(r)
 	RegisterMinimaxMetrics(r)
 	RegisterComparisonMetrics(r)
+	registerMem0Metrics(r)
 	return r
 }
 
@@ -669,6 +680,8 @@ func (r *Registry) Handler() http.Handler {
 		r.ComparisonAgreementRate.write(&sb)
 		r.ComparisonScenarioDurationMs.write(&sb)
 		r.ComparisonScenarioPassRate.write(&sb)
+		r.Mem0Requests.write(&sb)
+		r.Mem0Duration.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
