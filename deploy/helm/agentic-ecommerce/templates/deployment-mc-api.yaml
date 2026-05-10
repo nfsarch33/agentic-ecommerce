@@ -1,0 +1,56 @@
+{{- $binary := "mc-api" }}
+{{- $cfg := index .Values.binaries $binary }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentic-ecommerce.fullname" . }}-{{ $binary }}
+  labels:
+    {{- include "agentic-ecommerce.labels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ $binary }}
+spec:
+  replicas: {{ $cfg.replicas }}
+  selector:
+    matchLabels:
+      {{- include "agentic-ecommerce.selectorLabels" (dict "name" $binary "release" .Release.Name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentic-ecommerce.selectorLabels" (dict "name" $binary "release" .Release.Name) | nindent 8 }}
+        app.kubernetes.io/component: {{ $binary }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ $binary }}
+          image: "{{ .Values.global.image.registry }}/agentic-ecommerce-{{ $binary }}:{{ .Values.global.image.tag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $cfg.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "agentic-ecommerce.fullname" . }}-config
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml $cfg.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

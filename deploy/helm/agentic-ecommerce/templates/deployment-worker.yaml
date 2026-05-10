@@ -1,0 +1,60 @@
+{{- range $binary := list "content-worker" "agent-worker" "temporal-worker" "uiauto-compare" "ec-cli" "evomap-rollup" }}
+{{- $cfg := index $.Values.binaries $binary }}
+{{- if gt (int $cfg.replicas) 0 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentic-ecommerce.fullname" $ }}-{{ $binary }}
+  labels:
+    {{- include "agentic-ecommerce.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $binary }}
+spec:
+  replicas: {{ $cfg.replicas }}
+  selector:
+    matchLabels:
+      {{- include "agentic-ecommerce.selectorLabels" (dict "name" $binary "release" $.Release.Name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentic-ecommerce.selectorLabels" (dict "name" $binary "release" $.Release.Name) | nindent 8 }}
+        app.kubernetes.io/component: {{ $binary }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ $binary }}
+          image: "{{ $.Values.global.image.registry }}/agentic-ecommerce-{{ $binary }}:{{ $.Values.global.image.tag }}"
+          imagePullPolicy: {{ $.Values.global.image.pullPolicy }}
+          ports:
+            - name: probes
+              containerPort: 9090
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "agentic-ecommerce.fullname" $ }}-config
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: probes
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: probes
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml $cfg.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+{{- end }}
+{{- end }}

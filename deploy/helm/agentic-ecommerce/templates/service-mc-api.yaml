@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agentic-ecommerce.fullname" . }}-mc-api
+  labels:
+    {{- include "agentic-ecommerce.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mc-api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "agentic-ecommerce.selectorLabels" (dict "name" "mc-api" "release" .Release.Name) | nindent 4 }}
