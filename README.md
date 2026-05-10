@@ -1,38 +1,50 @@
 # Agentic Ecommerce
 
-Standalone Go service stack for WooCommerce-first agentic ecommerce.
+[![CI](https://github.com/nfsarch33/agentic-ecommerce/actions/workflows/ci.yml/badge.svg)](https://github.com/nfsarch33/agentic-ecommerce/actions/workflows/ci.yml)
+![Go](https://img.shields.io/badge/Go-1.26.3-00ADD8?logo=go)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-Current release: **v2.0.0**. See `VERSION`, `CHANGELOG.md`, and `docs/release-checklist.md` for release gates.
+Production-ready agentic e-commerce platform with multi-channel selling, AI-driven pricing, 4-provider payment gateway, cloud-native K8s deployment, GDPR compliance, and MADRL agent coordination.
 
-## Scope
+Current release: **v5.0.0**. See `VERSION`, `CHANGELOG.md`, and `docs/release-checklist.md` for release gates.
 
-- Mission Control API spine (`cmd/mc-api`) for storefront, admin, tenant, workflow, media, RAG, webhook, and compliance routes
-- WooCommerce sync worker (`cmd/wc-sync`)
-- Content, agent, and Temporal workers (`cmd/content-worker`, `cmd/agent-worker`, `cmd/temporal-worker`)
-- Clean Architecture packages under `internal/domain`, `internal/port`, `internal/app`, and `internal/adapter`
+## Features
 
-The v2.0.0 stack keeps WooCommerce cashflow first while adding durable Temporal workflows, n8n-compatible event automation, Media Intelligence, tenant-aware admin/compliance reporting, and RAG-grounded content generation.
+- **Multi-channel selling** -- TikTok Shop, Facebook, Instagram, Pinterest, RedNote, WooCommerce with unified listing, order, and inventory sync across all 6 channels
+- **4-provider payment gateway** -- Stripe, Alipay, WeChat Pay, PayPal with Temporal saga orchestration, webhook normalisation, and AI payment advisor
+- **AI-driven pricing** -- competitor price scraping, dynamic pricing agent with margin guardrails, MADRL multi-agent coordination for pricing vs fulfilment conflict resolution
+- **China sourcing pipeline** -- 1688 + Taobao adapters, supplier scoring, AU-import compliance gate, trend-signal blending via pgvector
+- **AI product enrichment** -- multilingual description generation, hero image processing, SEO optimisation, content calendar with EMA feedback loop
+- **Customer service automation** -- bilingual enquiry classifier, FAQ auto-responder, multi-channel messaging adapters
+- **Marketplace ecosystem** -- vendor onboarding, commission engine, payout tracking, Plugin SDK for third-party developers
+- **Cloud-native deployment** -- GKE Autopilot, EKS, OCI with Helm charts, KEDA autoscaling, Terraform IaC, multi-cloud DR
+- **GDPR/CCPA compliance** -- data residency controls, right-to-delete workflows, consent management, audit logging, data export
+- **Observability** -- OpenTelemetry tracing, ~7000 Prometheus series, 10+ Grafana dashboards, Agentrace EvoMap integration
+- **OOM prevention** -- adaptive worker pools, RSS-based backpressure, circuit breakers on all external calls, phased drain
+- **Logistics + returns** -- carrier label adapters, 3-channel status propagation, returns saga with auto-approval threshold, ROI heatmap
+- **Onboarding wizard** -- 4-step AI-guided tenant setup with channel pre-flight checks
 
 ## Architecture
 
 ```mermaid
 flowchart TB
-  Web["agentic-ecommerce-web\nNext.js storefront + admin"]
+  Web["agentic-ecommerce-web\nNext.js 16 storefront + admin"]
   BFF["Frontend BFF\nsession cookies + AI describe"]
   API["mc-api\nGo Mission Control API"]
   Workers["Workers\nwc-sync, content-worker, agent-worker, temporal-worker"]
-  Temporal["Temporal Server + UI\nworkflow history + signals"]
-  N8N["n8n\nHTTP-triggered automations"]
+  Temporal["Temporal Server + UI\n10 workflows + 40+ activities"]
   EventBus["Redis Streams\nevent bus + dead-letter"]
   CCE["CCE in Go\ncompliance, SEO, RAG, fact-check"]
   MIS["Media Intelligence\nsource, process, QA, store"]
-  Postgres["PostgreSQL + pgvector"]
+  Payment["Payment Gateway\nStripe + Alipay + WeChat + PayPal"]
+  Pricing["Pricing Engine\nMADRL + competitor scrape + guardrails"]
+  Channel["Channel Router\nTikTok + FB + IG + Pinterest + RedNote + WC"]
+  Postgres["PostgreSQL 16 + pgvector\n35 migrations + RLS"]
   ObjectStore["S3/GCS or filesystem\nmedia assets"]
-  Redis["Redis\ncart/session/cache"]
-  Woo["WooCommerce REST API\noperator-approved sync"]
+  Redis["Redis 7\ncart/session/cache/events"]
   Bridge["Approved AI bridge\nOpenAI-compatible proxy"]
-  Monitoring["Prometheus + Grafana"]
-  Cloud["AWS ECS / GCP Cloud Run\nTemporal, n8n, media placeholders"]
+  Monitoring["Prometheus + Grafana\n~7000 series + 10 dashboards"]
+  Cloud["GKE / EKS / OCI\nHelm + KEDA + Terraform"]
 
   Web --> API
   Web --> BFF
@@ -44,10 +56,11 @@ flowchart TB
   API --> CCE
   API --> MIS
   API --> EventBus
-  Workers --> Woo
+  API --> Payment
+  API --> Pricing
+  API --> Channel
   Workers --> Temporal
   Workers --> EventBus
-  EventBus --> N8N
   Temporal --> CCE
   Temporal --> MIS
   Workers --> Bridge
@@ -56,116 +69,90 @@ flowchart TB
   MIS --> ObjectStore
   API --> Monitoring
   Workers --> Monitoring
-  API -. image + env contract .-> Cloud
-  Web -. image + env contract .-> Cloud
+  API -. Helm + Terraform .-> Cloud
 ```
 
-`api/openapi.yaml` is the source of truth for the backend API consumed by the frontend. Public platform endpoints are `/healthz`, `/readyz`, and `/metrics`; storefront product reads, cart operations, and checkout order creation remain public, while admin/operator mutations require JWT bearer tokens and RBAC.
+The platform runs 8+ production binaries: `mc-api`, `wc-sync`, `content-worker`, `agent-worker`, `temporal-worker`, `uiauto-compare`, `ec-cli`, `evomap-rollup`. The database schema spans 35 numbered migrations (`0001` through `0035`) with row-level security on all tenant-keyed tables.
 
-## Public Safety
+## Tech Stack
 
-This repository is Apache-2.0 and safe for public collaboration only while it contains generic source, tests, documentation, and placeholder configuration. Do not commit live WooCommerce credentials, MiniMax keys, browser profiles, private fleet hostnames, internal IPs, or local `.env` files. See `SECURITY.md`.
+| Layer | Technology |
+|-------|-----------|
+| Backend | Go 1.26.3, Clean Architecture |
+| Frontend | Next.js 16.2.6, React 19, TypeScript strict |
+| Database | PostgreSQL 16 + pgvector |
+| Cache/Events | Redis 7 (Streams + pub/sub) |
+| Workflows | Temporal (10 workflows, 40+ activities) |
+| Observability | OpenTelemetry, Prometheus, Grafana |
+| Payments | Stripe, Alipay, WeChat Pay, PayPal |
+| Cloud | GKE Autopilot, EKS, OCI, Terraform, Helm, KEDA |
+| CI/CD | GitHub Actions, Docker (distroless) |
 
-The public Next.js frontend lives at `nfsarch33/agentic-ecommerce-web` and consumes the API contract in `api/openapi.yaml`.
+## Getting Started
 
-## Quickstart
-
-Use the dev compose stack for backend work:
+### Docker Compose quickstart
 
 ```bash
 cp .env.example .env
 make dev
 curl http://127.0.0.1:8080/healthz
 curl http://127.0.0.1:8080/readyz
-make redis-ping
 ```
 
-The stack runs PostgreSQL, Redis 7, and `mc-api` with published ports bound to `127.0.0.1` by default. `/healthz` is a liveness check only. `/readyz` gates configured dependencies by pinging `ECOMMERCE_DB_URL` and `ECOMMERCE_REDIS_ADDR`; unset dependencies are reported as skipped so local in-memory tests stay lightweight. PostgreSQL readiness uses explicit pgxpool settings (`ECOMMERCE_DB_POOL_MAX_CONNS`, `ECOMMERCE_DB_POOL_MIN_CONNS`, `ECOMMERCE_DB_POOL_MAX_CONN_LIFETIME`, `ECOMMERCE_DB_POOL_MAX_CONN_IDLE_TIME`, `ECOMMERCE_DB_CONNECT_TIMEOUT`) so cloud tasks can stay within managed database connection budgets. Redis is exposed to `mc-api` as `ECOMMERCE_REDIS_ADDR=redis:6379`; host tools can use `ECOMMERCE_REDIS_ADDR=127.0.0.1:6379`.
+The stack runs PostgreSQL + pgvector, Redis 7, and `mc-api` with ports bound to `127.0.0.1`. Profiles gate optional services (workers, Temporal, n8n) so they do not make live external calls by default.
 
-PostgreSQL uses the `pgvector/pgvector:pg16` image in both compose files. For
-v1.3.0 RAG infra work, apply deterministic fixtures and validate vector search
-without live embedding calls:
-
-```bash
-make rag-seed
-make rag-search-smoke
-```
-
-Embedding generation is bridge-only. Configure
-`ECOMMERCE_EMBEDDING_BRIDGE_URL`, `ECOMMERCE_EMBEDDING_MODEL`,
-`ECOMMERCE_EMBEDDING_DIMENSIONS`, and `ECOMMERCE_RAG_CHUNK_SIZE` when the
-approved fleet bridge embedding endpoint is available; do not point app
-containers directly at MiniMax.
-
-Protected backend operations use JWT bearer tokens with RBAC roles `admin`, `operator`, and `viewer`. Configure `ECOMMERCE_JWT_SECRET`, `ECOMMERCE_ADMIN_USERNAME`, and `ECOMMERCE_ADMIN_PASSWORD` locally, then call `/api/v1/auth/login` for a short-lived access token. Health, readiness, metrics, storefront product reads, cart operations, and checkout order creation remain public.
-
-Tenant-aware admin work is supported by deterministic v1.9.0 fixtures and smoke checks:
-
-```bash
-make tenant-isolation-test
-make tenant-isolation-smoke
-```
-
-See `docs/tenant-isolation.md` for the current data model, fixture tenant IDs, migration coverage, and monitoring-cardinality guardrails. Tenant provisioning UI and tenant-scoped uniqueness are not implemented in this infra slice.
-
-For the storefront checkout flow, run `agentic-ecommerce-web` separately with `bun run dev` and point it at `http://127.0.0.1:8080`. See `docs/local-development.md` for the backend compose, frontend dev, and Redis readiness plan.
-
-## API Documentation
-
-- Backend OpenAPI contract: `api/openapi.yaml`.
-- API capability guide: `docs/api-reference.md`.
-- Temporal workflow specs: `docs/temporal-workflow-specs.md`.
-- Webhook contracts: `docs/webhook-contracts.md`.
-- Local API root: `http://127.0.0.1:8080` after `make dev`.
-- Frontend BFF route documentation: `agentic-ecommerce-web/docs/bff-routes.md`.
-
-Regenerate frontend API types from this contract in the frontend repo with `bun run api:generate` after backend contract changes.
-
-## Full Stack Compose
-
-v2.0.0 uses a production-like compose stack for local single-host validation:
+### Full stack compose
 
 ```bash
 cp .env.compose.example .env.compose
-docker compose --env-file .env.compose -f docker-compose.yml config
 docker compose --env-file .env.compose -f docker-compose.yml up -d --build
 curl http://127.0.0.1:8080/healthz
-curl http://127.0.0.1:8080/readyz
 curl http://127.0.0.1:8080/metrics
 ```
 
-The stack includes `mc-api`, the public `agentic-ecommerce-web` image, PostgreSQL + pgvector, Redis, Prometheus, Grafana, Temporal, n8n, and media object-store placeholders. `mc-api` emits JSON access logs with `request_id`, `trace_id`, `tenant_id`, `actor_id`, `route`, HTTP status, and duration fields, mirrors `X-Request-ID` on responses, and can enable lightweight OpenTelemetry HTTP spans with `ECOMMERCE_OTEL_ENABLED=true`. `wc-sync`, `content-worker`, `agent-worker`, `temporal-worker`, n8n, and the optional `minimax-openai-bridge` placeholder are behind compose profiles so they do not make live WooCommerce, n8n-provider, Temporal-production, or MiniMax calls by default. See `docs/full-stack-compose.md`, `docs/temporal-local.md`, `docs/n8n-local.md`, and `docs/media-storage.md` for profiles, dashboard URLs, and security boundaries.
+Includes `mc-api`, frontend, PostgreSQL, Redis, Prometheus, Grafana, Temporal, and n8n.
 
-The optional WooCommerce dev profile adds WordPress, MariaDB, a WP-CLI helper, and the `wc-sync` worker:
+### Helm deployment (GKE/EKS/OCI)
 
 ```bash
-make wc-up
-make sync-once
-make wc-down
+helm upgrade --install ec deploy/helm/agentic-ecommerce \
+  --namespace ecommerce --create-namespace \
+  -f deploy/helm/agentic-ecommerce/values-gke.yaml
 ```
 
-WooCommerce plugin installation and REST API key creation are explicit local steps, not automatic boot actions. See `docs/dev-compose.md` for the full local WooCommerce flow and the Redis event bus channel contract.
+See `deploy/terraform/` for cloud-specific Terraform modules (GKE, EKS, OCI, DR, shared modules).
 
-## Cloud Deployment
+### ec-cli developer tool
 
-The v2.0.0 release keeps Docker Compose as the deploy-contract source of truth and provides credential-free Terraform scaffolding for AWS ECS Fargate and GCP Cloud Run under `deploy/terraform/`. The cloud contracts include Temporal server/worker placeholders, S3/GCS media storage, CDN stubs, secret-manager mappings, n8n boundary notes, database migration workflow, security boundaries, and cloud observability notes. See `docs/cloud-deploy.md` and `docs/cloud-hardening.md`.
+```bash
+ec-cli doctor                              # environment diagnostics
+ec-cli tenant create --slug demo --plan starter  # provision a tenant
+ec-cli plugin validate --path ./my-plugin  # validate a marketplace plugin
+```
 
-## Gates
+## API Documentation
+
+- Backend OpenAPI contract: `api/openapi.yaml`
+- API capability guide: `docs/api-reference.md`
+- Temporal workflow specs: `docs/temporal-workflow-specs.md`
+- Webhook contracts: `docs/webhook-contracts.md`
+- Cloud deployment guide: `docs/cloud-deploy.md`
+- Demo walkthrough: `docs/demo/v500-demo-script.md`
+
+## Quality Gates
 
 ```bash
 go test -race ./...
 go vet ./...
 make build
-go test -race -coverprofile=coverage.out ./...
-go tool cover -func=coverage.out
+make coverage-check          # >= 83% backend coverage
 make monitoring-validate
 make release-perf-smoke
+sentrux gate .               # complex_fn=4 hard gate
 ```
 
-`make release-perf-smoke` runs the v1.0.0 API smoke against an in-process
-deterministic mc-api with in-memory repositories, JWT login, and a mocked
-content agent. It verifies p95 latency targets for `GET /api/v1/products`,
-admin login, and mocked AI description generation without MiniMax or
-WooCommerce network calls.
+## Public Safety
 
-Private-repo operations must go through `runx` once the `ecommerce` alias is registered.
+This repository is Apache-2.0 and safe for public collaboration only while it contains generic source, tests, documentation, and placeholder configuration. Do not commit live credentials, browser profiles, private fleet hostnames, internal IPs, or local `.env` files. See `SECURITY.md`.
+
+The public Next.js frontend lives at `nfsarch33/agentic-ecommerce-web` and consumes the API contract in `api/openapi.yaml`.

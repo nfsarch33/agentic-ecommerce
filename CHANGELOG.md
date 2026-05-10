@@ -2,6 +2,216 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## [5.0.0] - 2026-05-11 -- Production-ready multi-channel agentic platform
+
+### Release Summary
+
+v5.0.0 closes the v4.1.0 through v4.19.1 sprint cycle (20 MVP/QA
+sprint pairs, 100 stories, PRs `#100`..`#119`) and promotes the
+Agentic Ecommerce backend from the v4.0.0 agentic stack into a
+production-ready multi-channel platform with 4-provider payment
+gateway, cloud-native Kubernetes deployment, GDPR compliance,
+MADRL agent coordination, and comprehensive observability. The
+release spans 10 new database migrations (0026-0035), ~1000
+additional Prometheus series (total ~7000), 2 additional Temporal
+workflows (total 10), and all 6 selling channels (TikTok, Facebook,
+Instagram, Pinterest, RedNote, WooCommerce) in production-ready
+state. Sentrux discipline held across all 20 pairs -- `complex_fn`
+unchanged at **4** (38-sprint streak); zero hook bypasses.
+
+### Added (by epic group)
+
+**QA Hardening + ADR-029 Carry-Forwards (Pair 1)**
+- RLS hardening across all tenant-keyed tables
+- Statement timeout enforcement for long-running queries
+- Stripe refund flow validation
+- Carrier production configuration stubs
+- govulncheck baseline: 0 findings
+
+**Payment Gateway (Pairs 2-3)**
+- `PaymentGateway` port with provider abstraction (Stripe, Alipay, WeChat Pay, PayPal)
+- Stripe adapter with full charge + refund + webhook lifecycle
+- Alipay adapter with sandbox integration (JSAPI + native flows)
+- WeChat Pay adapter with sandbox integration (H5 + mini-program)
+- PayPal adapter evaluation and integration
+- `PaymentSagaWorkflow` Temporal orchestration for multi-step payments
+- Webhook normaliser unifying provider callback formats
+- AI payment advisor for fraud scoring and routing recommendations
+- Payment dashboard frontend (`/payments` page)
+
+**Cloud-Native Deployment (Pairs 4, 17-18)**
+- GKE Autopilot Terraform module with node pools + networking
+- Helm chart (`deploy/helm/agentic-ecommerce/`) with values per cloud target
+- Distroless multi-stage Dockerfiles for all 8 binaries
+- KEDA autoscaling (CPU + queue-depth triggers)
+- Kubernetes health probes (`/healthz`, `/readyz`) with dependency checks
+- NetworkPolicies for pod-to-pod traffic isolation
+- EKS disaster recovery Terraform module
+- OCI (Oracle Cloud) Terraform bootstrap
+- Multi-cloud cost optimisation runbook
+- CI/CD pipeline templates (GitHub Actions)
+- Deploy scripts for GKE, EKS, OCI targets
+
+**Observability + Runtime (Pair 5)**
+- OpenTelemetry HTTP + Temporal tracing with Cloud Trace export
+- Go 1.26.3 toolchain audit and upgrade
+- Next.js 16 frontend upgrade (Pair 5 frontend companion)
+
+**Channel Expansion (Pair 6)**
+- Instagram promoted from stub to full integration (listing + order + inventory)
+- Pinterest promoted from stub to full integration (catalog + analytics)
+- 1688/Taobao adapters promoted to production-ready
+- Carrier key rotation policy and implementation
+
+**MADRL Coordination (Pair 7)**
+- Multi-agent reinforcement learning expanded from v3.5.1 seed
+- Weighted conflict resolution (pricing 60% / fulfilment 40% default)
+- Per-tenant observability (agent decisions, conflict log, resolution audit)
+- EKS disaster recovery cross-cloud failover
+
+**Marketplace + Coaching (Pair 8)**
+- Vendor onboarding workflow with business verification
+- Commission engine with per-category and per-vendor rates
+- Payout tracking (pending + completed + reconciliation)
+- Coaching context for agent sessions (learning from operator feedback)
+- Admin API extensions for marketplace management
+
+**GDPR/CCPA Compliance (Pair 9)**
+- Data residency controls (tenant-level region assignment)
+- Right-to-delete workflow (Article 17 compliance)
+- Consent management with timestamped records
+- Audit logging for all data access and mutations
+- Data export endpoint (JSON format, per-customer)
+- k6 load test matrix (1000-tenant scenarios)
+- Lighthouse baseline re-capture scripts
+
+**Scale Hardening (Pair 10)**
+- 1000-tenant EXPLAIN ANALYZE validation
+- Scale test suite with concurrent tenant operations
+- Performance baseline capture with regression detection
+- Coverage recovery to maintained >= 83%
+
+**Agentrace Deep Integration (Pair 11)**
+- EvoMap replay adapter for agent decision traces
+- Grafana dashboards for Agentrace insights (3 new dashboards)
+- Cursor hooks production wiring for real-time capture
+- Capsule writer for structured KPI aggregation
+
+**OOM Prevention (Pair 12)**
+- System-resource-aware adaptive worker pool sizing
+- RSS-based backpressure with configurable thresholds
+- Circuit breakers on all external call paths
+- Autotune for pool sizing based on historical load
+- Phased drain for graceful degradation
+
+**MiniMax Quota Rotation (Pair 13)**
+- Full `runx minimax` surface for API key management
+- Auto-failover chain between API key slots
+- Observability for quota consumption and failover events
+
+**uiauto vs Playwright Comparison (Pair 14)**
+- Side-by-side test runner with scenario mapping
+- Accuracy and speed metrics collector
+- Decision matrix for framework promotion
+- Comparison dashboard with trend visualisation
+
+**Worktree Hardening (Pair 15)**
+- Race detection for concurrent worktree access
+- Multi-agent coordination locks (file-based advisory)
+- Handoff protocol formalisation for agent session transfers
+- Auto-cleanup of stale worktrees
+
+**Skill Consolidation (Pair 16)**
+- Agent skill inventory audit (146 skills catalogued)
+- Quality gate CLI for skill validation
+- Codex-compatible variant generator
+- Deduplication recommendations
+
+**mem0 + OCI Infrastructure (Pair 17)**
+- mem0 WSL1 hardening (connection resilience + retry)
+- Oracle Cloud Terraform bootstrap (compute + networking)
+- Qdrant vector database integration for mem0
+- Cross-cloud DR documentation
+
+**Cloud Deployment Readiness (Pair 18)**
+- AWS/GCP deploy automation scripts
+- Multi-cloud Terraform modules (7 shared + 4 cloud-specific)
+- CI/CD pipeline templates
+- Cost optimisation runbook
+
+**Release Preparation (Pair 19)**
+- README comprehensive update (both repos)
+- ADR-031 v5 release decisions
+- Final validation matrix (20 gates documented)
+- v5.0.0 demo script (12 sections, 30 minutes)
+
+### Changed
+
+- VERSION bumped from `4.10.0` to `5.0.0`
+- README.md rewritten to reflect full v5.0.0 scope
+- Go toolchain upgraded to 1.26.3 (Pair 5)
+- Frontend upgraded to Next.js 16.2.6 (Pair 5)
+
+### Fixed
+
+- Channel stub tests updated for IG + Pinterest promotion (Pair 6)
+- Cycle resolution in package dependencies (Pair 10)
+- Coverage regression recovery after scale test additions (Pair 10)
+
+### Migrations (0026-0035)
+
+- `0026_payment_providers` (Pair 2) -- payment provider configuration
+- `0027_payment_transactions` (Pair 2) -- transaction ledger
+- `0028_payments` (Pair 3) -- payment metadata + webhook events
+- `0029_coordination_log` (Pair 7) -- MADRL coordination audit
+- `0030_coaching_sessions` (Pair 8) -- agent coaching context
+- `0031_vendors` (Pair 8) -- marketplace vendor registry
+- `0032_vendor_payouts` (Pair 8) -- commission + payout tracking
+- `0033_tenant_residency` (Pair 9) -- data residency controls
+- `0034_consent_records` (Pair 9) -- GDPR consent management
+- `0035_compliance_audit` (Pair 9) -- compliance audit log
+
+All migrations are tenant-keyed (`tenant_id` mandatory) and use
+the v2.4.0 RLS scheme; the `0011_rls` policy is re-asserted on
+every new table.
+
+### Operational Notes
+
+- **8+ production binaries** (topology unchanged from v4.0.0):
+  `mc-api`, `wc-sync`, `content-worker`, `agent-worker`,
+  `temporal-worker`, `uiauto-compare`, `ec-cli`, `evomap-rollup`
+- **~7000 Prometheus series** (cumulative; +~1000 from v4.0.0):
+  payment gateway (~200), cloud health probes (~100), MADRL
+  coordination (~150), marketplace/vendor (~200), compliance
+  audit (~100), Agentrace deep (~150), OOM prevention (~100)
+- **10 Temporal workflows** + 40+ activities (added
+  `PaymentSagaWorkflow`, `VendorOnboardingWorkflow` to the
+  v4.0.0 set of 8)
+- **35 numbered SQL migrations** (`0001` through `0035`)
+- **6 selling channels** all in production-ready state
+- **4 payment providers** with saga orchestration
+- **3 cloud targets** (GKE, EKS, OCI) with Terraform + Helm
+- **Sentrux 38-sprint streak**: `complex_fn` held at **4**
+- **Zero hook bypasses** across entire v4.x cycle
+
+### ADRs
+
+- **ADR-030** (`docs/adr/adr-030-v5-roadmap.md`) sourced the
+  20-pair plan that v5.0.0 closes
+- **ADR-031** (`docs/adr/adr-031-v5-release-decisions.md`)
+  documents v5.0.0 release decisions, completion status of all
+  20 pairs, deferred items for v5.1.x, and preview candidates
+
+### Carry-Forwards Locked for v5.1.x
+
+- Live Alipay/WeChat merchant accounts (sandbox complete)
+- Live carrier API integration (adapters built; production keys deferred)
+- Lighthouse full 6-page automated audit (scripts created)
+- Flutter native admin app (API surface ready; app repo deferred)
+- MADRL production training loop (rule-based resolution ships in v5.0.0)
+- Real-time per-tenant WebSocket observability
+- Marketplace plugin certification programme
+
 ## [4.0.0] - 2026-05-10 -- Production-ready agentic e-commerce stack
 
 ### Release Summary
