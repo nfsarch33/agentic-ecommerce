@@ -1,13 +1,7 @@
-// File scope: v3.9.1 typed event payloads for the final v4 polish
-// QA sprint -- Existing #10 onboarding wizard, EC-9-4 channel content
-// analytics, EC-9-5 operator alert centre, and EC-4-4 IG/Pinterest
-// stub adapters. Every payload follows the v3.5.0 / v3.8.0 / v3.9.0
-// envelope pattern: typed Validate, typed asMap, typed constructor.
+// System / operational domain payloads: tenant onboarding wizard
+// completion, channel stub signals, and operator alert resolution.
 //
-// Reuse evidence:
-//   - Pattern mirrors v3.9.0 (v390_payloads.go) +
-//     v3.8.0 (v380_payloads.go).
-//   - Error sentinel + %w-wrap from the package convention.
+// Consolidated from v391_payloads.go in v5.4.0.
 package eventbus
 
 import (
@@ -16,15 +10,10 @@ import (
 	"time"
 )
 
-// TenantOnboardedPayloadVersion is the schema version of
-// TenantOnboardedPayload. Bump on breaking change.
+// --- Tenant onboarded (v3.9.1 Existing #10) ---
+
 const TenantOnboardedPayloadVersion = 1
 
-// TenantOnboardedPayload is the v3.9.1 Existing #10 envelope. Emitted
-// by the OnboardingWizard handler when a tenant successfully
-// completes all four steps and the canonical tenant_onboarding
-// workflow has been launched. Downstream agents (channel router,
-// pricing agent, content calendar) subscribe to wire defaults.
 type TenantOnboardedPayload struct {
 	Version       int       `json:"version"`
 	TenantID      string    `json:"tenant_id"`
@@ -38,10 +27,8 @@ type TenantOnboardedPayload struct {
 	OccurredAt    time.Time `json:"occurred_at"`
 }
 
-// ErrTenantOnboardedInvalid is returned by Validate.
 var ErrTenantOnboardedInvalid = errors.New("invalid tenant onboarded payload")
 
-// Validate enforces required fields.
 func (p TenantOnboardedPayload) Validate() error {
 	if p.Version == 0 {
 		return fmt.Errorf("%w: version zero", ErrTenantOnboardedInvalid)
@@ -84,8 +71,6 @@ func (p TenantOnboardedPayload) asMap() map[string]any {
 	}
 }
 
-// NewTenantOnboardedEvent is the canonical constructor for Existing
-// #10 onboarding completion.
 func NewTenantOnboardedEvent(source string, occurredAt time.Time, payload TenantOnboardedPayload) (Event, error) {
 	if payload.Version == 0 {
 		payload.Version = TenantOnboardedPayloadVersion
@@ -108,16 +93,10 @@ func NewTenantOnboardedEvent(source string, occurredAt time.Time, payload Tenant
 	}, nil
 }
 
-// ChannelStatusNotYetImplementedPayloadVersion is the schema version
-// of the EC-4-4 stub-channel signal payload.
+// --- Channel status not-yet-implemented (v3.9.1 EC-4-4) ---
+
 const ChannelStatusNotYetImplementedPayloadVersion = 1
 
-// ChannelStatusNotYetImplementedPayload is the v3.9.1 EC-4-4 envelope.
-// Emitted by the channel router when an enriched product is routed to
-// an Instagram or Pinterest stub adapter (production-ready facades
-// pending v4.1.x integration). Downstream dashboards surface the
-// "stub-routed but not delivered" signal so operators can pivot the
-// fan-out plan without seeing it as a hard failure.
 type ChannelStatusNotYetImplementedPayload struct {
 	Version    int       `json:"version"`
 	TenantID   string    `json:"tenant_id"`
@@ -128,10 +107,8 @@ type ChannelStatusNotYetImplementedPayload struct {
 	OccurredAt time.Time `json:"occurred_at"`
 }
 
-// ErrChannelStatusNotYetImplementedInvalid is returned by Validate.
 var ErrChannelStatusNotYetImplementedInvalid = errors.New("invalid channel status not_yet_implemented payload")
 
-// Validate enforces required fields.
 func (p ChannelStatusNotYetImplementedPayload) Validate() error {
 	if p.Version == 0 {
 		return fmt.Errorf("%w: version zero", ErrChannelStatusNotYetImplementedInvalid)
@@ -160,8 +137,6 @@ func (p ChannelStatusNotYetImplementedPayload) asMap() map[string]any {
 	}
 }
 
-// NewChannelStatusNotYetImplementedEvent is the canonical constructor
-// for the EC-4-4 stub-channel signal.
 func NewChannelStatusNotYetImplementedEvent(source string, occurredAt time.Time, payload ChannelStatusNotYetImplementedPayload) (Event, error) {
 	if payload.Version == 0 {
 		payload.Version = ChannelStatusNotYetImplementedPayloadVersion
@@ -184,15 +159,10 @@ func NewChannelStatusNotYetImplementedEvent(source string, occurredAt time.Time,
 	}, nil
 }
 
-// OperatorAlertResolvedPayloadVersion is the schema version of the
-// EC-9-5 operator-alert-resolved payload.
+// --- Operator alert resolved (v3.9.1 EC-9-5) ---
+
 const OperatorAlertResolvedPayloadVersion = 1
 
-// OperatorAlertResolvedPayload is the v3.9.1 EC-9-5 envelope.
-// Emitted by the operator alert centre when an operator resolves a
-// pending alert (approve / deny). The downstream agents that produced
-// the original alert subscribe so the source-side approval gate can
-// honour the operator's decision.
 type OperatorAlertResolvedPayload struct {
 	Version       int       `json:"version"`
 	TenantID      string    `json:"tenant_id"`
@@ -204,10 +174,8 @@ type OperatorAlertResolvedPayload struct {
 	OccurredAt    time.Time `json:"occurred_at"`
 }
 
-// ErrOperatorAlertResolvedInvalid is returned by Validate.
 var ErrOperatorAlertResolvedInvalid = errors.New("invalid operator alert resolved payload")
 
-// Validate enforces required fields.
 func (p OperatorAlertResolvedPayload) Validate() error {
 	if p.Version == 0 {
 		return fmt.Errorf("%w: version zero", ErrOperatorAlertResolvedInvalid)
@@ -240,8 +208,6 @@ func (p OperatorAlertResolvedPayload) asMap() map[string]any {
 	}
 }
 
-// NewOperatorAlertResolvedEvent is the canonical constructor for
-// EC-9-5 alert resolution.
 func NewOperatorAlertResolvedEvent(source string, occurredAt time.Time, payload OperatorAlertResolvedPayload) (Event, error) {
 	if payload.Version == 0 {
 		payload.Version = OperatorAlertResolvedPayloadVersion

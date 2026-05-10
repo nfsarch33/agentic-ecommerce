@@ -1,3 +1,6 @@
+// Payment domain payloads: payment saga lifecycle events.
+//
+// Consolidated from v420_payloads.go in v5.4.0.
 package eventbus
 
 import (
@@ -6,11 +9,8 @@ import (
 	"time"
 )
 
-// PaymentSagaPayloadVersion is the schema version.
 const PaymentSagaPayloadVersion = 1
 
-// PaymentSagaPayload is the v4.2.0 envelope shared by all payment
-// lifecycle events. Follows the v3.5.0/v3.8.0 typed-payload pattern.
 type PaymentSagaPayload struct {
 	Version     int       `json:"version"`
 	TenantID    string    `json:"tenant_id"`
@@ -24,10 +24,8 @@ type PaymentSagaPayload struct {
 	OccurredAt  time.Time `json:"occurred_at"`
 }
 
-// ErrPaymentSagaPayloadInvalid is returned by Validate.
 var ErrPaymentSagaPayloadInvalid = errors.New("invalid payment saga payload")
 
-// Validate enforces required fields.
 func (p PaymentSagaPayload) Validate() error {
 	if p.Version == 0 {
 		return fmt.Errorf("%w: version zero", ErrPaymentSagaPayloadInvalid)
@@ -62,18 +60,14 @@ func (p PaymentSagaPayload) asMap() map[string]any {
 	}
 }
 
-// NewPaymentCompletedEvent fires when charge succeeds.
 func NewPaymentCompletedEvent(source string, occurredAt time.Time, payload PaymentSagaPayload) (Event, error) {
 	return newPaymentSagaEvent(PaymentCompleted, source, occurredAt, payload)
 }
 
-// NewPaymentFailedEvent fires on persistent charge failure.
 func NewPaymentFailedEvent(source string, occurredAt time.Time, payload PaymentSagaPayload) (Event, error) {
 	return newPaymentSagaEvent(PaymentFailed, source, occurredAt, payload)
 }
 
-// NewPaymentRefundRequestedEvent fires when a refund is requested
-// through the payment saga.
 func NewPaymentRefundRequestedEvent(source string, occurredAt time.Time, payload PaymentSagaPayload) (Event, error) {
 	return newPaymentSagaEvent(PaymentRefundRequested, source, occurredAt, payload)
 }
