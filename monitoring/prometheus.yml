@@ -5,6 +5,9 @@ global:
 rule_files:
   - /etc/prometheus/alerts.yml
   - /etc/prometheus/alerts/channel-health.yml
+  - /etc/prometheus/alerts/oom-prevention.yml
+  - /etc/prometheus/alerts/pricing-guardrails.yml
+  - /etc/prometheus/alerts/captcha-detection.yml
 
 scrape_configs:
   - job_name: mc-api
