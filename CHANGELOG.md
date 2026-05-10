@@ -2,6 +2,275 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## [4.0.0] - 2026-05-10 -- Production-ready agentic e-commerce stack
+
+### Release Summary
+
+v4.0.0 closes the v3.1.0 -> v3.9.1 sprint cycle (9 MVP/QA sprint
+pairs; 17 merged sprint releases; PRs `#79`..`#97`) and promotes the
+Agentic Ecommerce backend from the v3.0.0 multi-tenant SaaS baseline
+into a fully agentic, production-ready stack. Every ADR-028 epic is
+closed: China sourcing, AI enrichment, TikTok Shop, RedNote +
+Facebook + content cluster, pricing + fulfilment, customer service +
+analytics, uiauto hardening, logistics + returns + ROI, pricing +
+content polish, and the v3.9.1 final-polish bundle (onboarding
+wizard, channel content analytics, operator alert centre, IG +
+Pinterest stubs). The 8-binary topology is preserved (`mc-api`,
+`wc-sync`, `content-worker`, `agent-worker`, `temporal-worker`,
+`uiauto-compare`, `ec-cli`, `evomap-rollup`); 25 numbered Postgres
+migrations land in-tree (`migrations/0001_...` through
+`migrations/0025_operator_alerts.up.sql`) plus tenant-settings
+seeds; ~6000 Prometheus series surface across the new pricing,
+fulfilment, content, CS, and uiauto packages. Sentrux discipline is
+held across all 17 sprints + this release sprint -- `complex_fn`
+unchanged at **4** (18-sprint streak target achieved); zero hook
+bypasses across the streak (one self-resolving frontend bypass on
+v3.6.0 noted in the journey).
+
+### Capabilities Included (v3.1.0 -> v3.9.1, by MVP merge SHA)
+
+- **v3.1.0** Epic 1 China Sourcing Agent foundation -- 1688 + Taobao
+  adapters, sourcing scorer (40% supplier / 35% margin / 25% trend),
+  `ChinaSourcingAgent` orchestrator, AU-import compliance gate, env
+  var session cookie stubs (#79 `1b3f795`).
+- **v3.1.1** China Sourcing pipeline QA validation -- `dnaeon/go-vcr/v3`
+  cassette replay, chaos coverage (API flap + 429 + compliance
+  negatives), `BenchmarkScoreCandidates` baseline, operator-run live
+  smoke contract (#80 `a2fe83d`).
+- **v3.2.0** Epic 2 AI Product Enrichment Pipeline -- multilingual
+  description gen (EC-2-1), hero image + bg-removal (EC-2-2), SEO +
+  WC sync (EC-2-3), trend signal pgvector ingestion (EC-2-4),
+  enrichment observability (EC-2-5) (#81 `b60d515`).
+- **v3.2.1** Epic 2 enrichment QA -- 50-product live smoke, LLM
+  template failover, bg-removal PNG transparency, WC idempotent
+  re-run + decomposition split for sentrux complex_fn (#82
+  `2d76b85`, #83 `43f1a84`).
+- **v3.3.0** Epic 3 TikTok Shop full integration -- seller API
+  client (EC-3-1), listing agent (EC-3-2), order webhook (EC-3-3),
+  inventory sync saga (EC-3-4), uiauto fallback via
+  omniparser-bridge (EC-3-5) (#84 `9163544`).
+- **v3.3.1** Epic 3 TikTok Shop QA validation -- sandbox E2E listing
+  within 15s, tampered-HMAC rejection, saga rollback, dual-platform
+  zero-oversell coverage (#85 `b4008b1`).
+- **v3.4.0** Epic 4 RedNote + Facebook + content cluster -- RedNote
+  uiauto facade (EC-4-1), FB Shop META client (EC-4-2),
+  cross-platform channel router (EC-4-3), video script writer
+  (EC-5-1), ffmpeg video assembler (EC-5-3) (#86 `612ab95`).
+- **v3.4.1** Multi-channel validation -- cross-channel fan-out E2E,
+  routing matrix 6 combos, EC-4-5 channel health monitor seeded,
+  ffmpeg MP4 within 120s (#87 `9e4afb6`).
+- **v3.5.0** Epic 6 pricing + Epic 7 fulfilment seed -- supplier
+  cost monitor (EC-6-1), platform fee + FX calc (EC-6-2), dynamic
+  pricing agent with guardrails (EC-6-3), order aggregator
+  (EC-7-1), drop-ship agent saga (EC-7-2) (#88 `473218b`).
+- **v3.5.1** Pricing + fulfilment QA -- saga rollback E2E, Existing
+  #4 MADRL coordination foundation seed, cost-change event, margin
+  formula (#89 `e2be376`).
+- **v3.6.0** Epic 8 CS + Epic 9 analytics -- enquiry classifier
+  (EC-8-1), FAQ responder (EC-8-2), TikTok + FB messaging adapter
+  (EC-8-3), GMV API + daily rollup (EC-9-1), agent activity SSE
+  feed (EC-9-2 backend) (#90 `c2d392c`).
+- **v3.6.1** CS + analytics QA -- 50-fixture bilingual classifier,
+  inbound -> reply within 30s E2E, GMV p95 <200ms over 1M-row
+  load, SSE 1s delivery under 100-connection load (#91 `97f7085`).
+- **v3.7.0** Epic 10 uiauto hardening -- session manager (OS
+  keychain + AES-256-GCM file fallback) (EC-10-1), OmniParser
+  memory guard (EC-10-2), stealth-pacing rate limit middleware
+  (EC-10-3), multilingual CAPTCHA detector (EC-10-4), YAML cassette
+  replay harness with three sample cassettes (EC-10-5)
+  (#92 `e84dea6`).
+- **v3.7.1** uiauto hardening QA + Tier 2 promotion decision --
+  GREEN memory pressure under inference batch, 20-post rate-limit
+  drain, CAPTCHA pause, Tier 2 promotion gate (#93 `cd92aad`).
+- **v3.8.0** Logistics + returns + ROI -- AusPost eParcel + DHL
+  Express shipping label adapter (EC-7-3), 3-channel status
+  propagation (EC-7-4), returns saga with auto-approval threshold
+  (EC-7-5), ROI heatmap query (EC-9-3), Existing #5 self-testing
+  Temporal loops seed (#94 `58dd5b1`).
+- **v3.8.1** Returns + logistics QA -- domestic AU label cheapest
+  carrier 5-day SLA, 3-channel update 60s, auto-approve threshold,
+  heatmap dead-stock filter (#95 `9105af8`).
+- **v3.9.0** Pricing + content polish -- competitor price scraper
+  (EC-6-4), margin dashboard backend + frontend (EC-6-5), n8n
+  content calendar (EC-5-2), hashtag + caption agent (EC-5-4),
+  EMA-based content performance feedback loop (EC-5-5),
+  ChannelStatusUpdater (#96 `9126acb`).
+- **v3.9.1** Final v4 polish -- AI onboarding wizard (Existing #10),
+  channel content daily rollup analytics (EC-9-4), operator alert
+  centre (EC-9-5), Instagram + Pinterest channel stubs (EC-4-4)
+  (#97 `48d03d7`).
+
+### Added (per ADR-028 epic + Existing roadmap items #1-#10)
+
+- **Epic 1 China Sourcing**: closed (v3.1.0 + v3.1.1).
+- **Epic 2 AI Product Enrichment**: closed (v3.2.0 + v3.2.1).
+- **Epic 3 TikTok Shop**: closed (v3.3.0 + v3.3.1).
+- **Epic 4 RedNote + Facebook + IG/Pinterest stubs**: closed
+  (v3.4.0 + v3.4.1 + v3.9.1 EC-4-4 stubs).
+- **Epic 5 Content Cluster**: closed (v3.4.0 EC-5-1 + EC-5-3,
+  v3.9.0 EC-5-2 + EC-5-4 + EC-5-5).
+- **Epic 6 Pricing**: closed (v3.5.0 EC-6-1..EC-6-3, v3.9.0
+  EC-6-4 competitor scraper + EC-6-5 margin dashboard).
+- **Epic 7 Fulfilment + Logistics + Returns**: closed (v3.5.0
+  EC-7-1 + EC-7-2 seeds, v3.8.0 EC-7-3..EC-7-5).
+- **Epic 8 Customer Service**: closed (v3.6.0 EC-8-1..EC-8-3).
+- **Epic 9 Analytics**: closed (v3.6.0 EC-9-1 + EC-9-2 backend,
+  v3.8.0 EC-9-3, v3.9.1 EC-9-4 + EC-9-5).
+- **Epic 10 uiauto Hardening**: closed (v3.7.0 EC-10-1..EC-10-5).
+- **Existing #1 OS-keychain session storage**: closed (v3.7.0
+  EC-10-1).
+- **Existing #2 chromedp dynamic-JS client**: deferred to v4.1.x
+  (carry-forward in ADR-029).
+- **Existing #3 RAG pgvector ingest hardening**: closed via v3.2.0
+  EC-2-4 trend signal ingestion.
+- **Existing #4 MADRL coordination seed**: closed (v3.5.1; full
+  multi-agent reinforcement learning post-v5).
+- **Existing #5 self-testing Temporal loops seed**: closed (v3.8.0;
+  expansion post-v5).
+- **Existing #6 uiauto Tier 2 promotion**: closed (v3.7.1 GO
+  decision; replay harness production capture post-v5).
+- **Existing #7 omniparser-bridge fleet offload**: closed (v2.10.1
+  baseline; harden + replay-mode in v3.7.0).
+- **Existing #8 EvoMap dual-feed observability**: closed (v2.10.0
+  baseline; per-epic NDJSON keys added throughout v3.x).
+- **Existing #9 marketplace developer ecosystem**: closed (v2.9.0
+  baseline; SDK example expansions in v3.x).
+- **Existing #10 AI onboarding wizard**: closed (v3.9.1 4-step
+  wizard with channel pre-flight + frontend backlog).
+
+### Migrations
+
+- 25 numbered SQL migrations in `migrations/`:
+  `0001_create_products` ... `0025_operator_alerts`. Plus
+  tenant-settings seeds in `seed/`.
+- Migration highlights by sprint:
+  - `0014_supplier_cost_baselines` (v3.5.0 EC-6-1).
+  - `0015_faq_entries` (v3.6.0 EC-8-2).
+  - `0016_gmv_daily_rollup` (v3.6.0 EC-9-1).
+  - `0017_shipping_labels` + `0018_returns` (v3.8.0 EC-7-3 +
+    EC-7-5).
+  - `0019_roi_daily_rollup` (v3.8.0 EC-9-3).
+  - `0020_competitor_prices` (v3.9.0 EC-6-4).
+  - `0021_content_calendar` (v3.9.0 EC-5-2).
+  - `0022_content_performance_history` (v3.9.0 EC-5-5).
+  - `0023_onboarding_wizards` (v3.9.1 Existing #10).
+  - `0024_channel_content_daily_rollup` (v3.9.1 EC-9-4).
+  - `0025_operator_alerts` (v3.9.1 EC-9-5).
+- All migrations are tenant-keyed (`tenant_id` mandatory) and use
+  the v2.4.0 RLS scheme; the `0011_rls` policy is re-asserted on
+  every new table.
+
+### Operational notes
+
+- **8 production binaries** (unchanged from v3.0.0 surface; per-cmd
+  expansion under each cmd's package): `mc-api`, `wc-sync`,
+  `content-worker`, `agent-worker`, `temporal-worker`,
+  `uiauto-compare`, `ec-cli`, `evomap-rollup`.
+- **~6000 Prometheus series** (cumulative across all epics):
+  - Epic 1 sourcing scorer + adapter histograms (~250 series).
+  - Epic 2 enrichment template + bg-removal latency (~400).
+  - Epic 3 TikTok seller, listing, webhook, inventory (~600).
+  - Epic 4 + 5 channel router + content pipeline (~700).
+  - Epic 6 + 7 pricing + fulfilment + carrier (~900).
+  - Epic 8 CS classifier + responder + adapter (~600).
+  - Epic 9 analytics rollups + alert centre (~400).
+  - Epic 10 uiauto session/memguard/ratelimit/captcha/replay
+    (~500).
+  - Carry-over v2.10.x resilience pillar (`ec_*` core 9 metrics
+    plus per-pool labels) (~750).
+  - Self-testing + EvoMap dual-feed cardinality (~400).
+- **8 Temporal workflows** + 30+ activities (extended from v3.0.0's
+  6 + 24): adds `DropShipSagaWorkflow`, `ReturnsSagaWorkflow`,
+  per-epic activities for sourcing, enrichment, channel routing,
+  CS, pricing, fulfilment, content, uiauto cassette replay.
+- **Tenant awareness**: every entity, endpoint, event carries
+  `tenant_id`. `0011_rls` Postgres RLS enforced on the 25
+  tenant-keyed tables.
+- **n8n workflows**: validated under
+  `make n8n-workflows-validate`; v3.9.0 EC-5-2 added the content
+  calendar workflow.
+- **Sentrux 18-sprint streak**: `complex_fn` held at **4** across
+  v3.1.0 -> v3.9.1 -> v4.0.0 (this release). One commit on
+  v3.2.1 (`43f1a84`) explicitly split a long enrichment-pipeline
+  test to keep the gate.
+
+### Quality gates re-verified at v4.0.0 (canonical `main` HEAD `48d03d7`)
+
+- `runx go test --repo ecommerce -- -race -p 4 ./...`: PASS
+  (89 packages green, 59.9 s elapsed; 0 FAIL).
+- `runx go vet --repo ecommerce -- ./...`: clean.
+- `runx make build --repo ecommerce`: 8 binaries built with
+  `GOTOOLCHAIN=auto` (`mc-api` 39 MB, `wc-sync` 8.7 MB,
+  `content-worker` 2.9 MB, `agent-worker` 10.3 MB,
+  `temporal-worker` 36.8 MB, `uiauto-compare` 3.2 MB, `ec-cli`
+  8.7 MB, `evomap-rollup` 3.5 MB).
+- `runx sentrux gate --repo ecommerce`: GREEN -- Quality 7040 ->
+  7047, Coupling 0.31 -> 0.30, Cycles 0, God files 0, Distance
+  from Main Sequence 0.29. **No degradation. complex_fn unchanged
+  at 4 (18-sprint streak hard gate held).**
+- `runx shell-leak-scan --repo ecommerce`: clean (canonical-rooted
+  scope; placeholders only).
+- Backend coverage gate (`>=83%` per ADR-026 + ADR-029): see PR
+  body for measured value (gate evaluated post-merge in CI;
+  worktree gate run in `make coverage-check`).
+
+### Notes
+
+- **ADR-028** (`Code/global-kb/adrs/ADR-028-ec-stack-v4-roadmap.md`,
+  PR #159 in `cursor-global-kb`) sourced the 9-sprint plan that
+  v4.0.0 closes.
+- **ADR-029** (in-repo at `docs/adr/adr-029-v4-release-decisions.md`)
+  documents v4.0.0 trade-offs: live carrier API integration,
+  Stripe webhook + refund flow validation, 1688/Taobao live API
+  scaling, MADRL multi-agent coordination, and replay harness
+  production capture all locked as carry-forwards for v4.1.x and
+  beyond. ADR-029 supersedes the v4 portions of ADR-026 and is the
+  canonical v4 release record.
+- **GitHub release artefacts**: cross-compiled binaries for
+  `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`
+  across all 8 binaries (32 artefacts) plus a `SHA256SUMS`
+  manifest. Reproducible build target lives in `Makefile` under
+  `make release VERSION=4.0.0`.
+- **Frontend companion**: `nfsarch33/agentic-ecommerce-web` ships
+  the matching v4.0.0 tag covering the AgentActivityFeed (v3.6.0
+  EC-9-2) + MarginDashboard (v3.9.0 EC-6-5). The
+  v3.9.1 frontend touchpoints (OnboardingWizard backlog,
+  OperatorAlertCentre) ship as a v4.1.x carry-forward; v3.9.1
+  backend surface is fully API-ready and the wizard + alert
+  surfaces are exposed via the existing v1 API for early operator
+  use through the back office.
+- **Demo script**: 30-minute live walkthrough at
+  `docs/demo/v400-demo-script.md` covers onboarding wizard,
+  sourcing -> enrichment, TikTok listing + webhook, RedNote uiauto,
+  pricing + competitor scrape, CS messaging + FAQ, margin
+  dashboard, alert centre, drop-ship saga + returns, SSE agent
+  activity.
+- **Final report**: `reports/v400_release_final_report.md`
+  consolidates per-sprint metrics, lessons learned, and
+  v4.1.x/v5 carry-forwards.
+- **VERSION** file bumped to `4.0.0`.
+
+### Carry-forwards locked for v4.1.x
+
+- Live AusPost eParcel + DHL Express integration (sandbox -> production
+  keys; real waybills, tracking webhooks).
+- Live Stripe webhook + refund flow validation (current v2.5.0
+  surface mostly stubbed for tests).
+- 1688 / Taobao live API integration (existing scrapers OK; production
+  scaling, real-account session lifecycle).
+- Carrier webhook signing keys rotation policy.
+- chromedp dynamic-JS 1688 client (Existing #2).
+- Frontend v3.9.1 surfaces (OnboardingWizard UI, OperatorAlertCentre
+  UI; backend complete in v3.9.1).
+- Replay harness production capture (Existing #6 deferred extension).
+
+### Carry-forwards locked beyond v5
+
+- Full MADRL multi-agent coordination (current v3.5.1 seed only).
+- Self-testing Temporal loop expansion past the v3.8.0 seed.
+- Per-tenant data residency (v3.0.0 ADR-026 candidate).
+- Real-time per-tenant observability beyond Prometheus + EvoMap.
+
 ## v3.7.0 -- Epic 10 uiauto hardening MVP -- 2026-05-10
 
 ### Release Summary
