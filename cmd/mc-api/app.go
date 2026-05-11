@@ -11,6 +11,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
 	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/agentic-ecommerce/internal/observability/hooks"
 )
 
 // app.go (v2.6.1 cmd/* DI refactor): keep main.go's main() body
@@ -56,9 +57,11 @@ func mainImpl(ctx context.Context, args []string, stdout io.Writer, getenv func(
 		shutdownTimeout = 10 * time.Second
 	}
 	mgr := lifecycle.New(logger, shutdownTimeout)
-	reg := startObservability(mgr, logger, "mc-api")
+	reg, h := startObservability(mgr, logger, "mc-api")
 	ecRegistry.Store(reg)
+	ecHooks.Store(h)
 	defer ecRegistry.Store(nil)
+	defer ecHooks.Store(nil)
 	return runServerWithLifecycle(ctx, mgr, logger, httpServer)
 }
 
@@ -118,9 +121,20 @@ func runServerWithLifecycle(ctx context.Context, mgr *lifecycle.Manager, logger 
 
 // startObservability boots the v2.10.0 metric registry + memwatch
 // sampler and registers them with the supplied lifecycle.Manager.
-// Returns the registry so the caller can wire its handler and the
-// per-request counters.
-func startObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary string) *metrics.Registry {
+// Returns the registry plus the v6.2.1 observability hooks bundle so
+// the caller can wire the workerpool / breaker / coordinator port
+// adapters into any current or future composition root call site.
+//
+// v6.2.1 QA change: previously this function returned only the
+// metric registry, leaving the v6.2.0 ec_workerpool_active,
+// ec_workerpool_rejected_total, ec_breaker_open_total,
+// ec_breaker_half_open_total, and ec_coord_conflicts_total hooks
+// without a production wiring path. The MVP report flagged that
+// production traffic was not yet exercising those counters. This
+// signature change closes the gap by handing back the
+// hooks.Hooks bundle that maps each port interface onto the matching
+// registry counter/gauge in one nil-safe constructor call.
+func startObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary string) (*metrics.Registry, *hooks.Hooks) {
 	reg := metrics.NewRegistry(binary)
 	sampler := memwatch.NewSampler(logger, memwatch.Config{
 		BinaryName:     binary,
@@ -133,7 +147,7 @@ func startObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary stri
 	})
 	go func() { _ = sampler.Run(context.Background()) }()
 	mgr.Register("memwatch", sampler)
-	return reg
+	return reg, hooks.FromRegistry(reg)
 }
 
 // getenvFn is the io-injectable variant of the package-private getenv
