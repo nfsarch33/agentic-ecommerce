@@ -807,32 +807,85 @@ func (s *server) readyzHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// productsHandler dispatches /api/v1/products{,/...} to the per-verb
+// helpers. The original v2.x body was a 19-cyclomatic switch ladder;
+// v6.1.0 splits the dispatch into two helpers so each path classifier
+// keeps cyclomatic well below the Sentrux complex_fn threshold without
+// changing routing semantics.
 func (s *server) productsHandler(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/products")
 	path = strings.TrimPrefix(path, "/")
 
-	switch {
-	case path == "" && r.Method == http.MethodGet:
-		s.listProducts(w, r)
-	case path == "" && r.Method == http.MethodPost:
-		s.createProduct(w, r)
-	case strings.HasSuffix(path, "/generate-description") && r.Method == http.MethodPost:
-		s.generateDescription(w, r, path)
-	case strings.HasSuffix(path, "/ai-suggestions") && r.Method == http.MethodGet:
-		s.aiSuggestions(w, r, path)
-	case strings.HasSuffix(path, "/compliance-check") && r.Method == http.MethodPost:
-		s.complianceCheck(w, r, path)
-	case strings.HasSuffix(path, "/seo-suggestions") && r.Method == http.MethodPost:
-		s.seoSuggestions(w, r, path)
-	case path != "" && r.Method == http.MethodGet:
-		s.getProduct(w, r, path)
-	case path != "" && r.Method == http.MethodPut:
-		s.updateProduct(w, r, path)
-	case path != "" && r.Method == http.MethodDelete:
-		s.deleteProduct(w, r, path)
-	default:
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+	if s.dispatchProductsCollection(w, r, path) {
+		return
 	}
+	if s.dispatchProductsResource(w, r, path) {
+		return
+	}
+	writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+}
+
+// dispatchProductsCollection handles the "" (collection) path:
+// GET -> list, POST -> create. Returns true when a handler ran.
+func (s *server) dispatchProductsCollection(w http.ResponseWriter, r *http.Request, path string) bool {
+	if path != "" {
+		return false
+	}
+	switch r.Method {
+	case http.MethodGet:
+		s.listProducts(w, r)
+		return true
+	case http.MethodPost:
+		s.createProduct(w, r)
+		return true
+	}
+	return false
+}
+
+// dispatchProductsResource handles the per-resource paths plus the
+// product-suffix RPCs. Returns true when a handler ran.
+func (s *server) dispatchProductsResource(w http.ResponseWriter, r *http.Request, path string) bool {
+	if path == "" {
+		return false
+	}
+	if s.dispatchProductsSuffixRPC(w, r, path) {
+		return true
+	}
+	switch r.Method {
+	case http.MethodGet:
+		s.getProduct(w, r, path)
+		return true
+	case http.MethodPut:
+		s.updateProduct(w, r, path)
+		return true
+	case http.MethodDelete:
+		s.deleteProduct(w, r, path)
+		return true
+	}
+	return false
+}
+
+// dispatchProductsSuffixRPC handles the AI / compliance / SEO RPC
+// endpoints suffixed onto a product path. Returns true when a handler
+// ran.
+func (s *server) dispatchProductsSuffixRPC(w http.ResponseWriter, r *http.Request, path string) bool {
+	if r.Method == http.MethodPost && strings.HasSuffix(path, "/generate-description") {
+		s.generateDescription(w, r, path)
+		return true
+	}
+	if r.Method == http.MethodGet && strings.HasSuffix(path, "/ai-suggestions") {
+		s.aiSuggestions(w, r, path)
+		return true
+	}
+	if r.Method == http.MethodPost && strings.HasSuffix(path, "/compliance-check") {
+		s.complianceCheck(w, r, path)
+		return true
+	}
+	if r.Method == http.MethodPost && strings.HasSuffix(path, "/seo-suggestions") {
+		s.seoSuggestions(w, r, path)
+		return true
+	}
+	return false
 }
 
 func (s *server) listProducts(w http.ResponseWriter, r *http.Request) {
