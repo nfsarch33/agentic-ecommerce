@@ -6,11 +6,13 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
 	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/agentic-ecommerce/internal/runtimeobs"
 )
 
 // app.go (v2.6.1 cmd/* DI refactor): keep main.go's main() body
@@ -121,18 +123,20 @@ func runServerWithLifecycle(ctx context.Context, mgr *lifecycle.Manager, logger 
 // Returns the registry so the caller can wire its handler and the
 // per-request counters.
 func startObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary string) *metrics.Registry {
-	reg := metrics.NewRegistry(binary)
+	rt := runtimeobs.New(logger, binary, runtimeobs.Config{
+		EvomapPath: runtimeobs.DefaultEvomapPath(os.Getenv),
+		Rotate:     true,
+	})
+	reg := rt.Registry()
 	sampler := memwatch.NewSampler(logger, memwatch.Config{
-		BinaryName:     binary,
-		SampleInterval: 5 * time.Second,
-		Sink: memwatch.SinkFunc(func(_ context.Context, s memwatch.Sample) {
-			reg.GoroutineCount.Set(float64(s.GoroutineCount), metrics.Labels{})
-			reg.HeapBytes.Set(float64(s.HeapInUseBytes), metrics.Labels{})
-		}),
+		BinaryName:        binary,
+		SampleInterval:    5 * time.Second,
+		Sink:              rt,
 		HeapAlarmCallback: func() { reg.OOMAlarms.Inc(metrics.Labels{}) },
 	})
 	go func() { _ = sampler.Run(context.Background()) }()
 	mgr.Register("memwatch", sampler)
+	mgr.Register("runtime-observability", rt)
 	return reg
 }
 
