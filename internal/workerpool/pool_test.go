@@ -162,7 +162,21 @@ func TestPanicIsolation(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("worker did not survive panic")
 	}
-	if got := pool.Stats().PanicsRecovered; got < 1 {
+	// `done` closes when the follow-up task runs on the surviving worker;
+	// the panic-task's deferred `panicsRecovered.Add` runs on a different
+	// goroutine and may not have observed by the time the channel fires
+	// (race surfaced under `-race -count=3`). Poll with a short deadline
+	// so the test asserts eventual consistency without sleeping.
+	deadline := time.Now().Add(2 * time.Second)
+	var got int64
+	for time.Now().Before(deadline) {
+		got = pool.Stats().PanicsRecovered
+		if got >= 1 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got < 1 {
 		t.Fatalf("PanicsRecovered=%d, want >=1", got)
 	}
 }
@@ -222,7 +236,18 @@ func TestStatsReflectActivity(t *testing.T) {
 		}
 	}
 	wg.Wait()
-	s := pool.Stats()
+	// wg.Done runs inside the task's own defer, which fires BEFORE the
+	// pool's outer defer that increments `completed`. Poll for eventual
+	// consistency so we don't race the outer defer under -race -count=N.
+	deadline := time.Now().Add(2 * time.Second)
+	var s Stats
+	for time.Now().Before(deadline) {
+		s = pool.Stats()
+		if s.Completed >= 6 && s.Submitted >= 6 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	if s.Submitted < 6 {
 		t.Fatalf("Submitted=%d, want >=6", s.Submitted)
 	}
