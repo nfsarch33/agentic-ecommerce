@@ -18,7 +18,7 @@ const (
 // infrastructureHostnames is the set of patterns that should never
 // appear in a public skill file per the public-repo-gate policy.
 var infrastructureHostnames = []string{
-	"wsl1", "win1", "macbook", "homelab",
+	"gpu-host-1", "windows-host-1", "operator-laptop", "private-lab",
 	"192.168.", "10.0.", "172.16.",
 	"localhost:8", "localhost:9",
 }

@@ -126,7 +126,7 @@ type RedNoteUIAutoClientConfig struct {
 }
 
 // RedNoteUIAutoClient calls the omniparser-bridge to drive a
-// chromedp poster on the wsl1 side. Client-side facade only; the
+// chromedp poster on the gpu-host-1 side. Client-side facade only; the
 // real chromedp poster ships in uiauto-framework.
 type RedNoteUIAutoClient struct {
 	cfg    RedNoteUIAutoClientConfig
@@ -142,7 +142,7 @@ func NewRedNoteUIAutoClient(logger *slog.Logger, cfg RedNoteUIAutoClientConfig) 
 		logger = slog.Default()
 	}
 	if strings.TrimSpace(cfg.BridgeURL) == "" {
-		return nil, fmt.Errorf("%w: BridgeURL required (runx alias for omniparser-bridge wsl1)", ErrRedNoteUnconfigured)
+		return nil, fmt.Errorf("%w: BridgeURL required (runx alias for omniparser-bridge gpu-host-1)", ErrRedNoteUnconfigured)
 	}
 	if len(cfg.BridgeSecret) < social.MinTikTokSecretBytes {
 		return nil, fmt.Errorf("%w: BridgeSecret < %d bytes", ErrRedNoteUnconfigured, social.MinTikTokSecretBytes)

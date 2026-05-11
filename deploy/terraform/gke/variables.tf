@@ -75,6 +75,12 @@ variable "environment" {
   description = "Deployment environment label (production, staging, dev)."
 }
 
+variable "namespace" {
+  type        = string
+  default     = "default"
+  description = "Kubernetes namespace that hosts the ecommerce workloads."
+}
+
 variable "labels" {
   type        = map(string)
   default     = {}

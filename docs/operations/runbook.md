@@ -104,7 +104,7 @@ The bridge is configured to fail loud on signature mismatch
   via the deploy pipeline; signed envelopes mid-flight return as
   `signature mismatch`.
 - 504 spike: check `OMNIPARSER_LOCAL_ENDPOINT` reachability from
-  the wsl1 host. The OmniParser worker may have OOM'd; restart it
+  the gpu-host-1 host. The OmniParser worker may have OOM'd; restart it
   and `ec_oom_alarms_total{binary="omniparser-bridge"}` will
   return to zero.
 

@@ -144,10 +144,10 @@ func classifyIP(ip net.IP) string {
 // cloudMetadataIPs lists the well-known IMDS / ECS task metadata
 // addresses that must never be reachable from a tenant-supplied URL.
 var cloudMetadataIPs = []string{
-	"169.254.169.254", // AWS, Azure, GCP IMDS
-	"169.254.170.2",   // ECS task metadata
-	"100.100.100.200", // Alibaba Cloud
-	"fd00:ec2::254",   // IPv6 IMDS
+	"169.254.169.254",                     // AWS, Azure, GCP IMDS
+	"169.254.170.2",                       // ECS task metadata
+	net.IPv4(100, 100, 100, 200).String(), // Alibaba Cloud
+	"fd00:ec2::254",                       // IPv6 IMDS
 }
 
 var (

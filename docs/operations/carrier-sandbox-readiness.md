@@ -13,15 +13,14 @@ We do NOT execute live AusPost or DHL sandbox tracking + label
 generation in v6.3.0. The hard requirements for live execution are:
 
 1. AusPost MyPost Business / Shipping API sandbox API key + HMAC secret,
-   sourced via `op read op://Cursor_IronClaw/auspost-sandbox-...`.
-2. DHL XML / MyDHL API sandbox account + bearer token, sourced via
-   `op read op://Cursor_IronClaw/dhl-sandbox-...`.
+   sourced through the approved `runx` environment surface.
+2. DHL XML / MyDHL API sandbox account + bearer token, sourced through
+   the approved `runx` environment surface.
 
-Inspection of the `Cursor_IronClaw` 1Password vault (47 items total) at
-the start of Pair 3 MVP found zero items matching `auspost`, `dhl`,
-`carrier`, or `shipping`. AusPost / DHL sandbox URLs and credentials
-will only be added via `runx config` (alias-only argv) and `op read`
-(stdin-injected secrets). Until the vault is populated and the runx
+Inspection of the operator-managed 1Password vault at the start of
+Pair 3 MVP found zero carrier sandbox items. AusPost / DHL sandbox URLs
+and credentials will only be added via `runx config` (alias-only argv)
+and stdin-injected secrets. Until the vault is populated and the runx
 alias is registered, the live path is gated off.
 
 ## Existing CI Coverage (no regression)
@@ -54,13 +53,13 @@ These tests run on every PR with `runx go test --repo ecommerce -- -race
 1. Register runx aliases (no raw hosts on argv):
    - `runx config set carrier.auspost.sandbox-url` -> alias only.
    - `runx config set carrier.dhl.sandbox-url` -> alias only.
-2. Populate `Cursor_IronClaw` vault items:
-   - `auspost-sandbox-api-key`, `auspost-sandbox-hmac-secret`
-   - `dhl-sandbox-account-id`, `dhl-sandbox-bearer-token`
+2. Populate operator vault items for the AusPost and DHL sandbox
+   credentials.
 3. Add a new build tag `live_carrier_sandbox`-gated test file at
    `internal/adapter/carrier/sandbox_live_test.go` that:
    - Skips when `op read` is unavailable or vault items missing.
-   - Reads each secret via `op read` piped into `t.Setenv` (no argv).
+   - Reads each secret through the approved stdin-injection path and
+     `t.Setenv` (no argv).
    - Executes quote + label generation + tracking lookup flows.
 4. Run via `runx go test --repo ecommerce -- -tags=live_carrier_sandbox
    ./internal/adapter/carrier/...` ad-hoc; never in default CI.

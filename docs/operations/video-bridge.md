@@ -28,7 +28,7 @@ directly. Specifically:
 - The temporary intermediate frames during 60-second clip
   assembly inflate the heap to ~600 MiB on a single product run.
 
-All three classes of work belong on the WSL fleet (wsl1 / wsl2)
+All three classes of work belong on the WSL fleet (gpu-host-1 / gpu-host-2)
 behind a small HTTP bridge analogous to `image-bridge`
 (v3.2.0 EC-2-2 stub-with-doc) and `omniparser-bridge` (v3.3.0
 EC-3-5 + v3.4.0 EC-4-1 RedNote facade).
@@ -59,7 +59,7 @@ sentinel.
 ### 1. Provision the bridge service
 
 - Repo: `video-bridge` (new, mirror `omniparser-bridge` layout).
-- Host: `wsl1` (primary), `wsl2` (failover).
+- Host: `gpu-host-1` (primary), `gpu-host-2` (failover).
 - Dependencies (all OSS):
   - `u2takey/ffmpeg-go` (~2.8k stars, Apache-2.0) -- Go wrapper
     around the ffmpeg CLI; declined for the v3.4.0 backend per

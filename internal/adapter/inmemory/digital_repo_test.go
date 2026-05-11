@@ -130,6 +130,20 @@ func TestLicenseRepoStateMachineSafe(t *testing.T) {
 	if page.Total != 1 {
 		t.Fatalf("ListByCustomer total = %d, want 1", page.Total)
 	}
+	all, err := repo.List(ctx, "tenant-a", 0, 0)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if all.Total != 1 || len(all.Licenses) != 1 {
+		t.Fatalf("List total=%d len=%d, want 1/1", all.Total, len(all.Licenses))
+	}
+	empty, err := repo.List(ctx, "tenant-a", 99, 1)
+	if err != nil {
+		t.Fatalf("List empty page: %v", err)
+	}
+	if empty.Total != 1 || len(empty.Licenses) != 0 {
+		t.Fatalf("List empty total=%d len=%d, want 1/0", empty.Total, len(empty.Licenses))
+	}
 }
 
 func TestAccessGrantRepoUpsertIdempotent(t *testing.T) {
@@ -166,6 +180,16 @@ func TestAccessGrantRepoUpsertIdempotent(t *testing.T) {
 	if got.Source() != digital.SourceGift {
 		t.Fatalf("source not updated, got %q", got.Source())
 	}
+	byID, err := repo.Get(ctx, "tenant-a", got.ID())
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if byID.ProductID() != productID {
+		t.Fatalf("Get product=%v, want %v", byID.ProductID(), productID)
+	}
+	if _, err := repo.Get(ctx, "tenant-a", uuid.New()); !errors.Is(err, port.ErrAccessGrantNotFound) {
+		t.Fatalf("missing Get: %v", err)
+	}
 	// Tenant isolation.
 	if _, err := repo.GetByCustomerProduct(ctx, "tenant-b", customerID, productID); !errors.Is(err, port.ErrAccessGrantNotFound) {
 		t.Fatalf("cross-tenant grant: %v", err)
@@ -174,5 +198,12 @@ func TestAccessGrantRepoUpsertIdempotent(t *testing.T) {
 	page, _ := repo.ListByCustomer(ctx, "tenant-a", customerID, 1, 10)
 	if page.Total != 1 {
 		t.Fatalf("ListByCustomer total = %d, want 1", page.Total)
+	}
+	empty, err := repo.ListByCustomer(ctx, "tenant-a", customerID, 99, 1)
+	if err != nil {
+		t.Fatalf("ListByCustomer empty page: %v", err)
+	}
+	if empty.Total != 1 || len(empty.Grants) != 0 {
+		t.Fatalf("ListByCustomer empty total=%d len=%d, want 1/0", empty.Total, len(empty.Grants))
 	}
 }

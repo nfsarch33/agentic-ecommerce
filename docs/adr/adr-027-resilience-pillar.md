@@ -48,7 +48,7 @@ v2.0.1 -> v2.9.0 left the stack feature-complete but resilience-light:
   NDJSON local sink and a Prometheus Pushgateway remote_write so
   EvoLoop-DRL can self-tune the same SLOs the operator dashboards
   watch.
-- Heavy upstreams (OmniParser, MiniMax) must run on the wsl1 fleet
+- Heavy upstreams (OmniParser, MiniMax) must run on the gpu-host-1 fleet
   and be reached via signed bridges so no MacBook agent prints the
   fleet IP on argv.
 
@@ -97,7 +97,7 @@ Cardinality is bounded at 10_000 distinct label combinations per
 metric; exceeding the bound increments
 `ec_metrics_series_dropped_total`.
 
-### D4: EvoMap dual-feed (NDJSON local + Prometheus Pushgateway)
+### D4: EvoMap dual-feed (NDJSON local + Prometheus metrics gateway)
 
 `internal/evomap.Sink` writes one JSON line per minute per binary
 to `tests/metrics/evomap.ndjson` (rotated daily by ISO date). The
@@ -108,15 +108,15 @@ EvoLoop-DRL self-tuning pipeline gets the same shape it already
 consumes.
 
 In parallel, every binary pushes the same KPI shape every 60 s to
-the fleet Prometheus Pushgateway. The Pushgateway URL is resolved
-via the existing `runx` `pushgateway` tunnel forward (alias-only
-on argv), never the wsl1 IP literal.
+the fleet Prometheus metrics gateway. The gateway URL is resolved
+via an existing `runx` tunnel forward (alias-only on argv), never
+a fleet IP literal.
 
 ### D5: Heavy-upstream offload via signed bridges
 
 OmniParser (visual UI parsing for `cmd/uiauto-compare`) and the
-Pushgateway (Prometheus remote_write target) are too heavy to run
-on the MacBook and live on the wsl1 fleet host. They are reached
+Prometheus remote_write target are too heavy to run on the MacBook
+and live on the gpu-host-1 fleet host. They are reached
 via signed bridges:
 
 - **`omniparser-bridge`** -- new repo `nfsarch33/omniparser-bridge`
@@ -124,9 +124,9 @@ via signed bridges:
   on a `<unix-secs>\n<path>\n<body>` preimage. Mirrors the proven
   `minimax-openai-bridge` pattern; 32-byte minimum secret,
   configurable replay window (default 60 s), 8 MiB inbound body cap.
-- **`pushgateway` runx tunnel** -- the existing v2.10.0 forward
-  resolves wsl1 -> 127.0.0.1:19091 on the MacBook. The bridge is
-  pure HTTPS basic-auth; no app code needs to know the wsl1
+- **Metrics gateway runx tunnel** -- the existing v2.10.0 forward
+  resolves a runx alias to `127.0.0.1:<port>` on the MacBook. The bridge is
+  pure HTTPS basic-auth; no app code needs to know the fleet
   endpoint.
 
 Both bridges accept only signed POST traffic. Both bridges are
@@ -174,7 +174,7 @@ each test pulls a Docker image and takes 30-180 s.
   MacBook cannot do either reliably for a 24/7 agent.
 
 We chose the bridge-per-upstream pattern (Option 4 negated) so
-heavy compute stays on wsl1 and the MacBook stays a thin client.
+heavy compute stays on gpu-host-1 and the MacBook stays a thin client.
 
 ## Consequences
 
@@ -183,7 +183,7 @@ heavy compute stays on wsl1 and the MacBook stays a thin client.
 - v3.0.0 ships with a credible "we will not OOM the host" property
   and an end-to-end traceable observability surface.
 - `omniparser-bridge` is reusable for any future fleet-resident
-  upstream (planned v3.1: rerank model on wsl2).
+  upstream (planned v3.1: rerank model on gpu-host-2).
 - Chaos suite gives v3.x sprints a "is the lifecycle invariant
   still honoured?" gate they can run before merging.
 

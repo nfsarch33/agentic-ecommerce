@@ -189,3 +189,19 @@ func TestCircuitBreakerOpenSkipsMiniMax(t *testing.T) {
 		t.Fatalf("minimax called %d times, want 0 (circuit open)", minimax.called)
 	}
 }
+
+func TestTemplateProviderReturnsStaticFallback(t *testing.T) {
+	t.Parallel()
+
+	provider := llm.NewTemplateProvider("fallback copy")
+	resp, err := provider.Complete(context.Background(), port.AICompletionRequest{})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if provider.Name() != "template" {
+		t.Fatalf("Name = %q, want template", provider.Name())
+	}
+	if resp.Content != "fallback copy" || resp.TokensUsed != 0 {
+		t.Fatalf("unexpected response: %#v", resp)
+	}
+}
