@@ -55,10 +55,13 @@ func TestRegisterWorkflowsAndActivities(t *testing.T) {
 	reg := &fakeRegistry{}
 	registerWorkflowsAndActivities(reg, deps)
 
-	if got, want := len(reg.workflows), 5; got != want {
+	// v6.3.0 CF-14 added GMVDailyRefreshWorkflow + the
+	// gmv.daily_refresh activity, bumping the contract from 5+24 to
+	// 6+25.
+	if got, want := len(reg.workflows), 6; got != want {
 		t.Fatalf("workflows registered = %d, want %d", got, want)
 	}
-	if got, want := len(reg.activities), 24; got != want {
+	if got, want := len(reg.activities), 25; got != want {
 		t.Fatalf("activities registered = %d, want %d", got, want)
 	}
 
@@ -76,6 +79,7 @@ func TestRegisterWorkflowsAndActivities(t *testing.T) {
 		"tenant.issue_welcome_notification":      false,
 		"tenant.register_default_plugins":        false,
 		"tenant.rollback_record":                 false,
+		"gmv.daily_refresh":                      false,
 	}
 	for _, a := range reg.activities {
 		if _, ok := wantNames[a.name]; ok {
