@@ -53,6 +53,7 @@ var migrationFiles = []string{
 	"0009_marketplace.up.sql",
 	"0010_billing.up.sql",
 	"0011_rls.up.sql",
+	"0037_idempotency_store.up.sql",
 }
 
 func startContainerPool(t *testing.T) *pgxpool.Pool {
