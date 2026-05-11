@@ -39,6 +39,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/agentic-ecommerce/internal/observability/hooks"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
@@ -69,6 +70,15 @@ var (
 	// legacy agentic_ecommerce_* exposition. Atomic so tests + runtime
 	// stay race-clean.
 	ecRegistry atomic.Pointer[metrics.Registry]
+
+	// v6.2.1 QA Story 5: observability hooks bundle (PoolMetrics +
+	// BreakerMetrics + CoordinatorMetrics) constructed by
+	// startObservability so any current or future workerpool /
+	// resilience / coord call site can opt in via the same registry
+	// path that surfaces ec_workerpool_*, ec_breaker_*, and
+	// ec_coord_conflicts_total on /metrics. Atomic so tests + runtime
+	// stay race-clean.
+	ecHooks atomic.Pointer[hooks.Hooks]
 )
 
 type moneyResponse struct {
