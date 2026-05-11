@@ -64,6 +64,10 @@ type workerDeps struct {
 	MediaActivities      *ecworkflow.MediaProcessingActivities
 	SourcingActivities   *ecworkflow.SourcingActivities
 	OnboardingActivities *ecworkflow.TenantOnboardingActivities
+	// v6.3.0 CF-14: GMV daily REFRESH activity. Nil when no
+	// ECOMMERCE_DB_URL is configured (the workflow then refuses to
+	// run because executor is unwired).
+	GMVDailyRefreshActivities *ecworkflow.GMVDailyRefreshActivities
 }
 
 type agentScheduleConfig struct {
@@ -107,6 +111,11 @@ func mainImpl(ctx context.Context, stdout io.Writer, getenv func(string) string,
 
 	w := worker.New(c, deps.TaskQueue, worker.Options{})
 	registerWorkflowsAndActivities(w, deps)
+
+	// v6.3.0 CF-14: register the GMV daily REFRESH schedule (cron
+	// 0 2 * * * Australia/Sydney). Idempotent: AlreadyExists is
+	// swallowed so worker restarts do not stack schedules.
+	ensureGMVDailyRefreshSchedule(ctx, logger, c, deps.TaskQueue)
 
 	// v2.10.0 Story 1+3: bind memwatch + lifecycle Manager so heap +
 	// goroutine ceilings are monitored. Temporal owns its own InterruptCh
@@ -171,19 +180,61 @@ func buildWorkerDeps(ctx context.Context, logger *slog.Logger, scheduleCfg agent
 	mediaActivities := newMediaProcessingActivitiesFromEnv(logger, repo)
 	sourcingActivities := ecworkflow.NewSourcingActivities(ecworkflow.SourcingActivityDeps{})
 	onboardingActivities := newTenantOnboardingActivitiesFromEnv()
+	gmvRefreshActivities := newGMVDailyRefreshActivitiesFromEnv(ctx, logger)
 
 	return &workerDeps{
-		Logger:               logger,
-		TaskQueue:            temporalTaskQueueFromEnv(),
-		ScheduleCfg:          scheduleCfg,
-		Repo:                 repo,
-		RepoCleanup:          cleanupRepo,
-		PublishActivities:    publishActivities,
-		ContentActivities:    contentActivities,
-		MediaActivities:      mediaActivities,
-		SourcingActivities:   sourcingActivities,
-		OnboardingActivities: onboardingActivities,
+		Logger:                    logger,
+		TaskQueue:                 temporalTaskQueueFromEnv(),
+		ScheduleCfg:               scheduleCfg,
+		Repo:                      repo,
+		RepoCleanup:               cleanupRepo,
+		PublishActivities:         publishActivities,
+		ContentActivities:         contentActivities,
+		MediaActivities:           mediaActivities,
+		SourcingActivities:        sourcingActivities,
+		OnboardingActivities:      onboardingActivities,
+		GMVDailyRefreshActivities: gmvRefreshActivities,
 	}, nil
+}
+
+// newGMVDailyRefreshActivitiesFromEnv wires the v6.3.0 CF-14 GMV
+// daily refresh activity. When ECOMMERCE_DB_URL is unset the
+// activity is wired with a nil executor so the workflow returns a
+// clean "executor unwired" error instead of panicking. Production
+// always has a DSN configured.
+func newGMVDailyRefreshActivitiesFromEnv(ctx context.Context, logger *slog.Logger) *ecworkflow.GMVDailyRefreshActivities {
+	dsn := strings.TrimSpace(os.Getenv("ECOMMERCE_DB_URL"))
+	if dsn == "" {
+		if logger != nil {
+			logger.Warn("temporal_worker.gmv_refresh_disabled", "reason", "ECOMMERCE_DB_URL not set")
+		}
+		return ecworkflow.NewGMVDailyRefreshActivities(ecworkflow.GMVDailyRefreshActivityDeps{})
+	}
+	poolCfg, err := temporalDatabasePoolConfigFromEnv(dsn)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("temporal_worker.gmv_refresh_pool_config", "error", err)
+		}
+		return ecworkflow.NewGMVDailyRefreshActivities(ecworkflow.GMVDailyRefreshActivityDeps{})
+	}
+	connectCtx, cancel := context.WithTimeout(ctx, poolCfg.ConnConfig.ConnectTimeout)
+	defer cancel()
+	pool, err := pgxpool.NewWithConfig(connectCtx, poolCfg)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("temporal_worker.gmv_refresh_pool", "error", err)
+		}
+		return ecworkflow.NewGMVDailyRefreshActivities(ecworkflow.GMVDailyRefreshActivityDeps{})
+	}
+	exec, err := postgres.NewRefreshExecutor(pool)
+	if err != nil {
+		pool.Close()
+		if logger != nil {
+			logger.Warn("temporal_worker.gmv_refresh_executor", "error", err)
+		}
+		return ecworkflow.NewGMVDailyRefreshActivities(ecworkflow.GMVDailyRefreshActivityDeps{})
+	}
+	return ecworkflow.NewGMVDailyRefreshActivities(ecworkflow.GMVDailyRefreshActivityDeps{Executor: exec})
 }
 
 // newTenantOnboardingActivitiesFromEnv wires the v2.9.0 tenant
@@ -238,6 +289,13 @@ func registerWorkflowsAndActivities(w workerRegistry, deps *workerDeps) {
 	w.RegisterActivityWithOptions(deps.OnboardingActivities.IssueWelcomeNotification, activity.RegisterOptions{Name: ecworkflow.TenantIssueWelcomeActivity})
 	w.RegisterActivityWithOptions(deps.OnboardingActivities.RegisterDefaultPlugins, activity.RegisterOptions{Name: ecworkflow.TenantRegisterDefaultPluginsActivity})
 	w.RegisterActivityWithOptions(deps.OnboardingActivities.RollbackRecord, activity.RegisterOptions{Name: ecworkflow.TenantRollbackRecordActivity})
+
+	// v6.3.0 CF-14: GMV daily REFRESH workflow + activity. Schedule
+	// registration is performed once at boot via
+	// ensureGMVDailyRefreshSchedule so re-registration on restart is
+	// idempotent (Create returns AlreadyExists which we swallow).
+	w.RegisterWorkflow(ecworkflow.GMVDailyRefreshWorkflow)
+	w.RegisterActivityWithOptions(deps.GMVDailyRefreshActivities.Refresh, activity.RegisterOptions{Name: ecworkflow.GMVDailyRefreshActivity})
 }
 
 func newMediaProcessingActivitiesFromEnv(logger *slog.Logger, repo port.ProductRepository) *ecworkflow.MediaProcessingActivities {
