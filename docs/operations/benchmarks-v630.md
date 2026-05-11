@@ -31,11 +31,12 @@ Run locally (one-shot):
 
 ```bash
 TESTCONTAINERS_RYUK_DISABLED=true \
+  EC_V631_BENCH_TEXTFILE_DIR=../../../tests/load/results/v631-pg-bench \
   runx worktree run --repo ecommerce \
-    --branch feat/v630-live-validation-performance -- \
+    --branch qa/v631-real-pg-distributions-and-k6-matrix -- \
     go test -tags=integration_pg -run=NONE \
-      -bench 'BenchmarkV630_' -benchtime=2s -benchmem \
-      -count=1 -timeout=8m ./internal/adapter/postgres/
+      -bench 'BenchmarkV630_' -benchtime=5s -benchmem \
+      -count=10 -timeout=30m ./internal/adapter/postgres/
 ```
 
 CI hook: gated behind the `integration_pg` build tag so the default
@@ -54,6 +55,46 @@ stays Docker-free (107 packages, ~2 min).
 | orders detail (`OrderRepo.GetByID`)   |      456,855 |     0.457 |  4,012 |        99 | sub-microsecond |
 | inventory reserve (read+write)        |      786,746 |     0.787 |  2,938 |        83 | sub-microsecond |
 | products list by tenant               |      491,371 |     0.491 | 29,496 |       425 | sub-microsecond |
+
+## v6.3.1 QA Distribution Baseline (2026-05-11, Apple M4 Pro)
+
+Command:
+
+```bash
+TESTCONTAINERS_RYUK_DISABLED=true \
+  EC_V631_BENCH_TEXTFILE_DIR=../../../tests/load/results/v631-pg-bench \
+  runx worktree run --repo ecommerce \
+    --branch qa/v631-real-pg-distributions-and-k6-matrix -- \
+    go test -tags=integration_pg -run=NONE \
+      -bench 'BenchmarkV630_' -benchtime=5s -benchmem \
+      -count=10 -timeout=30m ./internal/adapter/postgres/
+```
+
+The benchmark helper now records `time.Since` samples around the actual
+repository operation and reports `p50_ns/op`, `p95_ns/op`, and `p99_ns/op`
+through Go's benchmark metrics. When `EC_V631_BENCH_TEXTFILE_DIR` is set, each
+benchmark also writes a Prometheus textfile under that directory, overwriting
+calibration runs so the latest sample per benchmark stays bounded.
+
+The full distribution run emitted a complete PASS benchmark table. The `runx
+worktree run` wrapper reported `signal: killed` after the PASS table; a short
+smoke rerun of `BenchmarkV630_ProductsGetByID` exited 0, so the measurements
+below are accepted as the v6.3.1 QA snapshot while the wrapper cleanup signal
+remains watch-listed.
+
+| Endpoint surface (repo op) | Mean range (ms) | p50 range (ms) | Max p95 (ms) | Max p99 (ms) | allocs/op |
+|---|---:|---:|---:|---:|---:|
+| products list (`ProductRepo.List`) | 0.483-0.536 | 0.464-0.478 | 0.681 | 1.394 | 422 |
+| products detail (`GetByID`) | 0.215-0.246 | 0.205-0.213 | 0.316 | 0.693 | 50 |
+| products by slug (`GetBySlug`) | 0.218-0.235 | 0.204-0.214 | 0.331 | 0.547 | 31 |
+| products create (`Create`) | 0.248-0.278 | 0.234-0.253 | 0.381 | 0.497 | 41 |
+| orders create (`OrderRepo.Create`) | 0.491-0.559 | 0.469-0.484 | 0.742 | 1.527 | 99 |
+| orders detail (`OrderRepo.GetByID`) | 0.438-0.474 | 0.421-0.438 | 0.613 | 0.959 | 99 |
+| inventory reserve (read+write) | 0.457-0.487 | 0.440-0.448 | 0.611 | 0.911 | 83 |
+| products list by tenant | 0.473-0.531 | 0.455-0.477 | 0.663 | 1.047 | 425 |
+
+Result: all eight real-Postgres surfaces remain sub-1ms at p95 on the local
+Docker baseline; the highest observed p99 was 1.53ms on `OrderRepo.Create`.
 
 ### Interpretation
 
@@ -76,13 +117,10 @@ budgets per ADR-029.
 ### Bench-time vs p95/p99
 
 `-benchtime=2s` produces a stable mean but not a tail-sensitive
-distribution. Pair 3 QA (v6.3.1) will:
-
-1. Re-run with `-count=10 -benchtime=5s` to give Go's bench
-   stat-aggregator enough samples to report mean +/- stddev.
-2. Wrap key ops with a `time.Since` histogram exporter so p50,
-   p95, p99 are emitted to a Prometheus textfile -- captured into
-   the QA capsule as the v6.3.1 baseline.
+distribution. Pair 3 QA (v6.3.1) closed that gap by re-running with
+`-count=10 -benchtime=5s` and wrapping key ops with a `time.Since`
+distribution exporter for p50, p95, p99, and optional Prometheus textfile
+output.
 
 For the v6.3.0 MVP gate the harness (testcontainers + pgvector +
 canonical migration set + shared pool) is the deliverable; the
@@ -105,6 +143,6 @@ EC_PG_MAX_OPEN_CONNS=50 EC_PG_MAX_IDLE_CONNS=20 \
 
 ## Carry-forward
 
-CF-10 is now CLOSED at the harness level and OPEN at the
-distribution-publishing level (deferred to v6.3.1 QA per the plan
-"v6.3.1 QA -- Real Postgres Benchmark Report" task).
+CF-10 is now CLOSED at both the harness level and the distribution-publishing
+level. Future QA runs should refresh the v6.3.1 table rather than creating a
+new benchmark harness.

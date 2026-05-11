@@ -183,14 +183,19 @@ func BenchmarkV630_ProductsList_Page1(b *testing.B) {
 	}
 	_ = seedProducts(b, pool, 50)
 	ctx := context.Background()
+	latency := newBenchLatencyRecorder("products_list", b.N)
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
+		start := time.Now()
 		if _, err := repo.List(ctx, 1, 20); err != nil {
 			b.Fatalf("List: %v", err)
 		}
+		latency.observe(time.Since(start))
 	}
+	b.StopTimer()
+	finishBenchLatency(b, latency)
 }
 
 // --- Bench 2: ProductRepo.GetByID (product detail endpoint) -------
@@ -203,15 +208,20 @@ func BenchmarkV630_ProductsGetByID(b *testing.B) {
 	}
 	ids := seedProducts(b, pool, 50)
 	ctx := context.Background()
+	latency := newBenchLatencyRecorder("products_get_by_id", b.N)
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		id := ids[i%len(ids)]
+		start := time.Now()
 		if _, err := repo.GetByID(ctx, id); err != nil {
 			b.Fatalf("GetByID: %v", err)
 		}
+		latency.observe(time.Since(start))
 	}
+	b.StopTimer()
+	finishBenchLatency(b, latency)
 }
 
 // --- Bench 3: ProductRepo.GetBySlug -------------------------------
@@ -237,14 +247,19 @@ func BenchmarkV630_ProductsGetBySlug(b *testing.B) {
 		slugs = append(slugs, p.Slug())
 	}
 	ctx := context.Background()
+	latency := newBenchLatencyRecorder("products_get_by_slug", b.N)
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
+		start := time.Now()
 		if _, err := repo.GetBySlug(ctx, slugs[i%len(slugs)]); err != nil {
 			b.Fatalf("GetBySlug: %v", err)
 		}
+		latency.observe(time.Since(start))
 	}
+	b.StopTimer()
+	finishBenchLatency(b, latency)
 }
 
 // --- Bench 4: ProductRepo.Create (catalog write) -------------------
@@ -256,6 +271,7 @@ func BenchmarkV630_ProductsCreate(b *testing.B) {
 		b.Fatalf("truncate: %v", err)
 	}
 	ctx := context.Background()
+	latency := newBenchLatencyRecorder("products_create", b.N)
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -269,10 +285,14 @@ func BenchmarkV630_ProductsCreate(b *testing.B) {
 			ID: uuid.New(), SKU: sku, Title: "Create Bench", Slug: "create-" + sku,
 			Description: "Bench write row.", Price: price, Stock: 1, Status: catalog.StatusActive,
 		})
+		start := time.Now()
 		if err := repo.Create(ctx, p); err != nil {
 			b.Fatalf("Create: %v", err)
 		}
+		latency.observe(time.Since(start))
 	}
+	b.StopTimer()
+	finishBenchLatency(b, latency)
 }
 
 // --- Bench 5: OrderRepo.Create (orders create endpoint) ------------
@@ -290,15 +310,20 @@ func BenchmarkV630_OrdersCreate(b *testing.B) {
 		b.Fatalf("seed product: %v", err)
 	}
 	ctx := context.Background()
+	latency := newBenchLatencyRecorder("orders_create", b.N)
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		order := makeIntegrationOrder(t, product)
+		start := time.Now()
 		if err := orders.Create(ctx, order); err != nil {
 			b.Fatalf("Create order: %v", err)
 		}
+		latency.observe(time.Since(start))
 	}
+	b.StopTimer()
+	finishBenchLatency(b, latency)
 }
 
 // --- Bench 6: OrderRepo.GetByID (orders detail) -------------------
@@ -324,14 +349,19 @@ func BenchmarkV630_OrdersGetByID(b *testing.B) {
 		orderIDs = append(orderIDs, o.ID())
 	}
 	ctx := context.Background()
+	latency := newBenchLatencyRecorder("orders_get_by_id", b.N)
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
+		start := time.Now()
 		if _, err := orders.GetByID(ctx, orderIDs[i%len(orderIDs)]); err != nil {
 			b.Fatalf("GetByID: %v", err)
 		}
+		latency.observe(time.Since(start))
 	}
+	b.StopTimer()
+	finishBenchLatency(b, latency)
 }
 
 // --- Bench 7: ProductRepo.Update (inventory reserve approximation) -
@@ -348,12 +378,14 @@ func BenchmarkV630_InventoryReserveAndRead(b *testing.B) {
 	}
 	ids := seedProducts(b, pool, 25)
 	ctx := context.Background()
+	latency := newBenchLatencyRecorder("inventory_reserve_and_read", b.N)
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		id := ids[i%len(ids)]
 		// Read-modify-write to model a reservation flow.
+		start := time.Now()
 		got, err := products.GetByID(ctx, id)
 		if err != nil {
 			b.Fatalf("get: %v", err)
@@ -366,7 +398,10 @@ func BenchmarkV630_InventoryReserveAndRead(b *testing.B) {
 		if err := products.Update(ctx, updated); err != nil {
 			b.Fatalf("update: %v", err)
 		}
+		latency.observe(time.Since(start))
 	}
+	b.StopTimer()
+	finishBenchLatency(b, latency)
 }
 
 // --- Bench 8: ProductRepo.ListByTenant (tenant-scoped catalog) -----
@@ -385,12 +420,17 @@ func BenchmarkV630_ProductsListByTenant(b *testing.B) {
 		}
 	}
 	ctx := context.Background()
+	latency := newBenchLatencyRecorder("products_list_by_tenant", b.N)
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
+		start := time.Now()
 		if _, err := repo.ListByTenant(ctx, "bench-tenant", 1, 20); err != nil {
 			b.Fatalf("ListByTenant: %v", err)
 		}
+		latency.observe(time.Since(start))
 	}
+	b.StopTimer()
+	finishBenchLatency(b, latency)
 }
