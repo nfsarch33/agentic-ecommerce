@@ -2,6 +2,76 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## [6.6.0] - 2026-05-11 -- v6.1.x carry-forward cleanup closeout
+
+### Release Summary
+
+v6.6.0 closes the compressed v6.1.x -> v6.6.0 cleanup cycle. The release
+drained the highest-risk ADR-032 and v5 lessons-learned carry-forwards without
+adding new product scope: backend quality and OOM controls deepened, real
+Postgres and k6 evidence replaced dry-run assumptions, repo documentation gained
+docsync gates, and the frontend Lighthouse/SEO carry-forwards closed with
+route-matrix evidence.
+
+### Pair 1: v6.1.0 MVP + v6.1.1 QA
+
+- Closed the macOS `TestHeapCeilingTriggers*` flake by wiring sampler shutdown
+  and asynchronous heap-alarm callbacks.
+- Added Postgres-backed idempotency storage (`0037_idempotency_store`) with the
+  in-memory store retained as a test double.
+- Extracted the typed `ErrInvalidFXRate` sentinel and refreshed backend
+  coverage to 84.8% after triple-run flake detection.
+- Refreshed the Sentrux baseline with zero hook bypasses.
+
+### Pair 2: v6.2.0 MVP + v6.2.1 QA
+
+- Wired Agentrace production NDJSON capture with runx-alias transport guards.
+- Added JWT key-version storage (`0038_jwt_key_versions`) and graceful rotation
+  support.
+- Added memwatch request budgets, adaptive RSS ceilings, and coordinator
+  Prometheus metrics.
+- Added Postgres FAQ storage (`0039_faq_store`) and validated Agentrace/JWT/
+  memwatch soak behaviour.
+
+### Pair 3: v6.3.0 MVP + v6.3.1 QA
+
+- Published real Postgres benchmark distributions and corrected the k6 matrix
+  route/rate contract.
+- Validated the full k6 matrix at 100 RPS for 5 minutes with 30,008 requests,
+  0 failed checks, and aggregate p95 8.06 ms.
+- Added Temporal daily GMV refresh scheduling and kept all 107 backend packages
+  green under `-race`.
+
+### Pair 4: v6.4.0 MVP + v6.4.1 QA
+
+- Added `cursor-tools docsync` and `runx docs` wrappers so README, ADR, release,
+  and operations docs can be checked consistently.
+- Repaired cursor-tools workspace/install skew and completed a fleet-wide
+  docsync sweep with owned drift fixed through focused PRs.
+- Aligned backend README/OpenAPI/ADR documentation and closed CF-18 supplier
+  cost threshold semantics.
+
+### Pair 5: v6.5.0 MVP + v6.5.1 QA
+
+- Repaired the Next.js 16 / ESLint 9 flat-config quality gate in the frontend.
+- Added centralized frontend metadata and JSON-LD for product and marketplace
+  detail pages.
+- Closed Lighthouse Performance >=90 and dynamic-page SEO >=90 with static and
+  mock-backed route matrices.
+- Added the frontend cross-cycle KPI dashboard and tracked React `act(...)`
+  warnings as a release-readiness metric.
+
+### Remaining Carry-Forwards
+
+- Backend Sentrux Quality >7000 remains a v7 structural refactor candidate.
+- Backend coverage >=85% remains 0.2 percentage points short at the last durable
+  84.8% measurement.
+- Backend `complex_fn <=4` remains open at 5.
+- Live OmniParser/uiauto comparison remains deferred to v7.x until remote GPU
+  routing is registered and proven safe.
+- Live Alipay/WeChat/AusPost/DHL production credentials remain external
+  dependencies.
+
 ## [6.0.0] - 2026-05-11 -- Refactored, hardened, and production-polished
 
 ### Release Summary
@@ -927,7 +997,7 @@ work that must land before the v3.0.0 release tag.
 
 - **New repo** `nfsarch33/omniparser-bridge` (initial commit
   `64e35b6`). Tiny Go HTTP service that lets MacBook agents call a
-  node-a-resident OmniParser worker without publishing the node-a
+  gpu-host-1-resident OmniParser worker without publishing the gpu-host-1
   endpoint on argv. Mirrors the proven `minimax-openai-bridge`
   pattern (HMAC-SHA256 + `crypto/subtle.ConstantTimeCompare`,
   32-byte minimum secret, configurable replay window).
@@ -951,7 +1021,7 @@ work that must land before the v3.0.0 release tag.
   `~/.config/runx/config.yaml` (path: `$HOME/Code/personal/omniparser-bridge`,
   identity: `nfsarch33`). uiauto-framework + ecommerce uiauto code
   read `OMNIPARSER_BRIDGE_URL` (alias-resolved by runx tunnel
-  forward); the node-a IP / Tailscale name never lands on argv.
+  forward); the fleet IP / private DNS name never lands on argv.
 - **Operations doc** -- new `docs/operations/omniparser-bridge.md`
   in this repo with the deploy contract and security notes.
 

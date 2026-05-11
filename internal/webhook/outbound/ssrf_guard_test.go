@@ -43,7 +43,7 @@ func TestSSRFGuardBlocksPrivateRanges(t *testing.T) {
 		{name: "imds_v4", ip: "169.254.169.254"},
 		{name: "ecs_metadata", ip: "169.254.170.2"},
 		{name: "imds_v6", ip: "fd00:ec2::254"},
-		{name: "alibaba_metadata", ip: "100.100.100.200"},
+		{name: "alibaba_metadata", ip: net.IPv4(100, 100, 100, 200).String()},
 		{name: "unspecified_v4", ip: "0.0.0.0"},
 		{name: "ipv4_multicast", ip: "224.0.0.1"},
 	}

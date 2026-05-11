@@ -203,7 +203,7 @@ func TestVideoAssembler_LiveBridgeUnconfiguredAlwaysFails(t *testing.T) {
 	t.Parallel()
 	cases := map[string]BridgeVideoAssemblerConfig{
 		"missing url":    {BridgeSecret: validVideoBridgeSecret(), Timeout: 10 * time.Second},
-		"missing secret": {BridgeURL: "video-bridge-node-a", Timeout: 10 * time.Second},
+		"missing secret": {BridgeURL: "video-bridge-gpu-host-1", Timeout: 10 * time.Second},
 	}
 	for name, cfg := range cases {
 		name, cfg := name, cfg

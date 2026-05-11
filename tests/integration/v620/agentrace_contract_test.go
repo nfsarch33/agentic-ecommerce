@@ -6,7 +6,7 @@
 //
 // The transport is a filesystem path (no raw IPs in argv per
 // no-shell-leak.mdc). Production deployments swap the path for the
-// runx-aliased writer to node-a; the contract proven here -- writer
+// runx-aliased writer to gpu-host-1; the contract proven here -- writer
 // produces NDJSON the existing reader understands -- is identical.
 package v620
 

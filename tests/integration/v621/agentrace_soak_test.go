@@ -17,7 +17,7 @@
 //
 // no-shell-leak: the sink is a t.TempDir() filesystem path (NOT a raw
 // IP or Tailscale endpoint). Production wiring uses a runx alias for
-// the node-a writer.
+// the gpu-host-1 writer.
 package v621
 
 import (

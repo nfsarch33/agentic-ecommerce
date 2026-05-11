@@ -6,7 +6,7 @@
 
 Production-ready agentic e-commerce platform with multi-channel selling, AI-driven pricing, 4-provider payment gateway, cloud-native K8s deployment, GDPR compliance, and MADRL agent coordination.
 
-Current release: **v6.0.0**. See `VERSION`, `CHANGELOG.md`, and `docs/release-checklist.md` for release gates.
+Current release: **v6.6.0**. See `VERSION`, `CHANGELOG.md`, and `docs/release-checklist.md` for release gates.
 
 ## Features
 
@@ -39,7 +39,7 @@ flowchart TB
   Payment["Payment Gateway\nStripe + Alipay + WeChat + PayPal"]
   Pricing["Pricing Engine\nMADRL + competitor scrape + guardrails"]
   Channel["Channel Router\nTikTok + FB + IG + Pinterest + RedNote + WC"]
-  Postgres["PostgreSQL 16 + pgvector\n35 migrations + RLS"]
+  Postgres["PostgreSQL 16 + pgvector\n39 migrations + RLS"]
   ObjectStore["S3/GCS or filesystem\nmedia assets"]
   Redis["Redis 7\ncart/session/cache/events"]
   Bridge["Approved AI bridge\nOpenAI-compatible proxy"]
@@ -72,7 +72,7 @@ flowchart TB
   API -. Helm + Terraform .-> Cloud
 ```
 
-The platform runs 8+ production binaries: `mc-api`, `wc-sync`, `content-worker`, `agent-worker`, `temporal-worker`, `uiauto-compare`, `ec-cli`, `evomap-rollup`. The database schema spans 35 numbered migrations (`0001` through `0035`) with row-level security on all tenant-keyed tables.
+The platform runs 8 production binaries: `mc-api`, `wc-sync`, `content-worker`, `agent-worker`, `temporal-worker`, `uiauto-compare`, `ec-cli`, `evomap-rollup`. The database schema spans 39 numbered migrations (`0001` through `0039`) with row-level security on all tenant-keyed tables.
 
 ## Tech Stack
 

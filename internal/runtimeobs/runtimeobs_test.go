@@ -55,3 +55,54 @@ func TestRuntimeObservabilityEmitsPrometheusAndEvomap(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultEvomapPathHonoursEnvAndGoTest(t *testing.T) {
+	t.Parallel()
+
+	if got := DefaultEvomapPath(func(key string) string {
+		if key == "ECOMMERCE_EVOMAP_NDJSON" {
+			return "custom.ndjson"
+		}
+		return ""
+	}); got != "custom.ndjson" {
+		t.Fatalf("env path = %q, want custom.ndjson", got)
+	}
+	if got := DefaultEvomapPath(func(string) string { return "" }); got != "" {
+		t.Fatalf("go test default path = %q, want empty", got)
+	}
+	if !runningUnderGoTest() {
+		t.Fatalf("runningUnderGoTest = false, want true")
+	}
+}
+
+func TestRuntimeObservabilityNilAndPrometheusOnly(t *testing.T) {
+	t.Parallel()
+
+	var nilRT *RuntimeObservability
+	nilRT.Emit(context.Background(), memwatch.Sample{})
+	if nilRT.Registry() != nil {
+		t.Fatalf("nil runtime registry should be nil")
+	}
+	if err := nilRT.Close(context.Background()); err != nil {
+		t.Fatalf("nil Close: %v", err)
+	}
+
+	rt := New(nil, "", Config{})
+	if rt.Registry() == nil {
+		t.Fatalf("registry should be configured")
+	}
+	rt.Emit(context.Background(), memwatch.Sample{
+		RecordedAt:     time.Date(2026, 5, 11, 4, 45, 0, 0, time.UTC),
+		HeapInUseBytes: 456789,
+		GoroutineCount: 23,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/metrics", nil)
+	rt.Registry().Handler().ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), `ec_goroutine_count{binary="unknown"} 23`) {
+		t.Fatalf("metrics body missing unknown binary goroutine count:\n%s", rec.Body.String())
+	}
+	if err := rt.Close(context.Background()); err != nil {
+		t.Fatalf("prometheus-only Close: %v", err)
+	}
+}

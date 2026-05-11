@@ -252,12 +252,12 @@ func applyDefaults(cfg Config) Config {
 
 // ValidateTransportTarget rejects any transport string that embeds a
 // raw IP, Tailscale address, or HTTP/HTTPS URL. The composition root
-// calls this before constructing the Adapter so unsafe node-a targets
+// calls this before constructing the Adapter so unsafe fleet targets
 // fail loud at boot rather than leaking through to NDJSON argv.
 //
 // Acceptable shapes:
 //   - relative or absolute filesystem paths (NDJSON file)
-//   - identifiers that begin with "alias:" (e.g. "alias:node-a.agentrace")
+//   - identifiers that begin with "alias:" (e.g. "alias:gpu-host-1.agentrace")
 //
 // Rejected shapes:
 //   - "http://...", "https://..."

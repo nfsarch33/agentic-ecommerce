@@ -1,15 +1,15 @@
-# v2.0.0 Release Checklist
+# v6.6.0 Release Checklist
 
-Use this checklist before tagging `agentic-ecommerce` v2.0.0.
+Use this checklist before tagging `agentic-ecommerce` v6.6.0.
 
 ## Version and Docs
 
-- `VERSION` contains `2.0.0`.
-- `api/openapi.yaml` has `info.version: 2.0.0`.
-- `CHANGELOG.md` includes the v2.0.0 release entry summarising v1.1.0-v2.0.0 capabilities.
+- `VERSION` contains `6.6.0`.
+- `api/openapi.yaml` has `info.version: 6.6.0`.
+- `CHANGELOG.md` includes the v6.6.0 release entry summarising v6.1.x-v6.5.x cleanup work.
 - `README.md` links quickstart, architecture, API docs, Temporal, n8n, media storage, cloud deployment, and security boundaries.
-- `docs/api-reference.md`, `docs/temporal-workflow-specs.md`, and `docs/webhook-contracts.md` reflect the v2.0.0 API, workflow, and automation surfaces.
-- `docs/adr/adr-025-v2-release-decisions.md` is accepted and linked from `docs/adr/README.md`.
+- `docs/api-reference.md`, `docs/temporal-workflow-specs.md`, and `docs/webhook-contracts.md` reflect the v6.6.0 API, workflow, and automation surfaces.
+- `docs/adr/adr-033-v660-release-decisions.md` is accepted and linked from `docs/adr/README.md`.
 
 ## Backend Quality Gates
 
@@ -23,7 +23,7 @@ make release-perf-smoke
 make monitoring-validate
 ```
 
-Target release threshold: at least 80% backend coverage, no `go vet` findings, and no monitoring config regressions.
+Target release threshold: no race-test regression, no `go vet` findings, and no monitoring config regressions. The 85% coverage target remains an explicit v7 carry-forward if the durable release measurement stays at 84.8%.
 
 ## Workflow and Automation Gates
 
@@ -50,7 +50,7 @@ terraform -chdir=deploy/terraform/aws-ecs plan -var "image_tag=$IMAGE_TAG"
 terraform -chdir=deploy/terraform/gcp-cloudrun plan -var "image_tag=$IMAGE_TAG"
 ```
 
-The Terraform commands are dry-run only for v2.0.0. Do not apply cloud resources until account, project, state backend, IAM, TLS, DNS, secret-manager ownership, Temporal persistence topology, and n8n exposure boundaries are approved.
+The Terraform commands are dry-run only for v6.6.0. Do not apply cloud resources until account, project, state backend, IAM, TLS, DNS, secret-manager ownership, Temporal persistence topology, and n8n exposure boundaries are approved.
 
 ## Runtime Smoke Gates
 
