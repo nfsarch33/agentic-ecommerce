@@ -167,6 +167,10 @@ type server struct {
 	tenantAggregateSvc    *tenant.AggregateService
 	marketplace           *marketplace.Service
 	marketplaceSubs       *marketplace.SubmissionService
+	paymentsHandler       http.Handler
+	adminMobileHandler    http.Handler
+	tenantDashboard       http.Handler
+	gmvHandler            http.Handler
 	billingSvc            *billing.Service
 	billingRepo           billing.Repository
 	billingPlans          billing.PlanCatalog
@@ -416,6 +420,10 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	if registrationErr != nil {
 		logger.Warn("registration service disabled", "error", registrationErr)
 	}
+	loadMatrixHandlers, loadMatrixErr := buildLoadMatrixHandlers(logger)
+	if loadMatrixErr != nil {
+		logger.Warn("load matrix handlers disabled", "error", loadMatrixErr)
+	}
 
 	srv := &server{
 		cfg: serverConfig{
@@ -463,6 +471,10 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		tenantAggregateSvc:    tenantAggregateSvc,
 		marketplace:           marketplaceSvc,
 		marketplaceSubs:       marketplaceSubsSvc,
+		paymentsHandler:       loadMatrixHandlers.payments,
+		adminMobileHandler:    loadMatrixHandlers.adminMobile,
+		tenantDashboard:       loadMatrixHandlers.tenantDashboard,
+		gmvHandler:            loadMatrixHandlers.gmv,
 		billingSvc:            billingSvc,
 		billingRepo:           billingRepo,
 		billingPlans:          billingPlans,
@@ -555,6 +567,10 @@ func (s *server) mux() http.Handler {
 	webhooksAPI := s.withCORS(s.withRateLimit(s.withRBAC(webhooksRole, s.withAudit(webhooksAuditAction, s.webhooksHandler))))
 	mux.HandleFunc("/api/v1/webhooks", webhooksAPI)
 	mux.HandleFunc("/api/v1/webhooks/", webhooksAPI)
+	if s.paymentsHandler != nil {
+		paymentsAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.paymentsHandler.ServeHTTP)))
+		mux.HandleFunc("/api/v1/payments", paymentsAPI)
+	}
 	complianceAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.complianceRulesHandler)))
 	mux.HandleFunc("/api/v1/compliance/rules", complianceAPI)
 	tenantSettingsAPI := s.withCORS(s.withRateLimit(s.withRBAC(tenantSettingsRole, s.withTenantRequired(s.tenantSettingsHandler))))
@@ -587,6 +603,11 @@ func (s *server) mux() http.Handler {
 	contentAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.contentFactCheckHandler)))
 	mux.HandleFunc("/api/v1/content/generate", contentAPI)
 	mux.HandleFunc("/api/v1/content/fact-checks/", contentAPI)
+	if s.gmvHandler != nil {
+		gmvAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.gmvHandler.ServeHTTP)))
+		mux.HandleFunc("/api/v1/analytics/gmv", gmvAPI)
+		mux.HandleFunc("/api/v1/analytics/gmv/", gmvAPI)
+	}
 	mediaAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.mediaHandler)))
 	mux.HandleFunc("/api/v1/media/source", mediaAPI)
 	mux.HandleFunc("/api/v1/media/process", mediaAPI)
@@ -613,9 +634,16 @@ func (s *server) mux() http.Handler {
 	// v2.4.0 Marketplace plugin framework + tenant aggregate routes.
 	marketplaceAPI := s.withCORS(s.withRateLimit(s.withRBAC(marketplaceRole, s.withAudit(marketplaceAuditAction, s.marketplaceHandler))))
 	mux.HandleFunc("/api/v1/marketplace/", marketplaceAPI)
-	tenantAdminAPI := s.withCORS(s.withRateLimit(s.withRBAC(tenantAdminRole, s.withAudit(tenantAdminAuditAction, s.tenantAdminHandler))))
+	tenantAdminAPI := s.withCORS(s.withRateLimit(s.withRBAC(tenantAdminRole, s.withAudit(tenantAdminAuditAction, s.tenantAdminMux))))
 	mux.HandleFunc("/api/v1/tenants", tenantAdminAPI)
 	mux.HandleFunc("/api/v1/tenants/", tenantAdminAPI)
+	if s.adminMobileHandler != nil {
+		adminMobileAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.adminMobileHandler.ServeHTTP)))
+		mux.HandleFunc("/api/v1/admin/summary", adminMobileAPI)
+		mux.HandleFunc("/api/v1/admin/orders", adminMobileAPI)
+		mux.HandleFunc("/api/v1/admin/channels", adminMobileAPI)
+		mux.HandleFunc("/api/v1/admin/alerts/", adminMobileAPI)
+	}
 
 	// v2.7.0 Marketplace plugin submission queue.
 	submitAPI := s.withCORS(s.withRateLimit(s.withRBAC(submissionRole, s.withTenantRequired(s.withAudit(submissionAuditAction, s.submitMarketplacePlugin)))))
