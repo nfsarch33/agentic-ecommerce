@@ -12,6 +12,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
 	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/agentic-ecommerce/internal/observability/hooks"
 	"github.com/nfsarch33/agentic-ecommerce/internal/runtimeobs"
 )
 
@@ -58,9 +59,11 @@ func mainImpl(ctx context.Context, args []string, stdout io.Writer, getenv func(
 		shutdownTimeout = 10 * time.Second
 	}
 	mgr := lifecycle.New(logger, shutdownTimeout)
-	reg := startObservability(mgr, logger, "mc-api")
+	reg, h := startObservability(mgr, logger, "mc-api")
 	ecRegistry.Store(reg)
+	ecHooks.Store(h)
 	defer ecRegistry.Store(nil)
+	defer ecHooks.Store(nil)
 	return runServerWithLifecycle(ctx, mgr, logger, httpServer)
 }
 
@@ -120,9 +123,18 @@ func runServerWithLifecycle(ctx context.Context, mgr *lifecycle.Manager, logger 
 
 // startObservability boots the v2.10.0 metric registry + memwatch
 // sampler and registers them with the supplied lifecycle.Manager.
-// Returns the registry so the caller can wire its handler and the
-// per-request counters.
-func startObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary string) *metrics.Registry {
+// Returns the registry plus the v6.2.1 observability hooks bundle so
+// the caller can wire the workerpool / breaker / coordinator port
+// adapters into any current or future composition root call site.
+//
+// v6.2.0 (PR #134) introduced internal/runtimeobs to wrap registry
+// construction + memwatch sink + evomap runtime sample emission.
+// v6.2.1 QA layers the hooks.FromRegistry bundle on top of that
+// wrapper: the runtimeobs.Registry() is the same *metrics.Registry
+// that hooks.FromRegistry adapts, so the workerpool / breaker /
+// coord port interfaces and the evomap runtime samples write into
+// the same scrape surface.
+func startObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary string) (*metrics.Registry, *hooks.Hooks) {
 	rt := runtimeobs.New(logger, binary, runtimeobs.Config{
 		EvomapPath: runtimeobs.DefaultEvomapPath(os.Getenv),
 		Rotate:     true,
@@ -137,7 +149,7 @@ func startObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary stri
 	go func() { _ = sampler.Run(context.Background()) }()
 	mgr.Register("memwatch", sampler)
 	mgr.Register("runtime-observability", rt)
-	return reg
+	return reg, hooks.FromRegistry(reg)
 }
 
 // getenvFn is the io-injectable variant of the package-private getenv
