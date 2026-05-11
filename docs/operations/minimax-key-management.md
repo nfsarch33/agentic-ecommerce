@@ -8,12 +8,12 @@ The EC stack uses MiniMax for LLM-powered content generation (description_gen, v
 
 ## Key Storage
 
-Keys are stored in **1Password <vault-name> vault**:
+Keys are stored in the operator-managed 1Password vault:
 
-| Alias | 1Password Item | Env Var |
-|-------|---------------|---------|
-| `minimax-api-1` | `minimax-api-1` in <vault-name> | `EC_MINIMAX_API_KEY_1` |
-| `minimax-api-2` | `minimax-api-2` in <vault-name> | `EC_MINIMAX_API_KEY_2` |
+| Alias | Secret item | Env Var |
+|-------|-------------|---------|
+| `primary` | Primary MiniMax credential | `EC_MINIMAX_API_KEY_1` |
+| `secondary` | Secondary MiniMax credential | `EC_MINIMAX_API_KEY_2` |
 
 **Security rules:**
 - Keys are NEVER committed to code or config files
@@ -34,9 +34,9 @@ Keys are stored in **1Password <vault-name> vault**:
 ### Initial Setup
 
 ```bash
-# Export keys from 1Password to env (operator machine only)
-export EC_MINIMAX_API_KEY_1="$(op read 'op://<vault-name>/minimax-api-1/credential')"
-export EC_MINIMAX_API_KEY_2="$(op read 'op://<vault-name>/minimax-api-2/credential')"
+# Start workers through the approved runx environment surface.
+# runx resolves credentials without printing them or placing them on argv.
+runx env personal-shell --exec 'runx ec workers start --with-minimax'
 ```
 
 ### Key Rotation

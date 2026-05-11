@@ -89,7 +89,7 @@ type TikTokUIAutoClientConfig struct {
 }
 
 // TikTokUIAutoClient calls the omniparser-bridge to drive a chromedp
-// poster on the node-a side. It is the client-side facade; the real
+// poster on the gpu-host-1 side. It is the client-side facade; the real
 // chromedp poster ships in uiauto-framework.
 type TikTokUIAutoClient struct {
 	cfg    TikTokUIAutoClientConfig
@@ -105,7 +105,7 @@ func NewTikTokUIAutoClient(logger *slog.Logger, cfg TikTokUIAutoClientConfig) (*
 		logger = slog.Default()
 	}
 	if strings.TrimSpace(cfg.BridgeURL) == "" {
-		return nil, fmt.Errorf("%w: BridgeURL required (runx alias for omniparser-bridge node-a)", ErrUIAutoUnconfigured)
+		return nil, fmt.Errorf("%w: BridgeURL required (runx alias for omniparser-bridge gpu-host-1)", ErrUIAutoUnconfigured)
 	}
 	if len(cfg.BridgeSecret) < social.MinTikTokSecretBytes {
 		return nil, fmt.Errorf("%w: BridgeSecret < %d bytes", ErrUIAutoUnconfigured, social.MinTikTokSecretBytes)

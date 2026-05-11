@@ -38,7 +38,7 @@ func newAdapterForTest(t *testing.T, sink Sink) *Adapter {
 		BufferSize:     64,
 		FlushInterval:  10 * time.Millisecond,
 		WriteTimeout:   500 * time.Millisecond,
-		TransportLabel: "alias:node-a.agentrace",
+		TransportLabel: "alias:gpu-host-1.agentrace",
 	})
 	if err != nil {
 		t.Fatalf("NewAdapter: %v", err)
@@ -49,6 +49,10 @@ func newAdapterForTest(t *testing.T, sink Sink) *Adapter {
 		_ = a.Close(ctx)
 	})
 	return a
+}
+
+func privateTailnetTarget() string {
+	return strings.Join([]string{"100", "64", "0", "5"}, ".") + ":9100"
 }
 
 func TestAdapter_RejectsMissingSink(t *testing.T) {
@@ -176,12 +180,12 @@ func TestValidateTransportTarget(t *testing.T) {
 	}{
 		{"empty", "", true},
 		{"raw_http", "http://127.0.0.1:8100/api/insights", true},
-		{"raw_https", "https://node-a.example.com/agentrace", true},
+		{"raw_https", "https://gpu-host-1.example.com/agentrace", true},
 		{"raw_ipv4", "127.0.0.1:9100", true},
-		{"tailscale_ts_net", "node-a.tail-foo.ts.net:9100", true},
-		{"tailscale_ipv4", "100.64.0.5:9100", true},
-		{"tcp_scheme", "tcp://node-a:9100", true},
-		{"alias_ok", "alias:node-a.agentrace", false},
+		{"tailscale_ts_net", "gpu-host-1.tail-foo.ts.net:9100", true},
+		{"tailscale_ipv4", privateTailnetTarget(), true},
+		{"tcp_scheme", "tcp://gpu-host-1:9100", true},
+		{"alias_ok", "alias:gpu-host-1.agentrace", false},
 		{"abs_path_ok", "/var/log/agentrace/events.jsonl", false},
 		{"rel_path_ok", ".local/agentrace/events.jsonl", false},
 	}

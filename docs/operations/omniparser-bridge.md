@@ -3,9 +3,9 @@
 > Last verified: 2026-05-11
 
 The OmniParser visual UI parser is too heavy to run on a MacBook
-(needs a GPU + Python environment). The fleet host `node-a` runs the
+(needs a GPU + Python environment). The fleet host `gpu-host-1` runs the
 real OmniParser worker; MacBook agents reach it through the signed
-`omniparser-bridge` HTTP service so the node-a endpoint never lands
+`omniparser-bridge` HTTP service so the fleet endpoint never lands
 on argv.
 
 This document captures the deploy contract on the **caller side**
@@ -32,7 +32,7 @@ For local development that exercises the OmniParser path:
    `127.0.0.1:18090` on the MacBook.
 3. Set `OMNIPARSER_BRIDGE_URL=http://127.0.0.1:18090` in the
    uiauto-framework env. The framework signs every outbound request
-   with `OMNIPARSER_BRIDGE_SECRET` (must match the node-a-side env).
+   with `OMNIPARSER_BRIDGE_SECRET` (must match the gpu-host-1-side env).
 
 ## runx forward snippet
 
@@ -42,7 +42,7 @@ callers see the bridge as a localhost forward only:
 ```yaml
 forwards:
   omniparser-bridge:
-    target: node-a
+    target: gpu-host-1
     remote: 127.0.0.1:8090
     local:  127.0.0.1:18090
     reconnect:
@@ -51,7 +51,7 @@ forwards:
       jitter:          true
 ```
 
-The node-a-side bridge listens on `127.0.0.1:8090`; the runx tunnel
+The gpu-host-1-side bridge listens on `127.0.0.1:8090`; the runx tunnel
 maps it to `127.0.0.1:18090` on the MacBook.
 
 ## Env-var reference (caller side)
@@ -59,7 +59,7 @@ maps it to `127.0.0.1:18090` on the MacBook.
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `OMNIPARSER_BRIDGE_URL` | yes | Local-side forwarded URL (e.g. `http://127.0.0.1:18090`). |
-| `OMNIPARSER_BRIDGE_SECRET` | yes | 32-byte HMAC key shared with the node-a bridge. |
+| `OMNIPARSER_BRIDGE_SECRET` | yes | 32-byte HMAC key shared with the gpu-host-1 bridge. |
 
 The caller signs every POST with the same canonical preimage the
 bridge verifies:
@@ -94,7 +94,7 @@ req.Header.Set("X-OmniBridge-Signature", sig)
   payloads are small (base64 PNGs); raise the cap on both sides if
   a future use case needs larger blobs.
 - The bridge runs as `nonroot:nonroot` in a distroless static image.
-  The node-a systemd unit should set `NoNewPrivileges=true`,
+  The gpu-host-1 systemd unit should set `NoNewPrivileges=true`,
   `ProtectSystem=strict`, and `ProtectHome=true`.
 
 ## Verifying the integration

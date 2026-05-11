@@ -93,7 +93,7 @@ A short description.
 
 ## Triggers
 
-Use when: deploying to node-a, configuring homelab, setting up host-a
+Use when: deploying to gpu-host-1, configuring private-lab, setting up windows-host-1
 
 ## Instructions
 

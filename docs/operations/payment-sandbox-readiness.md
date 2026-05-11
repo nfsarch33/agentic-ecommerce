@@ -12,17 +12,17 @@ Closes ADR-032 CF #3 in `documented operational gate` mode.
 We do NOT execute live Alipay or WeChat Pay sandbox transactions in
 v6.3.0. The hard requirements for live execution are:
 
-1. Alipay Open Platform sandbox merchant + RSA2 keypair, sourced via
-   `op read op://<vault-name>/alipay-sandbox-...`.
+1. Alipay Open Platform sandbox merchant + RSA2 keypair, sourced
+   through the approved `runx` environment surface.
 2. WeChat Pay v3 sandbox merchant ID + APIv3 key + RSA private key,
-   sourced via `op read op://<vault-name>/wechat-sandbox-...`.
+   sourced through the approved `runx` environment surface.
 
-Inspection of the `<vault-name>` 1Password vault (47 items total) at
-the start of Pair 3 MVP found zero items matching `alipay`, `wechat`,
-`pay`, `sandbox`, or `carrier`. We will not put sandbox secrets on shell
-argv, in test fixtures, or in environment files committed to the repo.
-The `runx op read` style stdin injection remains the only acceptable
-path; until the vault is populated, the live path is gated off.
+Inspection of the operator-managed 1Password vault at the start of Pair
+3 MVP found zero merchant sandbox items. We will not put sandbox secrets
+on shell argv, in test fixtures, or in environment files committed to
+the repo. Stdin injection through the approved `runx` surface remains
+the only acceptable path; until the vault is populated, the live path is
+gated off.
 
 ## Existing CI Coverage (no regression)
 
@@ -52,15 +52,13 @@ and fail loudly on adapter drift.
 
 ## Live-Sandbox Re-Activation Procedure (when credentials arrive)
 
-1. Populate `<vault-name>` vault items:
-   - `alipay-sandbox-app-id`, `alipay-sandbox-private-key`,
-     `alipay-sandbox-public-key`
-   - `wechat-sandbox-merchant-id`, `wechat-sandbox-api-v3-key`,
-     `wechat-sandbox-private-key`
+1. Populate operator vault items for Alipay and WeChat sandbox
+   credentials.
 2. Add a new build tag `live_payment_sandbox`-gated test file at
    `internal/adapter/payment/sandbox_live_test.go` that:
    - Skips when `op read` is unavailable or vault items missing.
-   - Reads each secret via `op read` piped into `t.Setenv` (no argv).
+   - Reads each secret through the approved stdin-injection path and
+     `t.Setenv` (no argv).
    - Executes auth + capture + refund flows end-to-end.
 3. Run via `runx go test --repo ecommerce -- -tags=live_payment_sandbox
    ./internal/adapter/payment/...` ad-hoc; never in default CI.

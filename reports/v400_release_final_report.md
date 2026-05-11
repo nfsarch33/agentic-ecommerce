@@ -134,7 +134,7 @@ fresh Lighthouse capture as v4.1.x ops items.
    `GITHUB_TOKEN` family env vars. The
    `personal-repo-shell-hygiene` skill + `runx env personal-shell`
    exec wrapper kept every git push + gh CLI call on the personal
-   identity (`nfsarch33` / `ops@example.com`) without leaking
+   identity (`nfsarch33` / `user@example.com`) without leaking
    work tokens onto the public repos. Zero identity slips across
    17 push events.
 4. **Reuse-first over new-deps.** The cycle added zero new

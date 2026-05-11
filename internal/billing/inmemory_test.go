@@ -131,6 +131,45 @@ func TestInMemoryRepositoryInvoiceUpsert(t *testing.T) {
 	}
 }
 
+func TestInMemoryRepositoryListInvoicesSortsAndPaginates(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	repo := NewInMemoryRepository()
+	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	for i, id := range []string{"inv_old", "inv_mid", "inv_new"} {
+		inv := Invoice{
+			ID: "inv_" + id, TenantID: "tenant-a", SubscriptionID: "sub_1",
+			Amount: 1900, Currency: "AUD", Status: InvoiceOpen,
+			PeriodStart: now, PeriodEnd: now.Add(30 * 24 * time.Hour),
+			CreatedAt: now.Add(time.Duration(i) * time.Hour),
+			UpdatedAt: now.Add(time.Duration(i) * time.Hour),
+		}
+		if err := repo.UpsertInvoice(ctx, inv); err != nil {
+			t.Fatalf("UpsertInvoice(%s): %v", id, err)
+		}
+	}
+	list, err := repo.ListInvoices(ctx, "tenant-a", 1, 2)
+	if err != nil {
+		t.Fatalf("ListInvoices: %v", err)
+	}
+	if list.Total != 3 || len(list.Invoices) != 2 {
+		t.Fatalf("total=%d len=%d, want 3/2", list.Total, len(list.Invoices))
+	}
+	if list.Invoices[0].ID != "inv_inv_new" || list.Invoices[1].ID != "inv_inv_mid" {
+		t.Fatalf("unexpected sort order: %#v", list.Invoices)
+	}
+	empty, err := repo.ListInvoices(ctx, "tenant-a", 99, 2)
+	if err != nil {
+		t.Fatalf("ListInvoices empty: %v", err)
+	}
+	if empty.Total != 3 || len(empty.Invoices) != 0 {
+		t.Fatalf("empty page total=%d len=%d, want 3/0", empty.Total, len(empty.Invoices))
+	}
+	if _, err := repo.ListInvoices(ctx, "", 1, 10); !errors.Is(err, ErrTenantRequired) {
+		t.Fatalf("tenant required err=%v", err)
+	}
+}
+
 func TestStaticPlanCatalog(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
