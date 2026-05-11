@@ -89,6 +89,26 @@ func StartPool(t *testing.T, opts Options) *pgxpool.Pool {
 		t.Skip("DISABLE_DOCKER_TESTCONTAINERS=1; skipping testcontainers postgres fixture")
 	}
 
+	o := normalizeOptions(opts)
+	migrationPaths, err := resolveMigrationPaths(o.MigrationFiles)
+	if err != nil {
+		t.Fatalf("resolve migrations dir: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), o.StartupTimeout)
+	defer cancel()
+
+	container := runPostgresContainer(t, ctx, o, migrationPaths)
+	t.Cleanup(func() {
+		_ = container.Terminate(context.Background())
+	})
+
+	startPostgresContainer(t, ctx, container)
+	waitForPostgresReady(t, ctx, container, o.ReadinessTimeout)
+	return openReadyPool(t, ctx, container)
+}
+
+func normalizeOptions(opts Options) Options {
 	o := opts
 	if o.Image == "" {
 		o.Image = defaultPostgresImage
@@ -111,19 +131,23 @@ func StartPool(t *testing.T, opts Options) *pgxpool.Pool {
 	if len(o.MigrationFiles) == 0 {
 		o.MigrationFiles = CanonicalMigrationFiles()
 	}
+	return o
+}
 
+func resolveMigrationPaths(files []string) ([]string, error) {
 	migrationDir, err := ResolveMigrationDir()
 	if err != nil {
-		t.Fatalf("resolve migrations dir: %v", err)
+		return nil, err
 	}
-	migrationPaths := make([]string, 0, len(o.MigrationFiles))
-	for _, name := range o.MigrationFiles {
-		migrationPaths = append(migrationPaths, filepath.Join(migrationDir, name))
+	paths := make([]string, 0, len(files))
+	for _, name := range files {
+		paths = append(paths, filepath.Join(migrationDir, name))
 	}
+	return paths, nil
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), o.StartupTimeout)
-	defer cancel()
-
+func runPostgresContainer(t *testing.T, ctx context.Context, o Options, migrationPaths []string) *tcpostgres.PostgresContainer {
+	t.Helper()
 	container, err := tcpostgres.Run(
 		ctx,
 		o.Image,
@@ -136,29 +160,34 @@ func StartPool(t *testing.T, opts Options) *pgxpool.Pool {
 	if err != nil {
 		t.Skipf("testcontainers postgres unavailable (likely no Docker): %v", err)
 	}
-	t.Cleanup(func() {
-		_ = container.Terminate(context.Background())
-	})
+	return container
+}
 
-	if err := container.Start(ctx); err != nil && !errors.Is(err, errAlreadyStarted) && err.Error() != errAlreadyStarted.Error() {
+func startPostgresContainer(t *testing.T, ctx context.Context, container *tcpostgres.PostgresContainer) {
+	t.Helper()
+	if err := container.Start(ctx); err != nil && !containerAlreadyStarted(err) {
 		t.Skipf("postgres container failed to start: %v", err)
 	}
+}
 
-	if err := waitForReady(ctx, container, o.ReadinessTimeout); err != nil {
+func waitForPostgresReady(t *testing.T, ctx context.Context, container *tcpostgres.PostgresContainer, timeout time.Duration) {
+	t.Helper()
+	if err := waitForReady(ctx, container, timeout); err != nil {
 		t.Skipf("postgres readiness wait failed: %v", err)
 	}
+}
 
+func openReadyPool(t *testing.T, ctx context.Context, container *tcpostgres.PostgresContainer) *pgxpool.Pool {
+	t.Helper()
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		t.Fatalf("connection string: %v", err)
 	}
-
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		t.Fatalf("pgxpool.New: %v", err)
 	}
 	t.Cleanup(pool.Close)
-
 	if err := pool.Ping(ctx); err != nil {
 		t.Skipf("postgres ping failed: %v", err)
 	}
@@ -170,6 +199,10 @@ func StartPool(t *testing.T, opts Options) *pgxpool.Pool {
 // compare via .Error() string because the upstream package does not
 // export the sentinel.
 var errAlreadyStarted = errors.New("container is already started")
+
+func containerAlreadyStarted(err error) bool {
+	return errors.Is(err, errAlreadyStarted) || err.Error() == errAlreadyStarted.Error()
+}
 
 func waitForReady(ctx context.Context, container *tcpostgres.PostgresContainer, timeout time.Duration) error {
 	strat := wait.ForLog("database system is ready to accept connections").WithStartupTimeout(timeout)

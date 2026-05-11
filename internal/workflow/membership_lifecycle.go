@@ -143,7 +143,39 @@ func NewMembershipLifecycleActivities(deps MembershipLifecycleActivityDeps) *Mem
 // is deterministic (no time.Now, no rand, no map iteration that
 // influences control flow).
 func MembershipLifecycleWorkflow(ctx temporalworkflow.Context, input MembershipLifecycleInput) (MembershipLifecycleResult, error) {
-	activityOptions := temporalworkflow.ActivityOptions{
+	ctx = temporalworkflow.WithActivityOptions(ctx, membershipLifecycleActivityOptions())
+	state := initialMembershipLifecycleState(input)
+	if err := temporalworkflow.SetQueryHandler(ctx, MembershipStatusQuery, func() (MembershipLifecycleResult, error) {
+		return state, nil
+	}); err != nil {
+		return state, err
+	}
+
+	signals := membershipLifecycleSignals{
+		cancel: temporalworkflow.GetSignalChannel(ctx, MembershipCancelSignal),
+		pause:  temporalworkflow.GetSignalChannel(ctx, MembershipPauseSignal),
+		resume: temporalworkflow.GetSignalChannel(ctx, MembershipResumeSignal),
+	}
+
+	charge, err := startMembershipLifecycle(ctx, input, &state)
+	if err != nil {
+		return state, err
+	}
+	done, err := waitForTrialCompletion(ctx, input, &state, charge, signals.cancel)
+	if err != nil {
+		return state, err
+	}
+	if done {
+		return state, nil
+	}
+	if err := activateMembership(ctx, input, &state); err != nil {
+		return state, err
+	}
+	return state, runMembershipRenewalLoop(ctx, input, &state, charge, signals)
+}
+
+func membershipLifecycleActivityOptions() temporalworkflow.ActivityOptions {
+	return temporalworkflow.ActivityOptions{
 		StartToCloseTimeout: time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -152,135 +184,176 @@ func MembershipLifecycleWorkflow(ctx temporalworkflow.Context, input MembershipL
 			MaximumAttempts:    3,
 		},
 	}
-	ctx = temporalworkflow.WithActivityOptions(ctx, activityOptions)
+}
 
-	state := MembershipLifecycleResult{
+func initialMembershipLifecycleState(input MembershipLifecycleInput) MembershipLifecycleResult {
+	return MembershipLifecycleResult{
 		TenantID:       input.TenantID,
 		SubscriptionID: input.SubscriptionID,
 		FinalState:     membership.StateTrial,
 	}
-	if err := temporalworkflow.SetQueryHandler(ctx, MembershipStatusQuery, func() (MembershipLifecycleResult, error) {
-		return state, nil
-	}); err != nil {
-		return state, err
-	}
+}
 
-	cancelSignal := temporalworkflow.GetSignalChannel(ctx, MembershipCancelSignal)
-	pauseSignal := temporalworkflow.GetSignalChannel(ctx, MembershipPauseSignal)
-	resumeSignal := temporalworkflow.GetSignalChannel(ctx, MembershipResumeSignal)
+type membershipLifecycleSignals struct {
+	cancel temporalworkflow.ReceiveChannel
+	pause  temporalworkflow.ReceiveChannel
+	resume temporalworkflow.ReceiveChannel
+}
 
+func startMembershipLifecycle(
+	ctx temporalworkflow.Context,
+	input MembershipLifecycleInput,
+	state *MembershipLifecycleResult,
+) (ChargeResponse, error) {
 	// Initial charge through the gateway. Even a trial subscription
 	// records a deterministic stripe id so the rest of the workflow can
 	// emit billing events keyed off it.
 	charge, err := executeCharge(ctx, input, false)
 	if err != nil {
-		return state, err
+		return ChargeResponse{}, err
 	}
 	state.StripeSubscriptionID = charge.StripeSubscriptionID
-	state.BillingEvents = append(state.BillingEvents, BillingEventRecord{
-		StripeSubscriptionID: charge.StripeSubscriptionID,
-		OccurredAt:           charge.CurrentPeriodEnd,
-		Kind:                 "initial",
-	})
-	state.Notifications = append(state.Notifications, recordNotification(ctx, input, membership.StateTrial, membership.TransitionActivate))
-	if err := executeNotification(ctx, input, membership.StateTrial, membership.TransitionActivate); err != nil {
-		return state, err
+	if err := recordMembershipBillingEvent(ctx, input, state, charge, "initial"); err != nil {
+		return ChargeResponse{}, err
 	}
-	if err := executeBillingEvent(ctx, BillingEventInput{
-		TenantID:             input.TenantID,
-		SubscriptionID:       input.SubscriptionID,
-		StripeSubscriptionID: charge.StripeSubscriptionID,
-		Kind:                 "initial",
-		OccurredAt:           charge.CurrentPeriodEnd,
-	}); err != nil {
-		return state, err
+	if err := notifyMembershipState(ctx, input, state, membership.StateTrial, membership.TransitionActivate); err != nil {
+		return ChargeResponse{}, err
 	}
+	return charge, nil
+}
 
-	// Trial timer (only if requested).
-	if input.TrialDays > 0 {
-		trial, action := waitForCancelOrTimer(ctx, time.Duration(input.TrialDays)*24*time.Hour, cancelSignal)
-		if !trial {
-			state.FinalState = membership.StateCancelled
-			state.Notifications = append(state.Notifications, recordNotification(ctx, input, membership.StateCancelled, membership.TransitionCancel))
-			if err := executeCancellation(ctx, input, charge.StripeSubscriptionID); err != nil {
-				return state, err
-			}
-			_ = action
-			return state, nil
-		}
+func waitForTrialCompletion(
+	ctx temporalworkflow.Context,
+	input MembershipLifecycleInput,
+	state *MembershipLifecycleResult,
+	charge ChargeResponse,
+	cancelSignal temporalworkflow.ReceiveChannel,
+) (bool, error) {
+	if input.TrialDays <= 0 {
+		return false, nil
 	}
-
-	state.FinalState = membership.StateActive
-	state.Notifications = append(state.Notifications, recordNotification(ctx, input, membership.StateActive, membership.TransitionActivate))
-	if err := executeNotification(ctx, input, membership.StateActive, membership.TransitionActivate); err != nil {
-		return state, err
+	trial, _ := waitForCancelOrTimer(ctx, time.Duration(input.TrialDays)*24*time.Hour, cancelSignal)
+	if trial {
+		return false, nil
 	}
+	return true, cancelMembership(ctx, input, state, charge.StripeSubscriptionID)
+}
 
-	// Renewal loop: one cycle per billing period until cancel/expire.
+func activateMembership(ctx temporalworkflow.Context, input MembershipLifecycleInput, state *MembershipLifecycleResult) error {
+	return notifyMembershipState(ctx, input, state, membership.StateActive, membership.TransitionActivate)
+}
+
+func runMembershipRenewalLoop(
+	ctx temporalworkflow.Context,
+	input MembershipLifecycleInput,
+	state *MembershipLifecycleResult,
+	charge ChargeResponse,
+	signals membershipLifecycleSignals,
+) error {
 	pauseRequested := false
 	cycleEnd := temporalworkflow.Now(ctx).Add(input.BillingCycle.Duration())
 	for {
-		shouldContinue, transition, paused, err := waitForLifecycleEvent(ctx, cycleEnd, cancelSignal, pauseSignal, resumeSignal, pauseRequested)
+		shouldContinue, transition, paused, err := waitForLifecycleEvent(ctx, cycleEnd, signals.cancel, signals.pause, signals.resume, pauseRequested)
 		if err != nil {
-			return state, err
+			return err
 		}
-		if !shouldContinue {
-			state.FinalState = membership.StateCancelled
-			state.Notifications = append(state.Notifications, recordNotification(ctx, input, membership.StateCancelled, membership.TransitionCancel))
-			if err := executeCancellation(ctx, input, charge.StripeSubscriptionID); err != nil {
-				return state, err
-			}
-			return state, nil
-		}
-		if paused {
+		switch {
+		case !shouldContinue:
+			return cancelMembership(ctx, input, state, charge.StripeSubscriptionID)
+		case paused:
 			pauseRequested = true
-			state.FinalState = membership.StatePaused
-			state.Notifications = append(state.Notifications, recordNotification(ctx, input, membership.StatePaused, membership.TransitionPause))
-			if err := executeNotification(ctx, input, membership.StatePaused, membership.TransitionPause); err != nil {
-				return state, err
+			if err := notifyMembershipState(ctx, input, state, membership.StatePaused, membership.TransitionPause); err != nil {
+				return err
 			}
-			continue
-		}
-		if transition == membership.TransitionResume {
+		case transition == membership.TransitionResume:
 			pauseRequested = false
-			state.FinalState = membership.StateActive
-			state.Notifications = append(state.Notifications, recordNotification(ctx, input, membership.StateActive, membership.TransitionResume))
-			if err := executeNotification(ctx, input, membership.StateActive, membership.TransitionResume); err != nil {
-				return state, err
+			if err := notifyMembershipState(ctx, input, state, membership.StateActive, membership.TransitionResume); err != nil {
+				return err
 			}
 			cycleEnd = temporalworkflow.Now(ctx).Add(input.BillingCycle.Duration())
-			continue
+		default:
+			renewal, err := renewMembership(ctx, input, state)
+			if err != nil {
+				return err
+			}
+			cycleEnd = renewal.CurrentPeriodEnd
 		}
-
-		// Renewal: charge + advance the period window.
-		renewal, err := executeCharge(ctx, input, true)
-		if err != nil {
-			// On payment failure mid-renewal, expire the subscription.
-			state.FinalState = membership.StateExpired
-			state.Notifications = append(state.Notifications, recordNotification(ctx, input, membership.StateExpired, membership.TransitionExpire))
-			_ = executeNotification(ctx, input, membership.StateExpired, membership.TransitionExpire)
-			return state, fmt.Errorf("renewal charge failed: %w", err)
-		}
-		state.BillingEvents = append(state.BillingEvents, BillingEventRecord{
-			StripeSubscriptionID: renewal.StripeSubscriptionID,
-			OccurredAt:           renewal.CurrentPeriodEnd,
-			Kind:                 "renewal",
-		})
-		if err := executeBillingEvent(ctx, BillingEventInput{
-			TenantID:             input.TenantID,
-			SubscriptionID:       input.SubscriptionID,
-			StripeSubscriptionID: renewal.StripeSubscriptionID,
-			Kind:                 "renewal",
-			OccurredAt:           renewal.CurrentPeriodEnd,
-		}); err != nil {
-			return state, err
-		}
-		state.Notifications = append(state.Notifications, recordNotification(ctx, input, membership.StateActive, membership.TransitionRenew))
-		if err := executeNotification(ctx, input, membership.StateActive, membership.TransitionRenew); err != nil {
-			return state, err
-		}
-		cycleEnd = renewal.CurrentPeriodEnd
 	}
+}
+
+func renewMembership(
+	ctx temporalworkflow.Context,
+	input MembershipLifecycleInput,
+	state *MembershipLifecycleResult,
+) (ChargeResponse, error) {
+	renewal, err := executeCharge(ctx, input, true)
+	if err != nil {
+		return ChargeResponse{}, expireMembership(ctx, input, state, err)
+	}
+	if err := recordMembershipBillingEvent(ctx, input, state, renewal, "renewal"); err != nil {
+		return ChargeResponse{}, err
+	}
+	if err := notifyMembershipState(ctx, input, state, membership.StateActive, membership.TransitionRenew); err != nil {
+		return ChargeResponse{}, err
+	}
+	return renewal, nil
+}
+
+func cancelMembership(
+	ctx temporalworkflow.Context,
+	input MembershipLifecycleInput,
+	state *MembershipLifecycleResult,
+	stripeSubID string,
+) error {
+	state.FinalState = membership.StateCancelled
+	state.Notifications = append(state.Notifications, recordNotification(ctx, input, membership.StateCancelled, membership.TransitionCancel))
+	return executeCancellation(ctx, input, stripeSubID)
+}
+
+func expireMembership(
+	ctx temporalworkflow.Context,
+	input MembershipLifecycleInput,
+	state *MembershipLifecycleResult,
+	cause error,
+) error {
+	state.FinalState = membership.StateExpired
+	state.Notifications = append(state.Notifications, recordNotification(ctx, input, membership.StateExpired, membership.TransitionExpire))
+	_ = executeNotification(ctx, input, membership.StateExpired, membership.TransitionExpire)
+	return fmt.Errorf("renewal charge failed: %w", cause)
+}
+
+func notifyMembershipState(
+	ctx temporalworkflow.Context,
+	input MembershipLifecycleInput,
+	state *MembershipLifecycleResult,
+	next membership.State,
+	transition membership.Transition,
+) error {
+	state.FinalState = next
+	state.Notifications = append(state.Notifications, recordNotification(ctx, input, next, transition))
+	return executeNotification(ctx, input, next, transition)
+}
+
+func recordMembershipBillingEvent(
+	ctx temporalworkflow.Context,
+	input MembershipLifecycleInput,
+	state *MembershipLifecycleResult,
+	charge ChargeResponse,
+	kind string,
+) error {
+	event := BillingEventRecord{
+		StripeSubscriptionID: charge.StripeSubscriptionID,
+		OccurredAt:           charge.CurrentPeriodEnd,
+		Kind:                 kind,
+	}
+	state.BillingEvents = append(state.BillingEvents, event)
+	return executeBillingEvent(ctx, BillingEventInput{
+		TenantID:             input.TenantID,
+		SubscriptionID:       input.SubscriptionID,
+		StripeSubscriptionID: charge.StripeSubscriptionID,
+		Kind:                 kind,
+		OccurredAt:           charge.CurrentPeriodEnd,
+	})
 }
 
 // waitForLifecycleEvent waits for either the next billing boundary or
