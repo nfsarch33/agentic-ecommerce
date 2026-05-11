@@ -100,7 +100,20 @@ var (
 	// ErrInvalidPriceComponents is returned when PriceComponents
 	// fails the validate gate (zero/negative selling price,
 	// negative cost, etc).
+	//
+	// Note (v6.1.0 CF-17): FX provider misbehaviour (rate <= 0)
+	// is NO LONGER routed through this sentinel; callers expecting
+	// to distinguish caller-input errors from provider pollution
+	// MUST check ErrInvalidFXRate for the latter.
 	ErrInvalidPriceComponents = errors.New("billing: invalid price components")
+
+	// ErrInvalidFXRate is returned when the FX provider yields a
+	// non-positive (AUDPerCNY <= 0) rate. Provider-side pollution
+	// is operationally distinct from caller-side input errors
+	// (ErrInvalidPriceComponents), so v6.1.0 carry-forward CF-17
+	// pulled it out of the broader sentinel into its own typed
+	// surface. Adapters write the same sentinel.
+	ErrInvalidFXRate = errors.New("billing: invalid fx rate")
 
 	// ErrFXRateUnconfigured is returned by NewPlatformFeeCalculator
 	// when the FXRateProvider port is nil.
@@ -271,7 +284,7 @@ func (c *PlatformFeeCalculator) resolveFX(ctx context.Context) (FXRate, error) {
 		return FXRate{}, fmt.Errorf("billing: fx provider: %w", err)
 	}
 	if rate.AUDPerCNY <= 0 {
-		return rate, fmt.Errorf("%w: fx rate non-positive (%.6f)", ErrInvalidPriceComponents, rate.AUDPerCNY)
+		return rate, fmt.Errorf("%w: fx rate non-positive (%.6f)", ErrInvalidFXRate, rate.AUDPerCNY)
 	}
 	if rate.IsStale(c.now(), c.maxAge) {
 		return rate, fmt.Errorf("%w: age %.0fs > %.0fs", ErrFXRateStale, rate.AgeSeconds(c.now()), c.maxAge.Seconds())

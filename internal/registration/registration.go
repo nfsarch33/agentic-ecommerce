@@ -310,27 +310,51 @@ func looksLikeEmail(s string) bool {
 // slugPattern enforces kebab-case so registration cannot pass a slug
 // the v2.4.0 tenant aggregate would reject. Keep this in sync with
 // internal/tenant.IsValidSlug.
+//
+// v6.1.0 CF-12 follow-on (Sentrux complex_fn budget): decomposed the
+// per-rune validator into three small helpers so the dispatcher loop
+// stays cyclomatic 2 and the complete function clears the >=15 gate
+// Sentrux uses to count "complex_fn" entries.
 func slugPattern(s string) bool {
 	if len(s) < 2 {
 		return false
 	}
-	for i, r := range s {
-		switch {
-		case i == 0:
-			if r < 'a' || r > 'z' {
-				return false
-			}
-		case i == len(s)-1:
-			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
-				return false
-			}
-		default:
-			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-') {
-				return false
-			}
+	runes := []rune(s)
+	for i, r := range runes {
+		if !slugRuneAllowed(r, i, len(runes)) {
+			return false
 		}
 	}
 	return true
+}
+
+// slugRuneAllowed returns true when r is valid at position i of an
+// n-rune slug. The three branches mirror the original switch
+// (first/last/middle); pulling them apart lets each helper stay
+// cyclomatic 1.
+func slugRuneAllowed(r rune, i, n int) bool {
+	switch {
+	case i == 0:
+		return slugStartRune(r)
+	case i == n-1:
+		return slugEndRune(r)
+	default:
+		return slugMiddleRune(r)
+	}
+}
+
+// slugStartRune accepts a-z only -- a leading digit or hyphen would
+// produce a slug the tenant aggregate would reject.
+func slugStartRune(r rune) bool { return r >= 'a' && r <= 'z' }
+
+// slugEndRune accepts a-z and 0-9 -- a trailing hyphen is rejected.
+func slugEndRune(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+}
+
+// slugMiddleRune accepts a-z, 0-9, and the kebab '-' separator.
+func slugMiddleRune(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-'
 }
 
 // newID returns a 16-byte hex-encoded identifier sourced from
