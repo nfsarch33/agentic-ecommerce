@@ -6,12 +6,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
 	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 	"github.com/nfsarch33/agentic-ecommerce/internal/observability/hooks"
+	"github.com/nfsarch33/agentic-ecommerce/internal/runtimeobs"
 )
 
 // app.go (v2.6.1 cmd/* DI refactor): keep main.go's main() body
@@ -125,28 +127,28 @@ func runServerWithLifecycle(ctx context.Context, mgr *lifecycle.Manager, logger 
 // the caller can wire the workerpool / breaker / coordinator port
 // adapters into any current or future composition root call site.
 //
-// v6.2.1 QA change: previously this function returned only the
-// metric registry, leaving the v6.2.0 ec_workerpool_active,
-// ec_workerpool_rejected_total, ec_breaker_open_total,
-// ec_breaker_half_open_total, and ec_coord_conflicts_total hooks
-// without a production wiring path. The MVP report flagged that
-// production traffic was not yet exercising those counters. This
-// signature change closes the gap by handing back the
-// hooks.Hooks bundle that maps each port interface onto the matching
-// registry counter/gauge in one nil-safe constructor call.
+// v6.2.0 (PR #134) introduced internal/runtimeobs to wrap registry
+// construction + memwatch sink + evomap runtime sample emission.
+// v6.2.1 QA layers the hooks.FromRegistry bundle on top of that
+// wrapper: the runtimeobs.Registry() is the same *metrics.Registry
+// that hooks.FromRegistry adapts, so the workerpool / breaker /
+// coord port interfaces and the evomap runtime samples write into
+// the same scrape surface.
 func startObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary string) (*metrics.Registry, *hooks.Hooks) {
-	reg := metrics.NewRegistry(binary)
+	rt := runtimeobs.New(logger, binary, runtimeobs.Config{
+		EvomapPath: runtimeobs.DefaultEvomapPath(os.Getenv),
+		Rotate:     true,
+	})
+	reg := rt.Registry()
 	sampler := memwatch.NewSampler(logger, memwatch.Config{
-		BinaryName:     binary,
-		SampleInterval: 5 * time.Second,
-		Sink: memwatch.SinkFunc(func(_ context.Context, s memwatch.Sample) {
-			reg.GoroutineCount.Set(float64(s.GoroutineCount), metrics.Labels{})
-			reg.HeapBytes.Set(float64(s.HeapInUseBytes), metrics.Labels{})
-		}),
+		BinaryName:        binary,
+		SampleInterval:    5 * time.Second,
+		Sink:              rt,
 		HeapAlarmCallback: func() { reg.OOMAlarms.Inc(metrics.Labels{}) },
 	})
 	go func() { _ = sampler.Run(context.Background()) }()
 	mgr.Register("memwatch", sampler)
+	mgr.Register("runtime-observability", rt)
 	return reg, hooks.FromRegistry(reg)
 }
 
