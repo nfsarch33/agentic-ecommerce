@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agentic Ecommerce Mission Control API
-  version: 6.0.0
+  version: 6.6.0
   description: |
     Public v1.x.y contract for the Agentic Ecommerce Go backend consumed by
     agentic-ecommerce-web. This spec intentionally excludes private

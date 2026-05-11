@@ -143,7 +143,7 @@ func TestNewVideoAssemblyPipeline_ConfigValidation(t *testing.T) {
 func TestBridgeVideoAssembler_AlwaysUnconfiguredInV340(t *testing.T) {
 	t.Parallel()
 	asm, err := NewBridgeVideoAssembler(BridgeVideoAssemblerConfig{
-		BridgeURL:    "video-bridge-wsl1", // runx alias
+		BridgeURL:    "video-bridge-gpu-host-1", // runx alias
 		BridgeSecret: []byte("ignored-because-not-implemented-yet"),
 	})
 	if err != nil {

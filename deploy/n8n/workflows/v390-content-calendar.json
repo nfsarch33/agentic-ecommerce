@@ -51,34 +51,30 @@
     {
       "id": "calendar-tick-001",
       "name": "Calendar Tick",
-      "notes": "Polls every 5 minutes for due calendar entries. Triggered automatically when n8n is running.",
+      "notes": "External scheduler posts every 5 minutes. The workflow acknowledges synchronously through the Respond to Webhook node.",
       "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "minutes",
-              "minutesInterval": 5
-            }
-          ]
-        }
+        "httpMethod": "POST",
+        "path": "content-calendar/tick",
+        "responseMode": "responseNode"
       },
       "position": [
         220,
         300
       ],
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "v390-content-calendar-tick"
     },
     {
       "id": "calendar-list-002",
       "name": "List Upcoming Entries",
-      "notes": "Set AGENTIC_ECOMMERCE_API_URL in the n8n container environment. Do not commit production hostnames.",
+      "notes": "Set AGENTIC_ECOMMERCE_CALENDAR_UPCOMING_URL in the n8n container environment. Do not commit production hostnames.",
       "parameters": {
         "method": "GET",
         "options": {
           "timeout": 5000
         },
-        "url": "={{$env.AGENTIC_ECOMMERCE_API_URL}}/api/v1/content/calendar/upcoming?limit=20"
+        "url": "={{$env.AGENTIC_ECOMMERCE_CALENDAR_UPCOMING_URL}}"
       },
       "position": [
         520,
@@ -131,7 +127,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "url": "={{$env.AGENTIC_ECOMMERCE_API_URL}}/api/v1/content/calendar/publish"
+        "url": "={{$env.AGENTIC_ECOMMERCE_CALENDAR_PUBLISH_URL}}"
       },
       "position": [
         1120,
@@ -166,4 +162,3 @@
   },
   "versionId": "v390-content-calendar-1"
 }
-

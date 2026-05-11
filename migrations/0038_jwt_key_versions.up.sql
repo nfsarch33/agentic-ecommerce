@@ -4,7 +4,7 @@
 -- secret bytes themselves are NEVER persisted in this table; only
 -- the version metadata + the grace deadline lives here. The actual
 -- HMAC bytes resolve at boot time from the secrets manager (1Password
--- Cursor_IronClaw / AWS Secrets Manager) so a Postgres dump cannot
+-- operator vault / AWS Secrets Manager) so a Postgres dump cannot
 -- leak signing material.
 --
 -- Lifecycle:

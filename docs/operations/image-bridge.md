@@ -26,7 +26,7 @@ Specifically:
 - Bedrock Titan lifestyle generation is multi-minute synchronous
   call with retries.
 
-All three classes of work belong on the WSL fleet (wsl1 / wsl2)
+All three classes of work belong on the WSL fleet (gpu-host-1 / gpu-host-2)
 behind a small HTTP bridge analogous to `omniparser-bridge`
 (already in use for OmniParser dynamic-element detection).
 
@@ -55,7 +55,7 @@ either succeeds with the stub or fails loud with a typed sentinel.
 ### 1. Provision the bridge service
 
 - Repo: `image-bridge` (new, mirror `omniparser-bridge` layout).
-- Host: `wsl1` (primary), `wsl2` (failover).
+- Host: `gpu-host-1` (primary), `gpu-host-2` (failover).
 - Endpoints:
   - `POST /v1/bg-remove` -- multipart `image` -> PNG body.
   - `POST /v1/lifestyle` -- JSON `{prompt, base_image_url}` ->

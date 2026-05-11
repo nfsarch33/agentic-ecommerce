@@ -15,6 +15,7 @@
 | ADR-030 | v4.1.0–v5.0.0 Roadmap | Superseded | 2026-05-10 | ADR-031 | [adr-030-v5-roadmap.md](adr-030-v5-roadmap.md) |
 | ADR-031 | v5.0.0 Release Decisions | Accepted | 2026-05-11 | — | [adr-031-v5-release-decisions.md](adr-031-v5-release-decisions.md) |
 | ADR-032 | v6.0.0 Release Decisions | Accepted | 2026-05-11 | — | [adr-032-v6-release-decisions.md](adr-032-v6-release-decisions.md) |
+| ADR-033 | v6.6.0 Release Decisions + v7 Preview | Accepted | 2026-05-11 | — | [adr-033-v660-release-decisions.md](adr-033-v660-release-decisions.md) |
 
 ## Pre-Ecommerce Ecosystem ADRs (in global-kb)
 
@@ -57,4 +58,5 @@ These ADRs predate or run alongside the ecommerce project and reside in `nfsarch
 - **ADR-001–023**: Ecosystem-level decisions in `nfsarch33/cursor-global-kb`
 - **ADR-024–031**: Ecommerce-specific decisions (in-repo or cross-referenced)
 - **ADR-032**: v6.0.0 release decisions
+- **ADR-033**: v6.6.0 release decisions and v7 preview
 - **Reserved** numbers were allocated but never used during rapid sprint cycles
