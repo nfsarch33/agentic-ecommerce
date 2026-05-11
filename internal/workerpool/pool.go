@@ -40,6 +40,19 @@ type Config struct {
 	MaxWorkers  int           // ceiling
 	QueueDepth  int           // bounded buffer between Submit and worker
 	IdleTimeout time.Duration // reserved for future scaling
+
+	// Metrics is the optional v6.2.0 metric sink. nil-safe; the pool
+	// emits ec_workerpool_active gauge updates + ec_workerpool_rejected_total
+	// counter increments through this hook.
+	Metrics PoolMetrics
+}
+
+// PoolMetrics is the optional metric sink the v6.2.0 pool calls when
+// activity changes. Implemented by the cmd/* composition root using
+// the metrics.Registry surface.
+type PoolMetrics interface {
+	SetActive(pool string, value int)
+	IncRejected(pool string, reason string)
 }
 
 // Stats exposes pool counters for tests + observability.
@@ -108,7 +121,22 @@ func New(logger *slog.Logger, cfg Config) *Pool {
 		p.wg.Add(1)
 		go p.worker(i)
 	}
+	p.emitActive()
 	return p
+}
+
+// emitActive forwards the current active worker count to the
+// configured PoolMetrics. nil-safe so tests and callers without
+// observability stay decoupled.
+func (p *Pool) emitActive() {
+	if p.cfg.Metrics == nil {
+		return
+	}
+	p.cfg.Metrics.SetActive(p.cfg.Name, p.activeCount())
+}
+
+func (p *Pool) activeCount() int {
+	return int(p.submitted.Load() - p.completed.Load())
 }
 
 // Config returns a copy of the resolved configuration. Useful for
@@ -137,6 +165,7 @@ func (p *Pool) Submit(ctx context.Context, task Task) error {
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()
+		p.recordRejected("closed")
 		return ErrPoolClosed
 	}
 	p.mu.Unlock()
@@ -148,14 +177,23 @@ func (p *Pool) Submit(ctx context.Context, task Task) error {
 	select {
 	case p.tasks <- poolTask{ctx: ctx, fn: task}:
 		p.submitted.Add(1)
+		p.emitActive()
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
 		p.saturated.Add(1)
+		p.recordRejected("saturated")
 		p.logger.Warn("workerpool.saturated", "pool", p.cfg.Name, "queue_depth", p.cfg.QueueDepth)
 		return ErrPoolSaturated
 	}
+}
+
+func (p *Pool) recordRejected(reason string) {
+	if p.cfg.Metrics == nil {
+		return
+	}
+	p.cfg.Metrics.IncRejected(p.cfg.Name, reason)
 }
 
 // Close marks the pool closed, drains in-flight + queued tasks, and
@@ -205,6 +243,7 @@ func (p *Pool) runTask(idx int, task poolTask) {
 			)
 		}
 		p.completed.Add(1)
+		p.emitActive()
 	}()
 	if task.ctx == nil {
 		task.ctx = context.Background()

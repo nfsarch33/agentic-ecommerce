@@ -27,6 +27,19 @@ type CBConfig struct {
 	SuccessThreshold int
 	CooldownDuration time.Duration
 	NowFunc          func() time.Time
+
+	// Metrics is the v6.2.0 optional metric sink. nil-safe; the
+	// breaker calls it on every state transition so dashboards can
+	// pivot ec_breaker_open_total / ec_breaker_half_open_total.
+	Metrics BreakerMetrics
+}
+
+// BreakerMetrics is the optional metric sink the v6.2.0 breaker
+// calls when state changes. Implemented by the cmd/* composition
+// root using the metrics.Registry surface.
+type BreakerMetrics interface {
+	IncOpen(name string)
+	IncHalfOpen(name string)
 }
 
 // CircuitBreaker wraps external calls with open/half-open/closed
@@ -44,6 +57,7 @@ type CircuitBreaker struct {
 	cooldownDuration time.Duration
 	lastFailureAt    time.Time
 	nowFunc          func() time.Time
+	metrics          BreakerMetrics
 }
 
 // NewCircuitBreaker creates a breaker with sensible defaults.
@@ -71,6 +85,7 @@ func NewCircuitBreaker(logger *slog.Logger, cfg CBConfig) *CircuitBreaker {
 		successThreshold: cfg.SuccessThreshold,
 		cooldownDuration: cfg.CooldownDuration,
 		nowFunc:          cfg.NowFunc,
+		metrics:          cfg.Metrics,
 	}
 }
 
@@ -108,7 +123,7 @@ func (cb *CircuitBreaker) Do(ctx context.Context, fn func(ctx context.Context) e
 func (cb *CircuitBreaker) resolveState() string {
 	if cb.state == StateOpen {
 		if cb.nowFunc().Sub(cb.lastFailureAt) >= cb.cooldownDuration {
-			cb.state = StateHalfOpen
+			cb.transition(StateOpen, StateHalfOpen)
 			cb.halfOpenSuccs = 0
 		}
 	}
@@ -143,6 +158,19 @@ func (cb *CircuitBreaker) transition(from, to string) {
 	cb.logger.Info("resilience.circuit_breaker_transition",
 		"name", cb.name, "from", from, "to", to,
 	)
+	cb.emitTransition(to)
+}
+
+func (cb *CircuitBreaker) emitTransition(state string) {
+	if cb.metrics == nil {
+		return
+	}
+	switch state {
+	case StateOpen:
+		cb.metrics.IncOpen(cb.name)
+	case StateHalfOpen:
+		cb.metrics.IncHalfOpen(cb.name)
+	}
 }
 
 // RegistryHealth is an aggregated view of all breakers.
