@@ -9,10 +9,10 @@
 //     (caller decides; no typed-error promotion in v3.5.0)
 //  3. FX rate exactly 24h old -- boundary test; NOT stale yet
 //  4. FX rate 24h+1s old -- ErrFXRateStale fires
-//  5. FX rate exactly 0 -- ErrInvalidPriceComponents (the v3.5.0
-//     shipped surface uses ErrInvalidPriceComponents for the FX
-//     non-positive guard; the task spec called it ErrInvalidFXRate
-//     for clarity but the shipped sentinel is the broader one)
+//  5. FX rate exactly 0 -- ErrInvalidFXRate (v6.1.0 CF-17 extracts
+//     the provider-side rate non-positive guard into its own typed
+//     sentinel; the v3.5.0 ErrInvalidPriceComponents alias was
+//     removed because PC vs FX errors have different ownership)
 //  6. Selling price exactly 0 -- ErrInvalidPriceComponents
 //  7. Multiple decimal precision (¥39.99 cost / A$99.95 sell /
 //     4.50% fee) -- rounding consistency
@@ -154,10 +154,10 @@ func TestPlatformFeeEdgeCase4_FXRateOneSecondOver24hStale(t *testing.T) {
 }
 
 // TestPlatformFeeEdgeCase5_FXRateZeroRejected verifies the FX
-// non-positive guard. The v3.5.0 shipped surface returns
-// ErrInvalidPriceComponents (the broader sentinel; the task spec
-// called it ErrInvalidFXRate but the shipped code routes through
-// the price-components guard).
+// non-positive guard. v6.1.0 CF-17 promoted the FX rate guard to
+// its own typed sentinel (ErrInvalidFXRate) so callers can
+// distinguish provider pollution from caller-supplied input shape
+// errors.
 func TestPlatformFeeEdgeCase5_FXRateZeroRejected(t *testing.T) {
 	t.Parallel()
 	rate := FXRate{AUDPerCNY: 0, FetchedAt: edgeFixedNow.Add(-1 * time.Hour), Source: "v351-edge-test"}
@@ -168,8 +168,8 @@ func TestPlatformFeeEdgeCase5_FXRateZeroRejected(t *testing.T) {
 		CostCNYCents:         4000,
 		ShippingEstAUDCents:  500,
 	})
-	if !errors.Is(err, ErrInvalidPriceComponents) {
-		t.Fatalf("CalculateMargin fx=0: err=%v, want ErrInvalidPriceComponents (v3.5.0 shipped sentinel for fx non-positive)", err)
+	if !errors.Is(err, ErrInvalidFXRate) {
+		t.Fatalf("CalculateMargin fx=0: err=%v, want ErrInvalidFXRate (v6.1.0 CF-17 typed sentinel)", err)
 	}
 }
 

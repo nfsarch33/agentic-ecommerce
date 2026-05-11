@@ -168,7 +168,7 @@ func WriteFXRateCacheFile(path string, rate FXRate) error {
 		return errors.New("billing: fx cache write: empty path")
 	}
 	if rate.AUDPerCNY <= 0 {
-		return fmt.Errorf("%w: rate non-positive", ErrInvalidPriceComponents)
+		return fmt.Errorf("%w: rate non-positive", ErrInvalidFXRate)
 	}
 	if rate.FetchedAt.IsZero() {
 		rate.FetchedAt = time.Now().UTC()
