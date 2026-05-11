@@ -24,6 +24,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
 	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/agentic-ecommerce/internal/runtimeobs"
 )
 
 var (
@@ -43,18 +44,20 @@ var (
 // startWorkerObservability wires the ec_* registry + memwatch sampler
 // into the supplied lifecycle.Manager. Mirrors the mc-api pattern.
 func startWorkerObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary string) *metrics.Registry {
-	reg := metrics.NewRegistry(binary)
+	rt := runtimeobs.New(logger, binary, runtimeobs.Config{
+		EvomapPath: runtimeobs.DefaultEvomapPath(os.Getenv),
+		Rotate:     true,
+	})
+	reg := rt.Registry()
 	sampler := memwatch.NewSampler(logger, memwatch.Config{
-		BinaryName:     binary,
-		SampleInterval: 5 * time.Second,
-		Sink: memwatch.SinkFunc(func(_ context.Context, s memwatch.Sample) {
-			reg.GoroutineCount.Set(float64(s.GoroutineCount), metrics.Labels{})
-			reg.HeapBytes.Set(float64(s.HeapInUseBytes), metrics.Labels{})
-		}),
+		BinaryName:        binary,
+		SampleInterval:    5 * time.Second,
+		Sink:              rt,
 		HeapAlarmCallback: func() { reg.OOMAlarms.Inc(metrics.Labels{}) },
 	})
 	go func() { _ = sampler.Run(context.Background()) }()
 	mgr.Register("memwatch", sampler)
+	mgr.Register("runtime-observability", rt)
 	return reg
 }
 
