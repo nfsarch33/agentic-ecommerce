@@ -438,6 +438,23 @@ type Registry struct {
 	PGPoolIdleConnections *Gauge
 	PGPoolWaitTotal       *Counter
 	PGPoolWaitDuration    *Histogram
+
+	// v6.2.0 Story 3 memwatch v3 / generalized resilience metrics.
+	// Cardinality budget per series:
+	//   ec_workerpool_active{pool}            ~ pools(8) = 8 series.
+	//   ec_workerpool_rejected_total{pool}    ~ pools(8) = 8 series.
+	//   ec_breaker_open_total{name}           ~ breakers(8: mem0|minimax|stripe|
+	//                                          alipay|wechat|auspost|dhl|misc) = 8 series.
+	//   ec_breaker_half_open_total{name}      ~ breakers(8) = 8 series.
+	//   ec_coord_conflicts_total{tenant_id, agent_a, agent_b, resolution}
+	//     ~ tenants(10) * agent pairs(6) * resolutions(2) = 120 series.
+	// Total ~ 152 additive series for v6.2.0; well under the
+	// per-binary 10_000 cap.
+	WorkerpoolActive     *Gauge
+	WorkerpoolRejected   *Counter
+	BreakerOpenTotal     *Counter
+	BreakerHalfOpenTotal *Counter
+	CoordConflictsTotal  *Counter
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -543,7 +560,19 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	RegisterComparisonMetrics(r)
 	registerMem0Metrics(r)
 	registerPGPoolMetrics(r)
+	registerV620ResilienceMetrics(r)
 	return r
+}
+
+// registerV620ResilienceMetrics registers the v6.2.0 worker pool +
+// circuit breaker metrics. Kept as a standalone helper so the
+// NewRegistry surface stays under the Sentrux complex_fn ceiling.
+func registerV620ResilienceMetrics(r *Registry) {
+	r.WorkerpoolActive = newGauge(r, "ec_workerpool_active", "v6.2.0 active workers per bounded pool by pool name.")
+	r.WorkerpoolRejected = newCounter(r, "ec_workerpool_rejected_total", "v6.2.0 worker pool submissions rejected (saturated|closed) by pool name.")
+	r.BreakerOpenTotal = newCounter(r, "ec_breaker_open_total", "v6.2.0 generalized circuit breaker transitions into the open state by name.")
+	r.BreakerHalfOpenTotal = newCounter(r, "ec_breaker_half_open_total", "v6.2.0 generalized circuit breaker transitions into the half-open state by name.")
+	r.CoordConflictsTotal = newCounter(r, "ec_coord_conflicts_total", "v6.2.0 CF-16 MADRL coordination conflicts by tenant_id + agent_a + agent_b + resolution.")
 }
 
 var defaultDurationBuckets = []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
@@ -698,6 +727,11 @@ func (r *Registry) Handler() http.Handler {
 		r.PGPoolIdleConnections.write(&sb)
 		r.PGPoolWaitTotal.write(&sb)
 		r.PGPoolWaitDuration.write(&sb)
+		r.WorkerpoolActive.write(&sb)
+		r.WorkerpoolRejected.write(&sb)
+		r.BreakerOpenTotal.write(&sb)
+		r.BreakerHalfOpenTotal.write(&sb)
+		r.CoordConflictsTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
