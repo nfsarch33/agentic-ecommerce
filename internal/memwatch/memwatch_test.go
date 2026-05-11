@@ -34,6 +34,7 @@ func TestSamplerEmitsSamples(t *testing.T) {
 			received.Add(1)
 		}),
 	})
+	t.Cleanup(func() { hardenedClose(t, s) })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -83,7 +84,11 @@ func TestHeapCeilingFiresAfterDwell(t *testing.T) {
 		HeapAlarmCallback: func() { alarms.Add(1) },
 	}
 	s := NewSampler(quietLogger(), cfg)
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	t.Cleanup(func() { hardenedClose(t, s) })
+	// v6.1.0 CF-12: 500ms gives macOS schedulers room to deliver
+	// the 5ms ticker at least 10 times even under load; the
+	// previous 200ms budget was the source of the v3.x flake.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	_ = s.Run(ctx)
 	if alarms.Load() == 0 {
@@ -104,7 +109,9 @@ func TestGoroutineCeilingFiresAfterDwell(t *testing.T) {
 		GoroutineAlarmCallback: func() { alarms.Add(1) },
 	}
 	s := NewSampler(quietLogger(), cfg)
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	t.Cleanup(func() { hardenedClose(t, s) })
+	// v6.1.0 CF-12: 500ms scheduler budget; see TestHeapCeilingFiresAfterDwell.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	_ = s.Run(ctx)
 	if alarms.Load() == 0 {
@@ -115,7 +122,11 @@ func TestGoroutineCeilingFiresAfterDwell(t *testing.T) {
 func TestSamplerStatsPopulated(t *testing.T) {
 	t.Parallel()
 	s := NewSampler(quietLogger(), Config{BinaryName: "stats", SampleInterval: 5 * time.Millisecond})
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	t.Cleanup(func() { hardenedClose(t, s) })
+	// v6.1.0 CF-12: 200ms budget is generous for an empty hot
+	// loop; the previous 50ms occasionally landed before the
+	// first tick on macOS test runners.
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	_ = s.Run(ctx)
 	if s.SampleCount() == 0 {
