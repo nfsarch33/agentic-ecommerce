@@ -38,3 +38,6 @@ credentials/
 *.tfstate
 *.tfstate.*
 *.tfplan
+
+# Local k6 + perf result artefacts (generated; not committed)
+/tests/load/results/
