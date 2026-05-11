@@ -146,7 +146,7 @@ func TestWriteFXRateCacheFile_RejectsBadInput(t *testing.T) {
 		t.Fatalf("WriteFXRateCacheFile empty path: want err")
 	}
 	dir := t.TempDir()
-	if err := WriteFXRateCacheFile(filepath.Join(dir, "fx.json"), FXRate{AUDPerCNY: 0}); !errors.Is(err, ErrInvalidPriceComponents) {
-		t.Fatalf("WriteFXRateCacheFile zero rate: err=%v, want ErrInvalidPriceComponents", err)
+	if err := WriteFXRateCacheFile(filepath.Join(dir, "fx.json"), FXRate{AUDPerCNY: 0}); !errors.Is(err, ErrInvalidFXRate) {
+		t.Fatalf("WriteFXRateCacheFile zero rate: err=%v, want ErrInvalidFXRate (v6.1.0 CF-17 typed sentinel)", err)
 	}
 }
