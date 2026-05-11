@@ -26,6 +26,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
+	"github.com/nfsarch33/agentic-ecommerce/internal/runtimeobs"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 	"github.com/nfsarch33/agentic-ecommerce/internal/tenant"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
@@ -112,18 +113,20 @@ func mainImpl(ctx context.Context, stdout io.Writer, getenv func(string) string,
 	// signal handling so we run lifecycle in parallel via Shutdown after
 	// w.Run returns.
 	mgr := lifecycle.New(logger, 30*time.Second)
-	reg := metrics.NewRegistry("temporal-worker")
+	rt := runtimeobs.New(logger, "temporal-worker", runtimeobs.Config{
+		EvomapPath: runtimeobs.DefaultEvomapPath(os.Getenv),
+		Rotate:     true,
+	})
+	reg := rt.Registry()
 	sampler := memwatch.NewSampler(logger, memwatch.Config{
-		BinaryName:     "temporal-worker",
-		SampleInterval: 5 * time.Second,
-		Sink: memwatch.SinkFunc(func(_ context.Context, s memwatch.Sample) {
-			reg.GoroutineCount.Set(float64(s.GoroutineCount), metrics.Labels{})
-			reg.HeapBytes.Set(float64(s.HeapInUseBytes), metrics.Labels{})
-		}),
+		BinaryName:        "temporal-worker",
+		SampleInterval:    5 * time.Second,
+		Sink:              rt,
 		HeapAlarmCallback: func() { reg.OOMAlarms.Inc(metrics.Labels{}) },
 	})
 	go func() { _ = sampler.Run(context.Background()) }()
 	mgr.Register("memwatch", sampler)
+	mgr.Register("runtime-observability", rt)
 	defer func() { _ = mgr.Shutdown() }()
 
 	logger.Info(
