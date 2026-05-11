@@ -21,15 +21,16 @@ resource "helm_release" "keda" {
 
   create_namespace = true
 
-  set {
-    name  = "resources.operator.requests.cpu"
-    value = "100m"
-  }
-
-  set {
-    name  = "resources.operator.requests.memory"
-    value = "128Mi"
-  }
+  set = [
+    {
+      name  = "resources.operator.requests.cpu"
+      value = "100m"
+    },
+    {
+      name  = "resources.operator.requests.memory"
+      value = "128Mi"
+    },
+  ]
 
   depends_on = [google_container_cluster.autopilot]
 }
