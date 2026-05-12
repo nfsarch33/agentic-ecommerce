@@ -482,6 +482,17 @@ type Registry struct {
 	MarketplaceSyncEventsTotal *Counter
 	MarketplaceSyncDLQTotal    *Counter
 	MarketplaceReplayTotal     *Counter
+
+	// v8.0.0 Pair 9 self-improvement metrics. Cardinality budget:
+	//   ec_self_improvement_evidence_total{decision}
+	//     ~ decisions(3: promote|reject|rework) = 3 series.
+	//   ec_self_improvement_reward gauge ~ 1 series.
+	//   ec_agentrace_evidence_total{source}
+	//     ~ sources(2: replay|live) = 2 series.
+	// Total ~6 additive series for v8 Pair 9.
+	SelfImprovementEvidenceTotal *Counter
+	SelfImprovementReward        *Gauge
+	AgentraceEvidenceTotal       *Counter
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -590,6 +601,7 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	registerV620ResilienceMetrics(r)
 	registerV8OOMObservabilityMetrics(r)
 	registerMarketplaceSyncMetrics(r)
+	registerSelfImprovementMetrics(r)
 	return r
 }
 
@@ -615,6 +627,12 @@ func registerMarketplaceSyncMetrics(r *Registry) {
 	r.MarketplaceSyncEventsTotal = newCounter(r, "ec_marketplace_sync_events_total", "v8.0.0 marketplace sync events by provider + entity_type + status.")
 	r.MarketplaceSyncDLQTotal = newCounter(r, "ec_marketplace_sync_dlq_total", "v8.0.0 marketplace sync DLQ enqueues by provider + entity_type + reason.")
 	r.MarketplaceReplayTotal = newCounter(r, "ec_marketplace_replay_total", "v8.0.0 marketplace sync replay outcomes by provider + entity_type + status.")
+}
+
+func registerSelfImprovementMetrics(r *Registry) {
+	r.SelfImprovementEvidenceTotal = newCounter(r, "ec_self_improvement_evidence_total", "v8.0.0 self-improvement producer-reviewer evidence by decision.")
+	r.SelfImprovementReward = newGauge(r, "ec_self_improvement_reward", "v8.0.0 self-improvement mean reward value for reviewed evidence.")
+	r.AgentraceEvidenceTotal = newCounter(r, "ec_agentrace_evidence_total", "v8.0.0 Agenttrace inputs used in self-improvement evidence by source.")
 }
 
 var defaultDurationBuckets = []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
@@ -781,6 +799,9 @@ func (r *Registry) Handler() http.Handler {
 		r.MarketplaceSyncEventsTotal.write(&sb)
 		r.MarketplaceSyncDLQTotal.write(&sb)
 		r.MarketplaceReplayTotal.write(&sb)
+		r.SelfImprovementEvidenceTotal.write(&sb)
+		r.SelfImprovementReward.write(&sb)
+		r.AgentraceEvidenceTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")
