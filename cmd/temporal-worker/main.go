@@ -54,16 +54,18 @@ type temporalDialer func(opts client.Options) (client.Client, error)
 // and activities. All fields are concrete pointers to keep the
 // dependency surface explicit (no interface{} bag-of-everything).
 type workerDeps struct {
-	Logger               *slog.Logger
-	TaskQueue            string
-	ScheduleCfg          agentScheduleConfig
-	Repo                 port.ProductRepository
-	RepoCleanup          func()
-	PublishActivities    *ecworkflow.ProductPublishActivities
-	ContentActivities    *ecworkflow.ContentGenerationActivities
-	MediaActivities      *ecworkflow.MediaProcessingActivities
-	SourcingActivities   *ecworkflow.SourcingActivities
-	OnboardingActivities *ecworkflow.TenantOnboardingActivities
+	Logger                *slog.Logger
+	TaskQueue             string
+	ScheduleCfg           agentScheduleConfig
+	Repo                  port.ProductRepository
+	RepoCleanup           func()
+	PublishActivities     *ecworkflow.ProductPublishActivities
+	ContentActivities     *ecworkflow.ContentGenerationActivities
+	MediaActivities       *ecworkflow.MediaProcessingActivities
+	SourcingActivities    *ecworkflow.SourcingActivities
+	OnboardingActivities  *ecworkflow.TenantOnboardingActivities
+	MarketplaceActivities *ecworkflow.MarketplaceSyncActivities
+	ImageEditActivities   *ecworkflow.ImageEditApprovalActivities
 	// v6.3.0 CF-14: GMV daily REFRESH activity. Nil when no
 	// ECOMMERCE_DB_URL is configured (the workflow then refuses to
 	// run because executor is unwired).
@@ -180,6 +182,8 @@ func buildWorkerDeps(ctx context.Context, logger *slog.Logger, scheduleCfg agent
 	mediaActivities := newMediaProcessingActivitiesFromEnv(logger, repo)
 	sourcingActivities := ecworkflow.NewSourcingActivities(ecworkflow.SourcingActivityDeps{})
 	onboardingActivities := newTenantOnboardingActivitiesFromEnv()
+	marketplaceActivities := ecworkflow.NewMarketplaceSyncActivities(ecworkflow.MarketplaceSyncActivityDeps{})
+	imageEditActivities := ecworkflow.NewImageEditApprovalActivities(ecworkflow.ImageEditApprovalActivityDeps{})
 	gmvRefreshActivities := newGMVDailyRefreshActivitiesFromEnv(ctx, logger)
 
 	return &workerDeps{
@@ -193,6 +197,8 @@ func buildWorkerDeps(ctx context.Context, logger *slog.Logger, scheduleCfg agent
 		MediaActivities:           mediaActivities,
 		SourcingActivities:        sourcingActivities,
 		OnboardingActivities:      onboardingActivities,
+		MarketplaceActivities:     marketplaceActivities,
+		ImageEditActivities:       imageEditActivities,
 		GMVDailyRefreshActivities: gmvRefreshActivities,
 	}, nil
 }
@@ -259,6 +265,9 @@ func registerWorkflowsAndActivities(w workerRegistry, deps *workerDeps) {
 	w.RegisterWorkflow(ecworkflow.ContentGenerationWorkflow)
 	w.RegisterWorkflow(ecworkflow.MediaProcessingWorkflow)
 	w.RegisterWorkflow(ecworkflow.SourcingWorkflow)
+	w.RegisterWorkflow(ecworkflow.MarketplaceSyncWorkflow)
+	w.RegisterWorkflow(ecworkflow.MarketplaceReplayWorkflow)
+	w.RegisterWorkflow(ecworkflow.ImageEditApprovalWorkflow)
 
 	w.RegisterActivityWithOptions(deps.PublishActivities.CheckCompliance, activity.RegisterOptions{Name: ecworkflow.CheckComplianceActivity})
 	w.RegisterActivityWithOptions(deps.PublishActivities.ValidateMedia, activity.RegisterOptions{Name: ecworkflow.ValidateMediaActivity})
@@ -281,6 +290,11 @@ func registerWorkflowsAndActivities(w workerRegistry, deps *workerDeps) {
 	w.RegisterActivityWithOptions(deps.SourcingActivities.ComparePrices, activity.RegisterOptions{Name: ecworkflow.CompareSourcingPricesActivity})
 	w.RegisterActivityWithOptions(deps.SourcingActivities.CheckMargin, activity.RegisterOptions{Name: ecworkflow.CheckSourcingMarginActivity})
 	w.RegisterActivityWithOptions(deps.SourcingActivities.RecommendCandidate, activity.RegisterOptions{Name: ecworkflow.RecommendSourcingCandidateActivity})
+	w.RegisterActivityWithOptions(deps.MarketplaceActivities.Sync, activity.RegisterOptions{Name: ecworkflow.MarketplaceSyncActivity})
+	w.RegisterActivityWithOptions(deps.MarketplaceActivities.Replay, activity.RegisterOptions{Name: ecworkflow.MarketplaceReplayActivity})
+	w.RegisterActivityWithOptions(deps.ImageEditActivities.Request, activity.RegisterOptions{Name: ecworkflow.ImageEditRequestActivity})
+	w.RegisterActivityWithOptions(deps.ImageEditActivities.Approve, activity.RegisterOptions{Name: ecworkflow.ImageEditApproveActivity})
+	w.RegisterActivityWithOptions(deps.ImageEditActivities.Reject, activity.RegisterOptions{Name: ecworkflow.ImageEditRejectActivity})
 
 	w.RegisterWorkflow(ecworkflow.TenantOnboardingWorkflow)
 	w.RegisterActivityWithOptions(deps.OnboardingActivities.ValidateRegistration, activity.RegisterOptions{Name: ecworkflow.TenantValidateRegistrationActivity})
