@@ -55,13 +55,13 @@ func TestRegisterWorkflowsAndActivities(t *testing.T) {
 	reg := &fakeRegistry{}
 	registerWorkflowsAndActivities(reg, deps)
 
-	// v6.3.0 CF-14 added GMVDailyRefreshWorkflow + the
-	// gmv.daily_refresh activity, bumping the contract from 5+24 to
-	// 6+25.
-	if got, want := len(reg.workflows), 6; got != want {
+	// v8 Pair 6 adds marketplace sync/replay and image edit approval
+	// workflows, plus five named activities. This bumps the contract
+	// from 6+25 to 9+30.
+	if got, want := len(reg.workflows), 9; got != want {
 		t.Fatalf("workflows registered = %d, want %d", got, want)
 	}
-	if got, want := len(reg.activities), 25; got != want {
+	if got, want := len(reg.activities), 30; got != want {
 		t.Fatalf("activities registered = %d, want %d", got, want)
 	}
 
@@ -80,6 +80,11 @@ func TestRegisterWorkflowsAndActivities(t *testing.T) {
 		"tenant.register_default_plugins":        false,
 		"tenant.rollback_record":                 false,
 		"gmv.daily_refresh":                      false,
+		"marketplace_sync.sync":                  false,
+		"marketplace_sync.replay":                false,
+		"image_edit.request":                     false,
+		"image_edit.approve":                     false,
+		"image_edit.reject":                      false,
 	}
 	for _, a := range reg.activities {
 		if _, ok := wantNames[a.name]; ok {
