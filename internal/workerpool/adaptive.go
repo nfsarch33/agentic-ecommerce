@@ -20,6 +20,13 @@ type AdaptiveConfig struct {
 	Enabled          *bool         // nil or true = enabled; explicit false = disabled
 	SampleHeapFunc   func() uint64 // injectable for testing; defaults to runtime.MemStats
 	OnResize         func(oldSize, newSize int)
+	Metrics          AdaptiveMetrics
+}
+
+// AdaptiveMetrics receives bounded resize metrics from AdaptivePool.
+type AdaptiveMetrics interface {
+	SetWorkerpoolSize(pool string, value int)
+	IncWorkerpoolResize(pool, direction string)
 }
 
 // AdaptivePool wraps Pool with periodic RSS-based sizing adjustments.
@@ -50,6 +57,7 @@ func NewAdaptivePool(logger *slog.Logger, cfg AdaptiveConfig) *AdaptivePool {
 		stopCh:      make(chan struct{}),
 		doneCh:      make(chan struct{}),
 	}
+	ap.emitSize(cfg.PoolConfig.MaxWorkers)
 	if ap.isEnabled() {
 		go ap.samplerLoop()
 	} else {
@@ -158,6 +166,7 @@ func (ap *AdaptivePool) applyResize(oldSize, newSize int) {
 		direction = "shrink"
 	}
 	ap.resizeEvents.Add(1)
+	ap.emitResize(newSize, direction)
 	ap.logger.Info("workerpool.adaptive_resize",
 		"pool", ap.cfg.PoolConfig.Name,
 		"direction", direction,
@@ -167,6 +176,21 @@ func (ap *AdaptivePool) applyResize(oldSize, newSize int) {
 	if ap.cfg.OnResize != nil {
 		ap.cfg.OnResize(oldSize, newSize)
 	}
+}
+
+func (ap *AdaptivePool) emitSize(size int) {
+	if ap.cfg.Metrics == nil {
+		return
+	}
+	ap.cfg.Metrics.SetWorkerpoolSize(ap.cfg.PoolConfig.Name, size)
+}
+
+func (ap *AdaptivePool) emitResize(size int, direction string) {
+	if ap.cfg.Metrics == nil {
+		return
+	}
+	ap.cfg.Metrics.SetWorkerpoolSize(ap.cfg.PoolConfig.Name, size)
+	ap.cfg.Metrics.IncWorkerpoolResize(ap.cfg.PoolConfig.Name, direction)
 }
 
 func resolveAdaptiveDefaults(cfg AdaptiveConfig) AdaptiveConfig {

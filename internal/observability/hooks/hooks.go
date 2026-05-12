@@ -39,6 +39,10 @@ type Hooks struct {
 	// ec_workerpool_active{pool} + ec_workerpool_rejected_total{pool,reason}.
 	Pool workerpool.PoolMetrics
 
+	// AdaptivePool implements workerpool.AdaptiveMetrics and forwards
+	// adaptive target size + resize direction counters.
+	AdaptivePool workerpool.AdaptiveMetrics
+
 	// Breaker implements resilience.BreakerMetrics and forwards into
 	// ec_breaker_open_total{name} + ec_breaker_half_open_total{name}.
 	Breaker resilience.BreakerMetrics
@@ -60,6 +64,10 @@ func FromRegistry(reg *metrics.Registry) *Hooks {
 		Pool: poolAdapter{
 			active:   reg.WorkerpoolActive,
 			rejected: reg.WorkerpoolRejected,
+		},
+		AdaptivePool: adaptivePoolAdapter{
+			size:   reg.WorkerpoolSize,
+			resize: reg.WorkerpoolResizeTotal,
 		},
 		Breaker: breakerAdapter{
 			open:     reg.BreakerOpenTotal,
@@ -88,6 +96,25 @@ func (a poolAdapter) IncRejected(pool string, reason string) {
 		return
 	}
 	a.rejected.Inc(metrics.Labels{"pool": pool, "reason": reason})
+}
+
+type adaptivePoolAdapter struct {
+	size   *metrics.Gauge
+	resize *metrics.Counter
+}
+
+func (a adaptivePoolAdapter) SetWorkerpoolSize(pool string, value int) {
+	if a.size == nil {
+		return
+	}
+	a.size.Set(float64(value), metrics.Labels{"pool": pool})
+}
+
+func (a adaptivePoolAdapter) IncWorkerpoolResize(pool, direction string) {
+	if a.resize == nil {
+		return
+	}
+	a.resize.Inc(metrics.Labels{"pool": pool, "direction": direction})
 }
 
 // breakerAdapter implements resilience.BreakerMetrics against the
@@ -129,7 +156,8 @@ func (e coordEmitter) Inc(labels map[string]string) {
 // Compile-time interface checks: any drift between port and adapter
 // signatures fails the build instead of silently going un-wired.
 var (
-	_ workerpool.PoolMetrics    = poolAdapter{}
-	_ resilience.BreakerMetrics = breakerAdapter{}
-	_ coord.MetricEmitter       = coordEmitter{}
+	_ workerpool.PoolMetrics     = poolAdapter{}
+	_ workerpool.AdaptiveMetrics = adaptivePoolAdapter{}
+	_ resilience.BreakerMetrics  = breakerAdapter{}
+	_ coord.MetricEmitter        = coordEmitter{}
 )

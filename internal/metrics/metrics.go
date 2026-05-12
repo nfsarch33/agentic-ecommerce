@@ -450,11 +450,20 @@ type Registry struct {
 	//     ~ tenants(10) * agent pairs(6) * resolutions(2) = 120 series.
 	// Total ~ 152 additive series for v6.2.0; well under the
 	// per-binary 10_000 cap.
-	WorkerpoolActive     *Gauge
-	WorkerpoolRejected   *Counter
-	BreakerOpenTotal     *Counter
-	BreakerHalfOpenTotal *Counter
-	CoordConflictsTotal  *Counter
+	WorkerpoolActive      *Gauge
+	WorkerpoolRejected    *Counter
+	WorkerpoolSize        *Gauge
+	WorkerpoolResizeTotal *Counter
+	BreakerOpenTotal      *Counter
+	BreakerHalfOpenTotal  *Counter
+	CoordConflictsTotal   *Counter
+
+	// v8.0.0 Pair 8 OOM observability metrics. Cardinality budget:
+	//   ec_resource_guard_alerts_total{signal,severity}
+	//     ~ signals(3: heap|goroutine|sentrux_desktop) * severities(2) = 6.
+	//   ec_sentrux_desktop_process_count gauge ~ 1 series.
+	ResourceGuardAlertsTotal   *Counter
+	SentruxDesktopProcessCount *Gauge
 
 	// v8.0.0 Pair 1 marketplace sync core metrics. Cardinality budget:
 	//   ec_marketplace_sync_events_total{provider, entity_type, status}
@@ -579,6 +588,7 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	registerMem0Metrics(r)
 	registerPGPoolMetrics(r)
 	registerV620ResilienceMetrics(r)
+	registerV8OOMObservabilityMetrics(r)
 	registerMarketplaceSyncMetrics(r)
 	return r
 }
@@ -592,6 +602,13 @@ func registerV620ResilienceMetrics(r *Registry) {
 	r.BreakerOpenTotal = newCounter(r, "ec_breaker_open_total", "v6.2.0 generalized circuit breaker transitions into the open state by name.")
 	r.BreakerHalfOpenTotal = newCounter(r, "ec_breaker_half_open_total", "v6.2.0 generalized circuit breaker transitions into the half-open state by name.")
 	r.CoordConflictsTotal = newCounter(r, "ec_coord_conflicts_total", "v6.2.0 CF-16 MADRL coordination conflicts by tenant_id + agent_a + agent_b + resolution.")
+}
+
+func registerV8OOMObservabilityMetrics(r *Registry) {
+	r.WorkerpoolSize = newGauge(r, "ec_workerpool_size", "v8.0.0 adaptive worker pool target size by pool name.")
+	r.WorkerpoolResizeTotal = newCounter(r, "ec_workerpool_resize_total", "v8.0.0 adaptive worker pool resize events by pool name and direction.")
+	r.ResourceGuardAlertsTotal = newCounter(r, "ec_resource_guard_alerts_total", "v8.0.0 resource guard alerts by bounded signal and severity.")
+	r.SentruxDesktopProcessCount = newGauge(r, "ec_sentrux_desktop_process_count", "v8.0.0 observed Sentrux desktop process count from runx/cursor-tools resource probes.")
 }
 
 func registerMarketplaceSyncMetrics(r *Registry) {
@@ -754,9 +771,13 @@ func (r *Registry) Handler() http.Handler {
 		r.PGPoolWaitDuration.write(&sb)
 		r.WorkerpoolActive.write(&sb)
 		r.WorkerpoolRejected.write(&sb)
+		r.WorkerpoolSize.write(&sb)
+		r.WorkerpoolResizeTotal.write(&sb)
 		r.BreakerOpenTotal.write(&sb)
 		r.BreakerHalfOpenTotal.write(&sb)
 		r.CoordConflictsTotal.write(&sb)
+		r.ResourceGuardAlertsTotal.write(&sb)
+		r.SentruxDesktopProcessCount.write(&sb)
 		r.MarketplaceSyncEventsTotal.write(&sb)
 		r.MarketplaceSyncDLQTotal.write(&sb)
 		r.MarketplaceReplayTotal.write(&sb)
