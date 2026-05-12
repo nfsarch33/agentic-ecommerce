@@ -39,7 +39,10 @@ func TestReplayNDJSONCapsulesBuildsDashboardSnapshots(t *testing.T) {
 		}
 		assertSnapshotField(t, snapshot, "agentrace_session_duration_seconds")
 		assertSnapshotField(t, snapshot, "workerpool_rejected_total")
+		assertSnapshotField(t, snapshot, "workerpool_resize_total")
 		assertSnapshotField(t, snapshot, "breaker_open_total")
+		assertSnapshotField(t, snapshot, "resource_guard_alerts_total")
+		assertSnapshotField(t, snapshot, "sentrux_desktop_process_count")
 		assertSnapshotField(t, snapshot, "coord_conflicts_total")
 	}
 }
@@ -74,7 +77,11 @@ func recordSpineMetricSamples(r *metrics.Registry) {
 	r.AgentraceBottlenecksTotal.Inc(metrics.Labels{"severity": "all"})
 	r.AgentraceParallelismRatio.Set(0.78, metrics.Labels{})
 	r.WorkerpoolRejected.Inc(metrics.Labels{"pool": "agent"})
+	r.WorkerpoolSize.Set(4, metrics.Labels{"pool": "agent"})
+	r.WorkerpoolResizeTotal.Inc(metrics.Labels{"pool": "agent", "direction": "shrink"})
 	r.BreakerOpenTotal.Inc(metrics.Labels{"name": "stripe"})
+	r.ResourceGuardAlertsTotal.Inc(metrics.Labels{"signal": "heap", "severity": "critical"})
+	r.SentruxDesktopProcessCount.Set(1, metrics.Labels{})
 	r.CoordConflictsTotal.Inc(metrics.Labels{
 		"tenant_id":  "tenant-1",
 		"agent_a":    "PricingAgent",
@@ -107,8 +114,12 @@ func qaCapsule(binary string, sessionDuration time.Duration) evomap.Capsule {
 			AgentraceParallelismRatio:   0.78,
 			UIAutoRateLimitDropsTotal:   3,
 			WorkerpoolRejectedTotal:     4,
+			WorkerpoolSize:              5,
+			WorkerpoolResizeTotal:       1,
 			BreakerOpenTotal:            5,
 			CoordConflictsTotal:         6,
+			ResourceGuardAlertsTotal:    2,
+			SentruxDesktopProcessCount:  1,
 			MarketplaceSyncEventsTotal:  7,
 			MarketplaceSyncDLQTotal:     8,
 			MarketplaceReplayTotal:      9,

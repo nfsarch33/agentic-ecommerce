@@ -81,6 +81,9 @@ func RenderCapsuleMarkdown(now time.Time, agg AggregateResult) string {
 	fmt.Fprintf(&sb, "- max goroutine count: %d\n", agg.MaxGoroutineCount)
 	fmt.Fprintf(&sb, "- max heap-in-use bytes: %d\n", agg.MaxHeapInUseBytes)
 	fmt.Fprintf(&sb, "- mean GC pause p99 us: %.2f\n\n", agg.MeanGCPauseP99Us)
+	fmt.Fprintf(&sb, "- total resource guard alerts: %d\n", agg.TotalResourceGuardAlerts)
+	fmt.Fprintf(&sb, "- max Sentrux desktop processes: %d\n", agg.MaxSentruxDesktopProcessCount)
+	fmt.Fprintf(&sb, "- total workerpool resizes: %d\n\n", agg.TotalWorkerpoolResizes)
 	fmt.Fprintf(&sb, "## Binary Distribution\n\n")
 	for binary, count := range agg.BinaryDistribution {
 		fmt.Fprintf(&sb, "- %s: %d capsules\n", binary, count)
