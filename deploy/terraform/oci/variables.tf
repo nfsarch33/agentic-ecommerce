@@ -86,8 +86,8 @@ variable "tags" {
   description = "Freeform tags applied to all resources."
   type        = map(string)
   default = {
-    project     = "agentic-ecommerce"
-    component   = "mem0"
-    managed_by  = "terraform"
+    project    = "agentic-ecommerce"
+    component  = "mem0"
+    managed_by = "terraform"
   }
 }

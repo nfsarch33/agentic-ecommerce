@@ -79,6 +79,14 @@ locals {
     scale_in_cooldown_seconds  = 300
     scale_out_cooldown_seconds = 60
   }
+
+  content_worker_autoscaling_policy = {
+    enabled                    = true
+    metric                     = "content_jobs_pending"
+    target_value               = 25
+    scale_in_cooldown_seconds  = 300
+    scale_out_cooldown_seconds = 60
+  }
 }
 
 module "network" {
@@ -179,6 +187,38 @@ module "wc_sync_service" {
     ECOMMERCE_SYNC_DRY_RUN = tostring(var.sync_dry_run)
   }
   secret_env_vars = local.common_backend_secrets
+}
+
+module "content_worker_service" {
+  source = "../modules/service"
+
+  provider_name           = local.provider_name
+  runtime_target          = "cloud-run"
+  name_prefix             = var.project_name
+  environment             = var.environment
+  service_name            = "content-worker"
+  image                   = var.backend_image
+  image_tag               = "${var.image_tag}-content-worker"
+  protocol                = "worker"
+  cpu                     = 1
+  memory_mb               = 512
+  min_instances           = var.content_worker_min_instances
+  max_instances           = var.content_worker_max_instances
+  allow_public_ingress    = false
+  network_id              = module.network.network_id
+  cloud_run_vpc_connector = module.network.vpc_connector_name
+  service_account_name    = local.runtime_service_account
+  env_vars = {
+    ECOMMERCE_EMBEDDING_MODEL      = local.common_backend_env.ECOMMERCE_EMBEDDING_MODEL
+    ECOMMERCE_EMBEDDING_DIMENSIONS = local.common_backend_env.ECOMMERCE_EMBEDDING_DIMENSIONS
+    ECOMMERCE_RAG_CHUNK_SIZE       = local.common_backend_env.ECOMMERCE_RAG_CHUNK_SIZE
+  }
+  secret_env_vars = {
+    ECOMMERCE_AI_BRIDGE_URL        = local.common_backend_secrets.ECOMMERCE_AI_BRIDGE_URL
+    ECOMMERCE_EMBEDDING_BRIDGE_URL = local.common_backend_secrets.ECOMMERCE_EMBEDDING_BRIDGE_URL
+    ECOMMERCE_REDIS_ADDR           = local.common_backend_secrets.ECOMMERCE_REDIS_ADDR
+  }
+  autoscaling_policy = local.content_worker_autoscaling_policy
 }
 
 module "agent_worker_service" {

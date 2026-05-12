@@ -19,6 +19,23 @@ S3/GCS media bucket contracts, CloudFront/Cloud CDN stubs, expanded
 Secrets Manager mappings, and autoscaling policy intent while preserving the
 no-credentials/no-apply boundary. See `../../docs/cloud-hardening.md`.
 
+## Provider Lock Policy
+
+Terraform roots are split into credential-free contract roots and live-provider
+roots:
+
+- `aws-ecs` and `gcp-cloudrun` are credential-free contract roots. They use
+  local modules only today, intentionally have no `provider` blocks, and are
+  covered by `make tf-validate` without cloud credentials.
+- `gke`, `eks`, `oci`, and `dr` are live-provider roots. Keep provider lock
+  files with those roots before operator-driven plan/apply work. `gke` already
+  carries `.terraform.lock.hcl`; the remaining live-provider roots should add
+  lock files in the same PR that refreshes their provider initialization.
+
+Do not introduce a live provider block into a credential-free root without also
+adding the matching `.terraform.lock.hcl`, state backend decision, IAM owner,
+and rollback note.
+
 ## Validation
 
 ```bash
