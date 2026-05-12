@@ -46,9 +46,10 @@ type activityInterceptor struct {
 }
 
 func (a *activityInterceptor) ExecuteActivity(ctx context.Context, in *interceptor.ExecuteActivityInput) (interface{}, error) {
-	ctx, span := a.tracer.Start(ctx, "temporal.activity."+in.Args[0].(string),
+	activityName := activityTypeName(in)
+	ctx, span := a.tracer.Start(ctx, "temporal.activity."+activityName,
 		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(attribute.String("temporal.activity.type", activityTypeName(in))),
+		trace.WithAttributes(attribute.String("temporal.activity.type", activityName)),
 	)
 	defer span.End()
 
