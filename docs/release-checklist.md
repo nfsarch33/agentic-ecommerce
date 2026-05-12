@@ -1,15 +1,16 @@
-# v7.5.1 Release Checklist
+# v8.0.0 Release Checklist
 
-Use this checklist before tagging `agentic-ecommerce` v7.5.1.
+Use this checklist before tagging `agentic-ecommerce` v8.0.0.
 
 ## Version and Docs
 
-- `VERSION` contains `7.5.1`.
-- `api/openapi.yaml` has `info.version: 7.5.1`.
-- `CHANGELOG.md` includes the v7.5.1 release entry summarising v7 Pair 1 through Pair 6 QA.
+- `VERSION` contains `8.0.0`.
+- `api/openapi.yaml` has `info.version: 8.0.0`.
+- `CHANGELOG.md` includes the v8.0.0 release entry summarising the backend portions of v8 Pair 1 through Pair 10.
 - `README.md` links quickstart, architecture, API docs, Temporal, n8n, media storage, cloud deployment, and security boundaries.
-- `docs/api-reference.md`, `docs/temporal-workflow-specs.md`, and `docs/webhook-contracts.md` reflect the v7.5.1 API, workflow, and automation surfaces.
-- `docs/adr/adr-034-v751-release-decisions.md` is accepted and linked from `docs/adr/README.md`.
+- `docs/api-reference.md`, `docs/temporal-workflow-specs.md`, and `docs/webhook-contracts.md` reflect the v8.0.0 API, workflow, and automation surfaces.
+- `docs/adr/adr-035-v8-release-decisions.md` is accepted and linked from `docs/adr/README.md`.
+- `docs/operations/v8-release-final.md` records final release evidence, skipped gates, and carry-forwards.
 
 ## Backend Quality Gates
 

@@ -83,8 +83,8 @@ tf-validate:
 	@if ! command -v terraform >/dev/null 2>&1; then \
 		echo "terraform not installed; install Terraform >=1.6 and run terraform init -backend=false plus terraform validate in each deploy/terraform root"; \
 		exit 0; \
-	fi
-	@set -e; for dir in $(TF_VALIDATE_DIRS); do \
+	fi; \
+	set -e; for dir in $(TF_VALIDATE_DIRS); do \
 		echo "==> terraform init/validate $$dir"; \
 		terraform -chdir=$$dir init -backend=false -input=false >/dev/null; \
 		terraform -chdir=$$dir validate; \
@@ -94,8 +94,8 @@ tf-plan-contract:
 	@if ! command -v terraform >/dev/null 2>&1; then \
 		echo "terraform not installed; install Terraform >=1.6 and run terraform plan for credential-free roots"; \
 		exit 0; \
-	fi
-	@set -e; for dir in $(TF_PLAN_DIRS); do \
+	fi; \
+	set -e; for dir in $(TF_PLAN_DIRS); do \
 		echo "==> terraform plan $$dir"; \
 		terraform -chdir=$$dir init -backend=false -input=false >/dev/null; \
 		terraform -chdir=$$dir plan -refresh=false -lock=false -input=false -no-color >/dev/null; \
