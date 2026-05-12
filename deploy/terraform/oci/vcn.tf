@@ -40,8 +40,8 @@ resource "oci_core_security_list" "ec_public_sl" {
   }
 
   ingress_security_rules {
-    source   = "0.0.0.0/0"
-    protocol = "6" # TCP
+    source    = "0.0.0.0/0"
+    protocol  = "6" # TCP
     stateless = false
     tcp_options {
       min = 22
@@ -50,8 +50,8 @@ resource "oci_core_security_list" "ec_public_sl" {
   }
 
   ingress_security_rules {
-    source   = var.vcn_cidr
-    protocol = "6"
+    source    = var.vcn_cidr
+    protocol  = "6"
     stateless = false
     tcp_options {
       min = 8080
@@ -60,8 +60,8 @@ resource "oci_core_security_list" "ec_public_sl" {
   }
 
   ingress_security_rules {
-    source   = var.vcn_cidr
-    protocol = "6"
+    source    = var.vcn_cidr
+    protocol  = "6"
     stateless = false
     tcp_options {
       min = 6333

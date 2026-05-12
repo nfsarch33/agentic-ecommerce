@@ -32,11 +32,11 @@ variable "hosted_zone_id" {
 
 resource "aws_route53_health_check" "primary" {
   fqdn              = var.primary_endpoint
-  port               = 443
-  type               = "HTTPS"
-  resource_path      = "/health/ready"
-  failure_threshold  = 3
-  request_interval   = 30
+  port              = 443
+  type              = "HTTPS"
+  resource_path     = "/health/ready"
+  failure_threshold = 3
+  request_interval  = 30
 
   tags = {
     Name        = "agentic-ecommerce-primary-health"
@@ -47,11 +47,11 @@ resource "aws_route53_health_check" "primary" {
 
 resource "aws_route53_health_check" "dr" {
   fqdn              = var.dr_endpoint
-  port               = 443
-  type               = "HTTPS"
-  resource_path      = "/health/ready"
-  failure_threshold  = 3
-  request_interval   = 30
+  port              = 443
+  type              = "HTTPS"
+  resource_path     = "/health/ready"
+  failure_threshold = 3
+  request_interval  = 30
 
   tags = {
     Name        = "agentic-ecommerce-dr-health"
