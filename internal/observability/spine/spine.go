@@ -83,6 +83,42 @@ func MetricInventory() []MetricContract {
 		{Name: "ec_workerpool_rejected_total", Kind: Counter, Owner: "workerpool", Description: "Bounded worker pool rejections.", Labels: []LabelContract{{Name: "pool", MaxCardinality: 16}}, DashboardFields: []string{"workerpool_rejected_total"}},
 		{Name: "ec_breaker_open_total", Kind: Counter, Owner: "resilience", Description: "Circuit breaker open transitions.", Labels: []LabelContract{{Name: "name", MaxCardinality: 16}}, DashboardFields: []string{"breaker_open_total"}},
 		{Name: "ec_coord_conflicts_total", Kind: Counter, Owner: "coord", Description: "Coordination conflict resolutions.", Labels: []LabelContract{{Name: "agent_a", MaxCardinality: 8}, {Name: "agent_b", MaxCardinality: 8}, {Name: "resolution", MaxCardinality: 4}}, DashboardFields: []string{"coord_conflicts_total"}},
+		{
+			Name:        "ec_marketplace_sync_events_total",
+			Kind:        Counter,
+			Owner:       "marketplacesync",
+			Description: "Marketplace sync events by provider, entity type, and bounded outcome.",
+			Labels: []LabelContract{
+				{Name: "provider", MaxCardinality: 8, Values: []string{"shopify", "shopee", "tiktok", "facebook"}},
+				{Name: "entity_type", MaxCardinality: 8, Values: []string{"product", "inventory", "order"}},
+				{Name: "status", MaxCardinality: 8, Values: []string{"applied", "duplicate", "retry", "dlq", "failed"}},
+			},
+			DashboardFields: []string{"marketplace_sync_events_total"},
+		},
+		{
+			Name:        "ec_marketplace_sync_dlq_total",
+			Kind:        Counter,
+			Owner:       "marketplacesync",
+			Description: "Marketplace sync DLQ enqueues by provider, entity type, and bounded reason.",
+			Labels: []LabelContract{
+				{Name: "provider", MaxCardinality: 8, Values: []string{"shopify", "shopee", "tiktok", "facebook"}},
+				{Name: "entity_type", MaxCardinality: 8, Values: []string{"product", "inventory", "order"}},
+				{Name: "reason", MaxCardinality: 8, Values: []string{"transient", "permanent", "validation", "conflict", "timeout", "unknown"}},
+			},
+			DashboardFields: []string{"marketplace_sync_dlq_total"},
+		},
+		{
+			Name:        "ec_marketplace_replay_total",
+			Kind:        Counter,
+			Owner:       "marketplacesync",
+			Description: "Marketplace replay outcomes by provider, entity type, and bounded status.",
+			Labels: []LabelContract{
+				{Name: "provider", MaxCardinality: 8, Values: []string{"shopify", "shopee", "tiktok", "facebook"}},
+				{Name: "entity_type", MaxCardinality: 8, Values: []string{"product", "inventory", "order"}},
+				{Name: "status", MaxCardinality: 8, Values: []string{"replayed", "duplicate", "failed", "skipped"}},
+			},
+			DashboardFields: []string{"marketplace_replay_total"},
+		},
 	}
 }
 
@@ -147,6 +183,9 @@ func SnapshotFromCapsule(c evomap.Capsule) DashboardSnapshot {
 			{Name: "workerpool_rejected_total", Value: float64(k.WorkerpoolRejectedTotal), Unit: "count"},
 			{Name: "breaker_open_total", Value: float64(k.BreakerOpenTotal), Unit: "count"},
 			{Name: "coord_conflicts_total", Value: float64(k.CoordConflictsTotal), Unit: "count"},
+			{Name: "marketplace_sync_events_total", Value: float64(k.MarketplaceSyncEventsTotal), Unit: "count"},
+			{Name: "marketplace_sync_dlq_total", Value: float64(k.MarketplaceSyncDLQTotal), Unit: "count"},
+			{Name: "marketplace_replay_total", Value: float64(k.MarketplaceReplayTotal), Unit: "count"},
 		},
 	}
 }

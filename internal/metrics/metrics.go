@@ -455,6 +455,24 @@ type Registry struct {
 	BreakerOpenTotal     *Counter
 	BreakerHalfOpenTotal *Counter
 	CoordConflictsTotal  *Counter
+
+	// v8.0.0 Pair 1 marketplace sync core metrics. Cardinality budget:
+	//   ec_marketplace_sync_events_total{provider, entity_type, status}
+	//     ~ providers(4: shopify|shopee|tiktok|facebook) *
+	//       entity_types(3: product|inventory|order) *
+	//       statuses(5: applied|duplicate|retry|dlq|failed) = 60 series.
+	//   ec_marketplace_sync_dlq_total{provider, entity_type, reason}
+	//     ~ providers(4) * entity_types(3) *
+	//       reasons(6: transient|permanent|validation|conflict|timeout|unknown)
+	//       = 72 series.
+	//   ec_marketplace_replay_total{provider, entity_type, status}
+	//     ~ providers(4) * entity_types(3) *
+	//       statuses(4: replayed|duplicate|failed|skipped) = 48 series.
+	// Total ~180 additive series for v8 Pair 1; well under the
+	// per-binary 10_000 cap.
+	MarketplaceSyncEventsTotal *Counter
+	MarketplaceSyncDLQTotal    *Counter
+	MarketplaceReplayTotal     *Counter
 }
 
 // NewRegistry returns a Registry pre-populated with the v2.10.0
@@ -561,6 +579,7 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	registerMem0Metrics(r)
 	registerPGPoolMetrics(r)
 	registerV620ResilienceMetrics(r)
+	registerMarketplaceSyncMetrics(r)
 	return r
 }
 
@@ -573,6 +592,12 @@ func registerV620ResilienceMetrics(r *Registry) {
 	r.BreakerOpenTotal = newCounter(r, "ec_breaker_open_total", "v6.2.0 generalized circuit breaker transitions into the open state by name.")
 	r.BreakerHalfOpenTotal = newCounter(r, "ec_breaker_half_open_total", "v6.2.0 generalized circuit breaker transitions into the half-open state by name.")
 	r.CoordConflictsTotal = newCounter(r, "ec_coord_conflicts_total", "v6.2.0 CF-16 MADRL coordination conflicts by tenant_id + agent_a + agent_b + resolution.")
+}
+
+func registerMarketplaceSyncMetrics(r *Registry) {
+	r.MarketplaceSyncEventsTotal = newCounter(r, "ec_marketplace_sync_events_total", "v8.0.0 marketplace sync events by provider + entity_type + status.")
+	r.MarketplaceSyncDLQTotal = newCounter(r, "ec_marketplace_sync_dlq_total", "v8.0.0 marketplace sync DLQ enqueues by provider + entity_type + reason.")
+	r.MarketplaceReplayTotal = newCounter(r, "ec_marketplace_replay_total", "v8.0.0 marketplace sync replay outcomes by provider + entity_type + status.")
 }
 
 var defaultDurationBuckets = []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
@@ -732,6 +757,9 @@ func (r *Registry) Handler() http.Handler {
 		r.BreakerOpenTotal.write(&sb)
 		r.BreakerHalfOpenTotal.write(&sb)
 		r.CoordConflictsTotal.write(&sb)
+		r.MarketplaceSyncEventsTotal.write(&sb)
+		r.MarketplaceSyncDLQTotal.write(&sb)
+		r.MarketplaceReplayTotal.write(&sb)
 		dropped := r.dropped.Load()
 		if dropped > 0 {
 			fmt.Fprintf(&sb, "# HELP ec_metrics_series_dropped_total Series rejected due to label cardinality cap.\n")

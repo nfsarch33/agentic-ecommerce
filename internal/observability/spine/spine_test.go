@@ -23,6 +23,9 @@ func TestMetricInventoryDeclaresDashboardAndIngestionContracts(t *testing.T) {
 		"ec_heap_bytes",
 		"ec_agentrace_session_duration_seconds",
 		"ec_agentrace_tool_calls_total",
+		"ec_marketplace_sync_events_total",
+		"ec_marketplace_sync_dlq_total",
+		"ec_marketplace_replay_total",
 		"ec_workerpool_rejected_total",
 		"ec_breaker_open_total",
 	} {
@@ -45,6 +48,14 @@ func TestMetricInventoryDeclaresDashboardAndIngestionContracts(t *testing.T) {
 	if !reflect.DeepEqual(toolCalls.Labels, wantLabels) {
 		t.Fatalf("agentrace tool-call labels = %#v, want %#v", toolCalls.Labels, wantLabels)
 	}
+
+	syncEvents, ok := FindMetric(inventory, "ec_marketplace_sync_events_total")
+	if !ok {
+		t.Fatal("missing marketplace sync events metric")
+	}
+	if syncEvents.Owner != "marketplacesync" {
+		t.Fatalf("marketplace sync owner = %s, want marketplacesync", syncEvents.Owner)
+	}
 }
 
 func TestDashboardSnapshotFromCapsuleUsesStableSchema(t *testing.T) {
@@ -57,21 +68,24 @@ func TestDashboardSnapshotFromCapsuleUsesStableSchema(t *testing.T) {
 		EventAt:    eventAt,
 		Binary:     "mc-api",
 		KPIs: evomap.KPIs{
-			ThroughputRPS:             120.5,
-			P95Ms:                     8.75,
-			ErrorRate:                 0.001,
-			OOMAlarms:                 2,
-			GoroutineCount:            321,
-			HeapInUseBytes:            42_000_000,
-			AgentraceAvailable:        true,
-			AgentraceToolCallCount:    17,
-			AgentraceCostUSD:          0.34,
-			AgentraceBottleneckCount:  3,
-			AgentraceParallelismRatio: 0.82,
-			UIAutoRateLimitDropsTotal: 4,
-			WorkerpoolRejectedTotal:   5,
-			BreakerOpenTotal:          6,
-			CoordConflictsTotal:       7,
+			ThroughputRPS:              120.5,
+			P95Ms:                      8.75,
+			ErrorRate:                  0.001,
+			OOMAlarms:                  2,
+			GoroutineCount:             321,
+			HeapInUseBytes:             42_000_000,
+			AgentraceAvailable:         true,
+			AgentraceToolCallCount:     17,
+			AgentraceCostUSD:           0.34,
+			AgentraceBottleneckCount:   3,
+			AgentraceParallelismRatio:  0.82,
+			UIAutoRateLimitDropsTotal:  4,
+			WorkerpoolRejectedTotal:    5,
+			BreakerOpenTotal:           6,
+			CoordConflictsTotal:        7,
+			MarketplaceSyncEventsTotal: 8,
+			MarketplaceSyncDLQTotal:    9,
+			MarketplaceReplayTotal:     10,
 		},
 	})
 
@@ -106,6 +120,9 @@ func TestDashboardSnapshotFromCapsuleUsesStableSchema(t *testing.T) {
 		"workerpool_rejected_total",
 		"breaker_open_total",
 		"coord_conflicts_total",
+		"marketplace_sync_events_total",
+		"marketplace_sync_dlq_total",
+		"marketplace_replay_total",
 	}
 	if !reflect.DeepEqual(gotNames, wantNames) {
 		t.Fatalf("field order = %#v, want %#v", gotNames, wantNames)
