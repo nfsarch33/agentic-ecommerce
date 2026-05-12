@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 var (
@@ -35,8 +36,8 @@ const (
 )
 
 type ProductEvent struct {
-	TenantID  string
-	Provider  string
+	TenantID   string
+	Provider   string
 	EntityType EntityType
 	EntityID   string
 	ExternalID string
@@ -95,6 +96,13 @@ type Engine struct {
 	dlq         DLQ
 	metrics     Metrics
 	maxAttempts int
+	locksMu     sync.Mutex
+	locks       map[string]*keyLock
+}
+
+type keyLock struct {
+	mu   sync.Mutex
+	refs int
 }
 
 func NewEngine(cfg EngineConfig) (*Engine, error) {
@@ -124,6 +132,9 @@ func (e *Engine) Sync(ctx context.Context, event ProductEvent) (SyncResult, erro
 		return SyncResult{}, err
 	}
 	key := event.key()
+	release := e.acquireKey(key)
+	defer release()
+
 	done, err := e.ledger.IsCompleted(ctx, key)
 	if err != nil {
 		return SyncResult{}, err
@@ -173,6 +184,31 @@ func (e *Engine) recordSync(event ProductEvent, status SyncStatus) {
 		return
 	}
 	e.metrics.RecordSyncEvent(event, status)
+}
+
+func (e *Engine) acquireKey(key string) func() {
+	e.locksMu.Lock()
+	if e.locks == nil {
+		e.locks = make(map[string]*keyLock)
+	}
+	lock := e.locks[key]
+	if lock == nil {
+		lock = &keyLock{}
+		e.locks[key] = lock
+	}
+	lock.refs++
+	e.locksMu.Unlock()
+
+	lock.mu.Lock()
+	return func() {
+		lock.mu.Unlock()
+		e.locksMu.Lock()
+		lock.refs--
+		if lock.refs == 0 {
+			delete(e.locks, key)
+		}
+		e.locksMu.Unlock()
+	}
 }
 
 func (e ProductEvent) validate() error {
