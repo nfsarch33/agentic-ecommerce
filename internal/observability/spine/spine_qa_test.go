@@ -81,6 +81,9 @@ func recordSpineMetricSamples(r *metrics.Registry) {
 		"agent_b":    "FulfilmentAgent",
 		"resolution": "last_write_wins",
 	})
+	r.MarketplaceSyncEventsTotal.Inc(metrics.Labels{"provider": "shopify", "entity_type": "product", "status": "applied"})
+	r.MarketplaceSyncDLQTotal.Inc(metrics.Labels{"provider": "shopify", "entity_type": "product", "reason": "transient"})
+	r.MarketplaceReplayTotal.Inc(metrics.Labels{"provider": "shopify", "entity_type": "product", "status": "duplicate"})
 }
 
 func qaCapsule(binary string, sessionDuration time.Duration) evomap.Capsule {
@@ -106,6 +109,9 @@ func qaCapsule(binary string, sessionDuration time.Duration) evomap.Capsule {
 			WorkerpoolRejectedTotal:     4,
 			BreakerOpenTotal:            5,
 			CoordConflictsTotal:         6,
+			MarketplaceSyncEventsTotal:  7,
+			MarketplaceSyncDLQTotal:     8,
+			MarketplaceReplayTotal:      9,
 		},
 	}
 }
