@@ -173,6 +173,13 @@ type KPIs struct {
 	WorkerpoolRejectedTotal int `json:"workerpool_rejected_total,omitempty"`
 	BreakerOpenTotal        int `json:"breaker_open_total,omitempty"`
 	CoordConflictsTotal     int `json:"coord_conflicts_total,omitempty"`
+
+	// v8.0.0 Pair 1 marketplace sync KPIs. These are aggregated
+	// counters intended for dashboard snapshots and EvoLoop reward
+	// artifacts; provider/entity drill-down stays in Prometheus labels.
+	MarketplaceSyncEventsTotal int `json:"marketplace_sync_events_total,omitempty"`
+	MarketplaceSyncDLQTotal    int `json:"marketplace_sync_dlq_total,omitempty"`
+	MarketplaceReplayTotal     int `json:"marketplace_replay_total,omitempty"`
 }
 
 // Config controls Sink construction.

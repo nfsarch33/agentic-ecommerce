@@ -105,6 +105,24 @@ func TestChannelHealthMetricsRender(t *testing.T) {
 	}
 }
 
+func TestMarketplaceSyncMetricsRender(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry("mc-api")
+	r.MarketplaceSyncEventsTotal.Inc(Labels{"provider": "shopify", "entity_type": "product", "status": "applied"})
+	r.MarketplaceSyncDLQTotal.Inc(Labels{"provider": "shopify", "entity_type": "product", "reason": "transient"})
+	r.MarketplaceReplayTotal.Inc(Labels{"provider": "shopify", "entity_type": "product", "status": "duplicate"})
+	body := scrape(t, r)
+	for _, want := range []string{
+		"ec_marketplace_sync_events_total",
+		"ec_marketplace_sync_dlq_total",
+		"ec_marketplace_replay_total",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("response missing %q\n%s", want, body)
+		}
+	}
+}
+
 // TestUIAutoHardeningMetricsRender is the v3.7.0 EC-10 metrics-side
 // gate. The handler MUST emit the seven new ec_uiauto_* /
 // ec_omniparser_* / ec_captcha_* series so the Prometheus alert
