@@ -147,10 +147,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Check Terraform inputs
+        id: terraform-inputs
+        env:
+          EC_PROJECT_ID: ${{ secrets.EC_PROJECT_ID }}
+          EC_REGION: ${{ secrets.EC_REGION }}
+          TERRAFORM_STATE_BUCKET: ${{ secrets.TERRAFORM_STATE_BUCKET }}
+        run: |
+          if [ -n "$EC_PROJECT_ID" ] && [ -n "$EC_REGION" ] && [ -n "$TERRAFORM_STATE_BUCKET" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Terraform
+        if: steps.terraform-inputs.outputs.ready == 'true'
         uses: hashicorp/setup-terraform@v4
 
       - name: Terraform init
+        if: steps.terraform-inputs.outputs.ready == 'true'
         working-directory: deploy/terraform/${{ needs.determine-env.outputs.cloud }}
         run: |
           terraform init \
@@ -158,6 +173,7 @@ jobs:
             -backend-config="prefix=agentic-ecommerce/${{ needs.determine-env.outputs.environment }}"
 
       - name: Terraform plan
+        if: steps.terraform-inputs.outputs.ready == 'true'
         working-directory: deploy/terraform/${{ needs.determine-env.outputs.cloud }}
         run: |
           terraform plan \
@@ -166,7 +182,12 @@ jobs:
             -var="environment=${{ needs.determine-env.outputs.environment }}" \
             -out=tfplan
 
+      - name: Terraform contract plan
+        if: steps.terraform-inputs.outputs.ready != 'true'
+        run: make tf-plan-contract
+
       - name: Upload plan artifact
+        if: steps.terraform-inputs.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-${{ needs.determine-env.outputs.environment }}

@@ -2,6 +2,61 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## [7.5.1] - 2026-05-12 -- v7 Pair 1 through Pair 6 QA release
+
+### Release Summary
+
+v7.5.1 publishes the backend v7 work merged after v6.6.0. It includes the
+quality foundation, coverage harness, observability spine, resource-aware
+orchestration, cloud deployability, adapter hardening, and sandbox-boundary QA
+work from backend PRs #142 through #153. No public v7.0.0 tag was created
+before these pairs shipped, so the current backend head is released as v7.5.1
+instead of back-tagging an older internal pair commit.
+
+### Pair 1: v7.0.0 MVP + v7.0.1 QA
+
+- Reduced the highest production cyclomatic hotspots and added a quality guard
+  for non-test complexity regressions.
+- Refreshed Sentrux quality evidence at Quality 6041, Coupling 0.04, Cycles 1,
+  and God files 0.
+
+### Pair 2: v7.1.0 MVP + v7.1.1 QA
+
+- Added Temporal activity interceptor coverage for panic paths and fallback span
+  naming.
+- Raised `internal/observability/temporal` coverage to 88.2% while total backend
+  coverage held at 85.1%.
+
+### Pair 3: v7.2.0 MVP + v7.2.1 QA
+
+- Added the observability spine for metric inventory, dashboard snapshots, and
+  Agentrace sample conversion.
+- Added EvoMap KPI fields for workerpool rejections, breaker opens, and
+  coordination conflicts, with NDJSON replay QA.
+
+### Pair 4: v7.3.0 MVP + v7.3.1 QA
+
+- Replaced unbounded China adapter batch fan-out with a fixed worker queue.
+- Routed agent scheduler dispatch through bounded worker pools and added
+  shutdown drain/cancel semantics.
+
+### Pair 5: v7.4.0 MVP + v7.4.1 QA
+
+- Aligned production Compose, Helm, AWS ECS, and GCP Cloud Run workload
+  contracts.
+- Added credential-free Terraform validate and plan gates plus rollback
+  documentation for infrastructure changes.
+- Hardened CD Terraform plan validation so pull requests without cloud
+  credentials run the credential-free plan contract instead of failing on empty
+  provider variables.
+
+### Pair 6: v7.5.0 MVP + v7.5.1 QA
+
+- Routed AusPost and DHL quote/label calls through shared retry, timeout,
+  response-hook, and circuit-breaker plumbing.
+- Documented payment, carrier, and social mock/live sandbox boundaries without
+  making live sandbox calls.
+
 ## [6.6.0] - 2026-05-11 -- v6.1.x carry-forward cleanup closeout
 
 ### Release Summary

@@ -6,7 +6,7 @@
 
 Production-ready agentic e-commerce platform with multi-channel selling, AI-driven pricing, 4-provider payment gateway, cloud-native K8s deployment, GDPR compliance, and MADRL agent coordination.
 
-Current release: **v6.6.0**. See `VERSION`, `CHANGELOG.md`, and `docs/release-checklist.md` for release gates.
+Current release: **v7.5.1**. See `VERSION`, `CHANGELOG.md`, and `docs/release-checklist.md` for release gates.
 
 ## Features
 
