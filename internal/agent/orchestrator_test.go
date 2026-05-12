@@ -185,6 +185,11 @@ func TestSchedulerRecordsLifecycleTransitionsAndStructuredEvents(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 	scheduler := NewScheduler(registry, store, events, fixedClock{now: time.Date(2026, 5, 7, 4, 0, 0, 0, time.UTC)}, SchedulerOptions{MaxConcurrent: 2})
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = scheduler.Close(ctx)
+	})
 
 	submitted, err := scheduler.Submit(context.Background(), SubmitRequest{AgentID: "pricing", Priority: 3, Payload: map[string]any{"sku": "RB-SET"}})
 	if err != nil {
@@ -245,6 +250,11 @@ func TestSchedulerCancelsQueuedRunAndEmitsStructuredEvent(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 	scheduler := NewScheduler(registry, store, events, nil, SchedulerOptions{MaxConcurrent: 1})
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = scheduler.Close(ctx)
+	})
 
 	blocking, err := scheduler.Submit(context.Background(), SubmitRequest{AgentID: "worker", Payload: map[string]any{"name": "blocking"}})
 	if err != nil {
@@ -331,13 +341,66 @@ func TestSchedulerMarksFailedAndCancelledRuns(t *testing.T) {
 	}
 }
 
+func TestSchedulerCloseCancelsRunningAndQueuedRuns(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	agent := stubAgent{id: "worker", name: "Worker", run: func(ctx context.Context, _ Task) (RunResult, error) {
+		close(started)
+		select {
+		case <-release:
+			return RunResult{Payload: map[string]any{"ok": true}}, nil
+		case <-ctx.Done():
+			return RunResult{}, ctx.Err()
+		}
+	}}
+	scheduler := newTestScheduler(t, agent, SchedulerOptions{MaxConcurrent: 1})
+
+	running, err := scheduler.Submit(context.Background(), SubmitRequest{AgentID: "worker", Payload: map[string]any{"name": "running"}})
+	if err != nil {
+		t.Fatalf("submit running: %v", err)
+	}
+	<-started
+	queued, err := scheduler.Submit(context.Background(), SubmitRequest{AgentID: "worker", Payload: map[string]any{"name": "queued"}})
+	if err != nil {
+		t.Fatalf("submit queued: %v", err)
+	}
+
+	closeCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := scheduler.Close(closeCtx); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	close(release)
+
+	for _, run := range []Run{running, queued} {
+		completed, err := scheduler.Wait(context.Background(), run.ID)
+		if err != nil {
+			t.Fatalf("wait %s: %v", run.ID, err)
+		}
+		if completed.State != RunCancelled {
+			t.Fatalf("run %s state=%s want %s", run.ID, completed.State, RunCancelled)
+		}
+	}
+	if _, err := scheduler.Submit(context.Background(), SubmitRequest{AgentID: "worker"}); !errors.Is(err, ErrSchedulerClosed) {
+		t.Fatalf("submit after close err=%v want ErrSchedulerClosed", err)
+	}
+}
+
 func newTestScheduler(t *testing.T, a Agent, opts SchedulerOptions) *Scheduler {
 	t.Helper()
 	registry := NewRegistry()
 	if err := registry.Register(a); err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	return NewScheduler(registry, NewInMemoryStore(), NewEventRecorder(), realClock{}, opts)
+	scheduler := NewScheduler(registry, NewInMemoryStore(), NewEventRecorder(), realClock{}, opts)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = scheduler.Close(ctx)
+	})
+	return scheduler
 }
 
 func containsEventType(events []EventType, want EventType) bool {

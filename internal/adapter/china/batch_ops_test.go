@@ -3,6 +3,9 @@ package china
 import (
 	"context"
 	"errors"
+	"fmt"
+	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -72,6 +75,53 @@ func TestBatchGetProducts_CircuitBreakerTrips(t *testing.T) {
 	}
 }
 
+func TestBatchGetProducts_BoundsWorkerGoroutines(t *testing.T) {
+	release := make(chan struct{})
+	client := &blockingChinaClient{
+		started: make(chan string, DefaultPoolSize*2),
+		release: release,
+	}
+	cb := NewCircuitBreaker(CircuitBreakerConfig{FailureThreshold: 100})
+
+	skus := make([]string, DefaultPoolSize*8)
+	for i := range skus {
+		skus[i] = fmt.Sprintf("sku-%02d", i)
+	}
+
+	before := runtime.NumGoroutine()
+	done := make(chan []BatchResult, 1)
+	go func() {
+		done <- BatchGetProducts(context.Background(), client, cb, skus)
+	}()
+
+	for i := 0; i < DefaultPoolSize; i++ {
+		select {
+		case <-client.started:
+		case <-time.After(time.Second):
+			t.Fatalf("started workers=%d want at least %d", i, DefaultPoolSize)
+		}
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	if delta := runtime.NumGoroutine() - before; delta > DefaultPoolSize+8 {
+		close(release)
+		t.Fatalf("goroutine delta=%d want <=%d for bounded worker queue", delta, DefaultPoolSize+8)
+	}
+
+	close(release)
+	select {
+	case results := <-done:
+		if len(results) != len(skus) {
+			t.Fatalf("results=%d want=%d", len(results), len(skus))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("BatchGetProducts did not drain after release")
+	}
+	if got := client.maxInflight.Load(); got > int64(DefaultPoolSize) {
+		t.Fatalf("max inflight=%d want <=%d", got, DefaultPoolSize)
+	}
+}
+
 func TestConnectionPoolStats(t *testing.T) {
 	t.Parallel()
 	cb := NewCircuitBreaker(CircuitBreakerConfig{FailureThreshold: 5})
@@ -87,5 +137,39 @@ func TestConnectionPoolStats(t *testing.T) {
 	s := stats.PoolStatsString()
 	if s == "" {
 		t.Fatal("empty stats string")
+	}
+}
+
+type blockingChinaClient struct {
+	started     chan string
+	release     <-chan struct{}
+	inflight    atomic.Int64
+	maxInflight atomic.Int64
+}
+
+func (b *blockingChinaClient) Source() Source                { return Source1688 }
+func (b *blockingChinaClient) Close(_ context.Context) error { return nil }
+func (b *blockingChinaClient) Search(_ context.Context, _ SearchRequest) ([]Product, error) {
+	return nil, nil
+}
+func (b *blockingChinaClient) ProductDetail(ctx context.Context, req ProductDetailRequest) (Product, error) {
+	current := b.inflight.Add(1)
+	for {
+		max := b.maxInflight.Load()
+		if current <= max || b.maxInflight.CompareAndSwap(max, current) {
+			break
+		}
+	}
+	select {
+	case b.started <- req.ExternalID:
+	default:
+	}
+	defer b.inflight.Add(-1)
+
+	select {
+	case <-ctx.Done():
+		return Product{}, ctx.Err()
+	case <-b.release:
+		return Product{ExternalID: req.ExternalID, Title: req.ExternalID}, nil
 	}
 }
