@@ -58,31 +58,60 @@ type BatchResult struct {
 }
 
 // BatchGetProducts fetches multiple products by SKU concurrently,
-// bounded by the circuit breaker and a concurrency semaphore.
+// bounded by the circuit breaker and a fixed worker queue.
 func BatchGetProducts(ctx context.Context, client Client, cb *CircuitBreaker, skus []string) []BatchResult {
+	cfg := LoadProductionScalingConfig()
+	return batchGetProducts(ctx, client, cb, skus, cfg.PoolSize)
+}
+
+func batchGetProducts(ctx context.Context, client Client, cb *CircuitBreaker, skus []string, poolSize int) []BatchResult {
 	results := make([]BatchResult, len(skus))
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, DefaultPoolSize)
-
-	for i, sku := range skus {
-		wg.Add(1)
-		go func(idx int, s string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			var product Product
-			err := cb.Do(ctx, func(c context.Context) error {
-				p, e := client.ProductDetail(c, ProductDetailRequest{ExternalID: s})
-				if e != nil {
-					return e
-				}
-				product = p
-				return nil
-			})
-			results[idx] = BatchResult{SKU: s, Product: product, Err: err}
-		}(i, sku)
+	if len(skus) == 0 {
+		return results
 	}
+	if poolSize <= 0 {
+		poolSize = DefaultPoolSize
+	}
+	if poolSize > len(skus) {
+		poolSize = len(skus)
+	}
+
+	var wg sync.WaitGroup
+	jobs := make(chan int)
+
+	for range poolSize {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for idx := range jobs {
+				s := skus[idx]
+				var product Product
+				err := cb.Do(ctx, func(c context.Context) error {
+					p, e := client.ProductDetail(c, ProductDetailRequest{ExternalID: s})
+					if e != nil {
+						return e
+					}
+					product = p
+					return nil
+				})
+				results[idx] = BatchResult{SKU: s, Product: product, Err: err}
+			}
+		}()
+	}
+
+	for i := range skus {
+		select {
+		case jobs <- i:
+		case <-ctx.Done():
+			close(jobs)
+			for j := i; j < len(skus); j++ {
+				results[j] = BatchResult{SKU: skus[j], Err: ctx.Err()}
+			}
+			wg.Wait()
+			return results
+		}
+	}
+	close(jobs)
 	wg.Wait()
 	return results
 }
