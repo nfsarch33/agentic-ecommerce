@@ -34,6 +34,8 @@ type ResourceGuardConfig struct {
 
 type ProcessSnapshot struct {
 	SentruxDesktopProcesses int
+	SentruxMCPProcesses     int
+	MemoryFreePercent       float64
 }
 
 type ResourceAlert struct {
