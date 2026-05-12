@@ -21,6 +21,7 @@ output "deployment_summary" {
     services = {
       mc_api          = module.mc_api_service.deployment_contract
       wc_sync         = module.wc_sync_service.deployment_contract
+      content_worker  = module.content_worker_service.deployment_contract
       agent_worker    = module.agent_worker_service.deployment_contract
       temporal_server = module.temporal_server_service.deployment_contract
       temporal_worker = module.temporal_worker_service.deployment_contract

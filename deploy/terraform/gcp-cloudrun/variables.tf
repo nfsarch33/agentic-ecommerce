@@ -106,6 +106,18 @@ variable "agent_worker_max_instances" {
   default     = 15
 }
 
+variable "content_worker_min_instances" {
+  description = "Minimum Cloud Run instance count for content-worker."
+  type        = number
+  default     = 0
+}
+
+variable "content_worker_max_instances" {
+  description = "Maximum Cloud Run instance count for content-worker content generation bursts."
+  type        = number
+  default     = 5
+}
+
 variable "tenants" {
   description = <<-EOT
     Map of tenant_id -> per-tenant configuration consumed by the

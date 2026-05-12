@@ -59,12 +59,12 @@ resource "aws_elasticache_replication_group" "dr" {
   replication_group_id = "agentic-ecommerce-dr"
   description          = "DR Redis cluster for agentic-ecommerce"
 
-  node_type            = var.redis_node_type
-  num_cache_clusters   = var.redis_num_replicas + 1
-  port                 = 6379
+  node_type          = var.redis_node_type
+  num_cache_clusters = var.redis_num_replicas + 1
+  port               = 6379
 
-  subnet_group_name    = aws_elasticache_subnet_group.dr.name
-  security_group_ids   = [aws_security_group.redis.id]
+  subnet_group_name  = aws_elasticache_subnet_group.dr.name
+  security_group_ids = [aws_security_group.redis.id]
 
   at_rest_encryption_enabled = true
   transit_encryption_enabled = true
