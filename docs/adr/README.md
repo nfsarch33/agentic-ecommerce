@@ -17,6 +17,7 @@
 | ADR-032 | v6.0.0 Release Decisions | Accepted | 2026-05-11 | — | [adr-032-v6-release-decisions.md](adr-032-v6-release-decisions.md) |
 | ADR-033 | v6.6.0 Release Decisions + v7 Preview | Accepted | 2026-05-11 | — | [adr-033-v660-release-decisions.md](adr-033-v660-release-decisions.md) |
 | ADR-034 | v7.5.1 Release Decisions | Accepted | 2026-05-12 | — | [adr-034-v751-release-decisions.md](adr-034-v751-release-decisions.md) |
+| ADR-035 | v8.0.0 Release Decisions | Accepted | 2026-05-13 | — | [adr-035-v8-release-decisions.md](adr-035-v8-release-decisions.md) |
 
 ## Pre-Ecommerce Ecosystem ADRs (in global-kb)
 
@@ -61,4 +62,5 @@ These ADRs predate or run alongside the ecommerce project and reside in `nfsarch
 - **ADR-032**: v6.0.0 release decisions
 - **ADR-033**: v6.6.0 release decisions and v7 preview
 - **ADR-034**: v7.5.1 release decisions and remaining v7 sprint batch
+- **ADR-035**: v8.0.0 release decisions and v9 seed roadmap
 - **Reserved** numbers were allocated but never used during rapid sprint cycles

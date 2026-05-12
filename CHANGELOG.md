@@ -2,6 +2,73 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## [8.0.0] - 2026-05-13 -- v8 TDD implementation release
+
+### Release Summary
+
+v8.0.0 publishes the backend portions of the v8 TDD implementation run:
+marketplace sync core, Shopify and Shopee adapters, product image editing,
+Temporal orchestration, OOM observability, self-improvement evidence loops, and
+final release-hardening metadata. Frontend media UX and tooling docsync work are
+released from their owning repositories but are linked from the global-kb v8
+handoff so the stack release can be audited as one system.
+
+### Pair 1: Marketplace Sync Core
+
+- Added an idempotent marketplace sync engine with ledger, retry-to-DLQ,
+  replay dedupe, reconciliation mismatch reporting, and Prometheus metrics for
+  sync events, DLQ events, and replay outcomes.
+- Captured retry/load matrix QA and replay fixture evidence in
+  `docs/operations/v8-p01-marketplace-sync-core-qa.md`.
+
+### Pair 2: Shopify Adapter
+
+- Added the Shopify connector behind the shared marketplace port using
+  contract-driven GraphQL cassette tests.
+- Documented mock/sandbox boundaries and cassette hygiene in
+  `docs/operations/v8-p02-shopify-adapter-qa.md`.
+
+### Pair 3: Shopee Adapter
+
+- Added the guarded Shopee connector only after official-doc and signing/auth
+  evidence was recorded.
+- Captured no-live-call proof, sandbox readiness, and replay cassette QA in
+  `docs/operations/v8-p03-shopee-adapter-qa.md`.
+
+### Pair 4: Product Image Editing
+
+- Added provider-neutral image-edit workflow contracts with approval states,
+  remote large-asset routing, and fallback-ready provider seams.
+- Captured memory-ceiling and provider fallback QA in
+  `docs/operations/v8-p04-image-editing-qa.md`.
+
+### Pair 6: Temporal Orchestration
+
+- Added deterministic Temporal orchestration for marketplace sync and image
+  approval workflows with schedules, signals, queries, and activity-only I/O.
+- Captured replay, cancellation, retry, worker shutdown, and schedule evidence
+  in `docs/operations/v8-p06-temporal-orchestration-qa.md`.
+
+### Pair 8: OOM Observability
+
+- Added resource-guard, workerpool, memwatch, Sentrux-count, Agenttrace, and
+  EvoMap metric wiring for long-running release cycles.
+- Captured leak-check and Sentrux cleanup evidence in
+  `docs/operations/v8-p08-oom-observability-qa.md`.
+
+### Pair 9: Self-Improvement
+
+- Added autoresearch producer-reviewer evidence validation and EvoLoop/DRL
+  reward artifacts backed by Agenttrace replay.
+- Captured replay and promotion-policy QA in
+  `docs/operations/v8-p09-self-improvement-qa.md`.
+
+### Pair 10: Final Hardening
+
+- Added release metadata guard coverage so stale VERSION, OpenAPI, README,
+  changelog, ADR, and release checklist state fails before tagging.
+- Added ADR-035 and final release evidence for v8.0.0.
+
 ## [7.5.1] - 2026-05-12 -- v7 Pair 1 through Pair 6 QA release
 
 ### Release Summary
