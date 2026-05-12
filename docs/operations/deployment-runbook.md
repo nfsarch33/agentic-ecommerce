@@ -217,11 +217,18 @@ curl -sf "http://${MC_API_URL}:8080/healthz"
 ### Full Infrastructure Rollback
 
 ```bash
-# Revert to previous Terraform state
 cd deploy/terraform/gke
 terraform state pull > backup.tfstate
-terraform apply -target=<resource> -var="..." # Selective revert
+terraform plan -out=rollback.tfplan -var="..."
+terraform apply rollback.tfplan
 ```
+
+terraform plan must be reviewed before any infrastructure rollback. Do not use `terraform apply -target` as the default rollback path; targeted apply is an exception path for a single broken resource and needs an operator-approved rollback note that explains why a full reviewed plan is not appropriate.
+
+After rollback docs or service-contract changes, re-run `make tf-plan-contract`
+to prove the credential-free AWS/GCP example roots still plan without live cloud
+credentials. Live-provider roots remain gated on cloud account access, remote
+state ownership, and budget approval.
 
 ## Troubleshooting
 
