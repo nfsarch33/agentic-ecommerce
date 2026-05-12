@@ -388,6 +388,53 @@ func TestSchedulerCloseCancelsRunningAndQueuedRuns(t *testing.T) {
 	}
 }
 
+func TestSchedulerDispatchEmitsWorkerpoolMetrics(t *testing.T) {
+	t.Parallel()
+
+	metrics := newRecordingSchedulerPoolMetrics()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	agent := stubAgent{id: "worker", name: "Worker", run: func(ctx context.Context, _ Task) (RunResult, error) {
+		close(started)
+		select {
+		case <-release:
+			return RunResult{Payload: map[string]any{"ok": true}}, nil
+		case <-ctx.Done():
+			return RunResult{}, ctx.Err()
+		}
+	}}
+	scheduler := newTestScheduler(t, agent, SchedulerOptions{MaxConcurrent: 1, Metrics: metrics})
+
+	run, err := scheduler.Submit(context.Background(), SubmitRequest{AgentID: "worker"})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	<-started
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if metrics.active("agent-scheduler") >= 1 {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if got := metrics.active("agent-scheduler"); got < 1 {
+		t.Fatalf("agent-scheduler active=%d want >=1", got)
+	}
+
+	close(release)
+	if _, err := scheduler.Wait(context.Background(), run.ID); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	deadline = time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if metrics.active("agent-scheduler") == 0 {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatalf("agent-scheduler active=%d want 0 after drain", metrics.active("agent-scheduler"))
+}
+
 func newTestScheduler(t *testing.T, a Agent, opts SchedulerOptions) *Scheduler {
 	t.Helper()
 	registry := NewRegistry()
@@ -410,4 +457,27 @@ func containsEventType(events []EventType, want EventType) bool {
 		}
 	}
 	return false
+}
+
+type recordingSchedulerPoolMetrics struct {
+	mu           sync.Mutex
+	activeByPool map[string]int
+}
+
+func newRecordingSchedulerPoolMetrics() *recordingSchedulerPoolMetrics {
+	return &recordingSchedulerPoolMetrics{activeByPool: map[string]int{}}
+}
+
+func (r *recordingSchedulerPoolMetrics) SetActive(pool string, value int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.activeByPool[pool] = value
+}
+
+func (r *recordingSchedulerPoolMetrics) IncRejected(_ string, _ string) {}
+
+func (r *recordingSchedulerPoolMetrics) active(pool string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.activeByPool[pool]
 }

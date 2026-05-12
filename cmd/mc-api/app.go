@@ -46,15 +46,7 @@ func mainImpl(ctx context.Context, args []string, stdout io.Writer, getenv func(
 	addr := getenvFn(getenv, "ECOMMERCE_HTTP_ADDR", "127.0.0.1:8080")
 	logger.Info("mc-api.start", "addr", addr)
 
-	srv := newServer(logger, repo, orderRepo, cartRepo)
-	defer srv.Close()
-	httpServer := &http.Server{
-		Addr:              addr,
-		Handler:           srv.mux(),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-
-	shutdownTimeout := srv.cfg.shutdownTimeout
+	shutdownTimeout := parseDurationEnv("ECOMMERCE_SHUTDOWN_TIMEOUT", 10*time.Second)
 	if shutdownTimeout <= 0 {
 		shutdownTimeout = 10 * time.Second
 	}
@@ -64,6 +56,13 @@ func mainImpl(ctx context.Context, args []string, stdout io.Writer, getenv func(
 	ecHooks.Store(h)
 	defer ecRegistry.Store(nil)
 	defer ecHooks.Store(nil)
+	srv := newServer(logger, repo, orderRepo, cartRepo)
+	defer srv.Close()
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           srv.mux(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 	return runServerWithLifecycle(ctx, mgr, logger, httpServer)
 }
 
