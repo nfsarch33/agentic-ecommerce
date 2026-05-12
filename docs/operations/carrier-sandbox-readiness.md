@@ -1,4 +1,4 @@
-# Carrier Sandbox Readiness — v6.3.0 Operational Gate
+# Carrier Sandbox Readiness -- v7.5.1 QA refresh
 
 Status: BLOCKED — sandbox carrier credentials unavailable on developer
 laptop. CI continues to validate AusPost and DHL adapters via the
@@ -6,6 +6,25 @@ existing `httptest.Server` fixture path (acts as the v5.1.0 cassette
 equivalent: deterministic, hermetic, HMAC-validated). No regression.
 
 Closes ADR-032 CF #4 in `documented operational gate` mode.
+
+## v7.5.1 QA refresh
+
+Pair 6 QA revalidated the carrier mock/live boundary after the v7.5.0 adapter
+hardening slice in `docs/operations/v750-adapter-hardening.md`. The default
+test path remains credential-free and hermetic. Live AusPost and DHL sandbox
+calls are operator-gated until credentials, runx aliases, and budget approval
+exist.
+
+## Mock / Live Boundary Matrix
+
+| Provider | Default runtime boundary | Hermetic CI coverage | Live sandbox gate |
+| --- | --- | --- | --- |
+| AusPost | `EC_AUSPOST_SANDBOX` defaults to sandbox; tests inject `BaseURL` and `HTTPClient`. | `internal/adapter/carrier/auspost_client_test.go` and `internal/adapter/carrier/v530_table_test.go`. | `live_carrier_sandbox`, operator-gated. |
+| DHL | `EC_DHL_SANDBOX` defaults to sandbox; tests inject `BaseURL`, `HTTPClient`, and token source. | `internal/adapter/carrier/dhl_client_test.go` and `internal/adapter/carrier/v530_table_test.go`. | `live_carrier_sandbox`, operator-gated. |
+
+The v7.5.0 retry work routes both adapters through shared retry transport, but
+does not change the live-call boundary: default CI remains mocked, local, and
+deterministic.
 
 ## Decision
 
@@ -45,8 +64,7 @@ the same HMAC-SHA256 envelopes as the live gateway:
 - `tests/integration/v381/shipping_label_acceptance_test.go`
   - label generation acceptance
 
-These tests run on every PR with `runx go test --repo ecommerce -- -race
--p 4 -count=1 ./...` and gate Sentrux Quality.
+These tests run on every PR with the backend race gate and Sentrux Quality.
 
 ## Live-Sandbox Re-Activation Procedure (when credentials arrive)
 
