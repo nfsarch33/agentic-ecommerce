@@ -84,6 +84,14 @@ func RenderCapsuleMarkdown(now time.Time, agg AggregateResult) string {
 	fmt.Fprintf(&sb, "- total resource guard alerts: %d\n", agg.TotalResourceGuardAlerts)
 	fmt.Fprintf(&sb, "- max Sentrux desktop processes: %d\n", agg.MaxSentruxDesktopProcessCount)
 	fmt.Fprintf(&sb, "- total workerpool resizes: %d\n\n", agg.TotalWorkerpoolResizes)
+	fmt.Fprintf(&sb, "- total self-improvement evidence: %d\n", agg.TotalSelfImprovementEvidence)
+	fmt.Fprintf(&sb, "- self-improvement promoted/rejected/rework: %d/%d/%d\n",
+		agg.TotalSelfImprovementPromoted,
+		agg.TotalSelfImprovementRejected,
+		agg.TotalSelfImprovementRework,
+	)
+	fmt.Fprintf(&sb, "- mean self-improvement reward: %.3f\n", agg.MeanSelfImprovementReward)
+	fmt.Fprintf(&sb, "- total Agenttrace evidence inputs: %d\n\n", agg.TotalAgentraceEvidence)
 	fmt.Fprintf(&sb, "## Binary Distribution\n\n")
 	for binary, count := range agg.BinaryDistribution {
 		fmt.Fprintf(&sb, "- %s: %d capsules\n", binary, count)

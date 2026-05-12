@@ -187,6 +187,16 @@ type KPIs struct {
 	MarketplaceSyncEventsTotal int `json:"marketplace_sync_events_total,omitempty"`
 	MarketplaceSyncDLQTotal    int `json:"marketplace_sync_dlq_total,omitempty"`
 	MarketplaceReplayTotal     int `json:"marketplace_replay_total,omitempty"`
+
+	// v8.0.0 Pair 9 self-improvement KPIs. These summarize reviewed
+	// producer-reviewer evidence and replay-ready Agenttrace inputs for
+	// EvoMap/EvoLoop/DRL reward analysis.
+	SelfImprovementEvidenceTotal int     `json:"self_improvement_evidence_total,omitempty"`
+	SelfImprovementPromotedTotal int     `json:"self_improvement_promoted_total,omitempty"`
+	SelfImprovementRejectedTotal int     `json:"self_improvement_rejected_total,omitempty"`
+	SelfImprovementReworkTotal   int     `json:"self_improvement_rework_total,omitempty"`
+	SelfImprovementRewardMean    float64 `json:"self_improvement_reward_mean,omitempty"`
+	AgentraceEvidenceTotal       int     `json:"agentrace_evidence_total,omitempty"`
 }
 
 // Config controls Sink construction.
@@ -431,6 +441,15 @@ type AggregateResult struct {
 	TotalResourceGuardAlerts      int
 	MaxSentruxDesktopProcessCount int
 	TotalWorkerpoolResizes        int
+
+	// v8.0.0 Pair 9 self-improvement KPIs aggregated into the daily
+	// roll-up for EvoLoop/DRL reward consumers.
+	TotalSelfImprovementEvidence int
+	TotalSelfImprovementPromoted int
+	TotalSelfImprovementRejected int
+	TotalSelfImprovementRework   int
+	MeanSelfImprovementReward    float64
+	TotalAgentraceEvidence       int
 }
 
 // aggregateAccumulator carries the per-iteration running sums + sample
@@ -438,23 +457,25 @@ type AggregateResult struct {
 // keep individual function cyclomatic complexity well under the v3.1.0
 // sentrux ceiling.
 type aggregateAccumulator struct {
-	sumRPS                      float64
-	sumErr                      float64
-	sumGC                       float64
-	sumSupplierScore            float64
-	sumEnrichmentQuality        float64
-	sumVideoScriptQuality       float64
-	sumCAPTCHAResolutionSeconds float64
-	sumHashtagCaptionScore      float64
-	supplierScoreSamples        int
-	enrichmentQualitySamples    int
-	videoScriptQualitySamples   int
-	captchaResolutionSamples    int
-	hashtagCaptionScoreSamples  int
-	sumMinimaxLatencyKey1       float64
-	sumMinimaxLatencyKey2       float64
-	minimaxLatencyKey1Samples   int
-	minimaxLatencyKey2Samples   int
+	sumRPS                       float64
+	sumErr                       float64
+	sumGC                        float64
+	sumSupplierScore             float64
+	sumEnrichmentQuality         float64
+	sumVideoScriptQuality        float64
+	sumCAPTCHAResolutionSeconds  float64
+	sumHashtagCaptionScore       float64
+	supplierScoreSamples         int
+	enrichmentQualitySamples     int
+	videoScriptQualitySamples    int
+	captchaResolutionSamples     int
+	hashtagCaptionScoreSamples   int
+	sumMinimaxLatencyKey1        float64
+	sumMinimaxLatencyKey2        float64
+	minimaxLatencyKey1Samples    int
+	minimaxLatencyKey2Samples    int
+	sumSelfImprovementReward     float64
+	selfImprovementRewardSamples int
 }
 
 // Aggregate computes summary KPIs across a slice of capsules.
@@ -485,6 +506,7 @@ func Aggregate(caps []Capsule) AggregateResult {
 		accumulateV391(c, &res)
 		accumulateMinimax(c, &res, &acc)
 		accumulateV8OOMObservability(c, &res)
+		accumulateSelfImprovement(c, &res, &acc)
 	}
 	n := float64(len(caps))
 	res.MeanThroughputRPS = acc.sumRPS / n
@@ -511,7 +533,22 @@ func Aggregate(caps []Capsule) AggregateResult {
 	if acc.minimaxLatencyKey2Samples > 0 {
 		res.MeanMinimaxLatencyMsKey2 = acc.sumMinimaxLatencyKey2 / float64(acc.minimaxLatencyKey2Samples)
 	}
+	if acc.selfImprovementRewardSamples > 0 {
+		res.MeanSelfImprovementReward = acc.sumSelfImprovementReward / float64(acc.selfImprovementRewardSamples)
+	}
 	return res
+}
+
+func accumulateSelfImprovement(c Capsule, res *AggregateResult, acc *aggregateAccumulator) {
+	res.TotalSelfImprovementEvidence += c.KPIs.SelfImprovementEvidenceTotal
+	res.TotalSelfImprovementPromoted += c.KPIs.SelfImprovementPromotedTotal
+	res.TotalSelfImprovementRejected += c.KPIs.SelfImprovementRejectedTotal
+	res.TotalSelfImprovementRework += c.KPIs.SelfImprovementReworkTotal
+	res.TotalAgentraceEvidence += c.KPIs.AgentraceEvidenceTotal
+	if c.KPIs.SelfImprovementRewardMean != 0 {
+		acc.sumSelfImprovementReward += c.KPIs.SelfImprovementRewardMean
+		acc.selfImprovementRewardSamples++
+	}
 }
 
 func accumulateV8OOMObservability(c Capsule, res *AggregateResult) {
