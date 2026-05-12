@@ -38,9 +38,18 @@ and rollback note.
 
 ## Validation
 
+### Credential-Free Validation Matrix
+
+| Surface | Included paths | Command |
+| --- | --- | --- |
+| Local modules | `modules/network`, `modules/objectstore`, `modules/postgres`, `modules/redis`, `modules/service`, `modules/container_cluster`, `modules/tenant_provisioning` | `make tf-validate` |
+| AWS/GCP contract roots | `aws-ecs`, `gcp-cloudrun` | `make tf-validate` and `make tf-plan-contract` |
+| Live-provider roots | `gke`, `eks`, `oci`, `dr` | Operator-gated only; do not include in credential-free plan/validate automation. |
+
 ```bash
 make tf-fmt
 make tf-validate
+make tf-plan-contract
 ```
 
 For direct Terraform use:
