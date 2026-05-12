@@ -1,0 +1,34 @@
+[
+  {
+    "Event": {
+      "TenantID": "tenant-a",
+      "Provider": "shopify",
+      "EntityType": "product",
+      "EntityID": "sku-replay-1",
+      "ExternalID": "remote-replay-1",
+      "Operation": "upsert",
+      "Version": "v1",
+      "Payload": {
+        "title": "Replay Fixture One"
+      }
+    },
+    "Attempts": 2,
+    "Reason": "transient timeout"
+  },
+  {
+    "Event": {
+      "TenantID": "tenant-a",
+      "Provider": "shopify",
+      "EntityType": "product",
+      "EntityID": "sku-replay-2",
+      "ExternalID": "remote-replay-2",
+      "Operation": "upsert",
+      "Version": "v2",
+      "Payload": {
+        "title": "Replay Fixture Two"
+      }
+    },
+    "Attempts": 3,
+    "Reason": "transient upstream reset"
+  }
+]
