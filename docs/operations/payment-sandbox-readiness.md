@@ -1,4 +1,4 @@
-# Payment Sandbox Readiness — v6.3.0 Operational Gate
+# Payment Sandbox Readiness -- v7.5.1 QA refresh
 
 Status: BLOCKED — sandbox merchant credentials unavailable on developer
 laptop. CI continues to validate Alipay and WeChat Pay adapters via the
@@ -6,6 +6,27 @@ existing `httptest.Server` fixture path (acts as the v5.1.0 cassette
 equivalent: deterministic, hermetic, signature-validated). No regression.
 
 Closes ADR-032 CF #3 in `documented operational gate` mode.
+
+## v7.5.1 QA refresh
+
+Pair 6 QA revalidated the payment mock/live boundary after the v7.5.0 adapter
+hardening slice. The default test path remains credential-free. Live Stripe,
+PayPal, Alipay, and WeChat sandbox calls are operator-gated and must not run on
+developer machines without approved credentials, budget, and runx-safe secret
+loading.
+
+## Mock / Live Boundary Matrix
+
+| Provider | Default runtime boundary | Hermetic CI coverage | Live sandbox gate |
+| --- | --- | --- | --- |
+| Stripe | Defaults to the live Stripe API root when `APIURL` is not injected; tests inject `httptest.Server`. | `internal/adapter/payment/stripe_adapter_test.go` and `internal/adapter/payment/v530_table_test.go`. | `live_payment_sandbox`, operator-gated. |
+| PayPal | Uses explicit sandbox selection through `PayPalAdapterConfig.Sandbox`; tests inject `APIURL`. | `internal/adapter/payment/paypal_adapter_test.go` and `internal/adapter/payment/v530_table_test.go`. | `live_payment_sandbox`, operator-gated. |
+| Alipay | Defaults to sandbox through `EC_ALIPAY_SANDBOX` when no gateway URL is injected. | `internal/adapter/payment/alipay_adapter_test.go` and `internal/adapter/payment/v530_table_test.go`. | `live_payment_sandbox`, operator-gated. |
+| WeChat | Defaults to sandbox through `EC_WECHAT_SANDBOX` when no API URL is injected. | `internal/adapter/payment/wechat_adapter_test.go` and `internal/adapter/payment/v530_table_test.go`. | `live_payment_sandbox`, operator-gated. |
+
+The mock path must stay deterministic: no default CI job may read operator
+vaults, call a live PSP endpoint, or require network access beyond local
+`httptest.Server` fixtures.
 
 ## Decision
 
@@ -26,10 +47,14 @@ gated off.
 
 ## Existing CI Coverage (no regression)
 
-The following test files exercise the full Alipay and WeChat Pay adapter
-paths against an in-process `httptest.Server` that signs and validates
-the same RSA2 / RSA-SHA256 / HMAC-SHA256 envelopes as the live gateway:
+The following test files exercise the payment adapter paths against in-process
+`httptest.Server` fixtures that sign and validate the same envelopes as the
+live gateways where applicable:
 
+- `internal/adapter/payment/stripe_adapter_test.go`
+  - charge, refund, webhook, and status flows with injected API URL
+- `internal/adapter/payment/paypal_adapter_test.go`
+  - OAuth, charge/capture, refund, webhook, and status flows with injected API URL
 - `internal/adapter/payment/alipay_adapter_test.go`
   - charge success / failure
   - refund success / failure
@@ -44,8 +69,8 @@ the same RSA2 / RSA-SHA256 / HMAC-SHA256 envelopes as the live gateway:
 - `internal/adapter/payment/v520_coverage_test.go`
   - error path coverage
 
-These tests run on every PR with `runx go test --repo ecommerce -- -race
--p 4 -count=1 ./...` and gate Sentrux Quality. They are the v5.1.0
+These tests run on every PR with the backend race gate and Sentrux Quality.
+They are the v5.1.0
 cassette equivalent in spirit: hermetic, deterministic, signature-pinned.
 The wire shapes and signing canonicalisation are pinned by these tests
 and fail loudly on adapter drift.
