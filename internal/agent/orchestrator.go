@@ -167,6 +167,7 @@ type SubmitRequest struct {
 
 type SchedulerOptions struct {
 	MaxConcurrent int
+	Metrics       workerpool.PoolMetrics
 }
 
 type Scheduler struct {
@@ -211,6 +212,7 @@ func NewScheduler(registry *Registry, store Store, events EventSink, clock Clock
 		MinWorkers: maxConcurrent,
 		MaxWorkers: maxConcurrent,
 		QueueDepth: maxConcurrent,
+		Metrics:    opts.Metrics,
 	})
 	heap.Init(&s.queue)
 	return s

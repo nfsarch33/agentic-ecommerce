@@ -463,7 +463,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		mediaService:          intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
 		workflowClient:        workflowClient,
 		agentRegistry:         registry,
-		agentScheduler:        orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), eventbus.NewEventBusAdapter(bus, "mc-api.agent"), nil, orchestrator.SchedulerOptions{MaxConcurrent: 2}),
+		agentScheduler:        orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), eventbus.NewEventBusAdapter(bus, "mc-api.agent"), nil, schedulerOptions(2)),
 		agentSchedules:        defaultAgentScheduleManager(),
 		webhookService:        webhookService,
 		webhookSecret:         webhookSecret,
@@ -494,6 +494,18 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 }
 
 func (s *server) Close() {
+	s.schedulerMu.Lock()
+	scheduler := s.agentScheduler
+	s.schedulerMu.Unlock()
+	if scheduler != nil {
+		timeout := s.cfg.shutdownTimeout
+		if timeout <= 0 {
+			timeout = 10 * time.Second
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		_ = scheduler.Close(ctx)
+		cancel()
+	}
 	for _, cleanup := range s.cleanup {
 		if cleanup != nil {
 			cleanup()
@@ -520,12 +532,20 @@ func (s *server) ensureAgentScheduler() {
 			orchestrator.NewInMemoryStore(),
 			sink,
 			nil,
-			orchestrator.SchedulerOptions{MaxConcurrent: 2},
+			schedulerOptions(2),
 		)
 	}
 	if s.agentSchedules == nil {
 		s.agentSchedules = defaultAgentScheduleManager()
 	}
+}
+
+func schedulerOptions(maxConcurrent int) orchestrator.SchedulerOptions {
+	opts := orchestrator.SchedulerOptions{MaxConcurrent: maxConcurrent}
+	if h := ecHooks.Load(); h != nil {
+		opts.Metrics = h.Pool
+	}
+	return opts
 }
 
 func defaultAgentRegistry() *orchestrator.Registry {
