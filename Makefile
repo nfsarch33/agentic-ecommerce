@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage coverage-check integration-pg lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate uiauto-smoke uiauto-compare compose-uiauto-config uiauto-down uiauto-up
+.PHONY: test build vet coverage coverage-check integration-pg lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate tf-plan-contract uiauto-smoke uiauto-compare compose-uiauto-config uiauto-down uiauto-up
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -24,6 +24,11 @@ TF_VALIDATE_DIRS := \
 	$(TF_DIR)/modules/postgres \
 	$(TF_DIR)/modules/redis \
 	$(TF_DIR)/modules/service \
+	$(TF_DIR)/modules/container_cluster \
+	$(TF_DIR)/modules/tenant_provisioning \
+	$(TF_DIR)/aws-ecs \
+	$(TF_DIR)/gcp-cloudrun
+TF_PLAN_DIRS := \
 	$(TF_DIR)/aws-ecs \
 	$(TF_DIR)/gcp-cloudrun
 
@@ -83,6 +88,17 @@ tf-validate:
 		echo "==> terraform init/validate $$dir"; \
 		terraform -chdir=$$dir init -backend=false -input=false >/dev/null; \
 		terraform -chdir=$$dir validate; \
+	done
+
+tf-plan-contract:
+	@if ! command -v terraform >/dev/null 2>&1; then \
+		echo "terraform not installed; install Terraform >=1.6 and run terraform plan for credential-free roots"; \
+		exit 0; \
+	fi
+	@set -e; for dir in $(TF_PLAN_DIRS); do \
+		echo "==> terraform plan $$dir"; \
+		terraform -chdir=$$dir init -backend=false -input=false >/dev/null; \
+		terraform -chdir=$$dir plan -refresh=false -lock=false -input=false -no-color >/dev/null; \
 	done
 
 docker-build:
