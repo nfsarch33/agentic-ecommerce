@@ -87,12 +87,38 @@ type ImageEditJob struct {
 }
 
 type ImageEditMetric struct {
+	TenantID    string
+	ProductID   string
 	Action      ImageEditAction
 	Provider    string
 	Status      string
 	Duration    time.Duration
 	SourceBytes int64
 	OutputBytes int
+}
+
+type ImageEditMediaKPISample struct {
+	TenantID        string
+	ProductID       string
+	Action          string
+	Provider        string
+	Status          string
+	DurationSeconds float64
+	SourceBytes     int64
+	OutputBytes     int
+}
+
+func (m ImageEditMetric) MediaKPISample() ImageEditMediaKPISample {
+	return ImageEditMediaKPISample{
+		TenantID:        m.TenantID,
+		ProductID:       m.ProductID,
+		Action:          string(m.Action),
+		Provider:        m.Provider,
+		Status:          m.Status,
+		DurationSeconds: m.Duration.Seconds(),
+		SourceBytes:     m.SourceBytes,
+		OutputBytes:     m.OutputBytes,
+	}
 }
 
 type ImageEditMetricsHook func(ImageEditMetric)
@@ -208,7 +234,7 @@ func (w *ImageEditWorkflow) execute(ctx context.Context, job ImageEditJob, req I
 		res, err := provider.Edit(ctx, req)
 		if err != nil {
 			lastErr = err
-			w.recordMetric(req.Action, name, "failed", w.now().Sub(start), req.SourceBytes, 0)
+			w.recordMetric(req, name, "failed", w.now().Sub(start), 0)
 			continue
 		}
 		job.Provider = name
@@ -217,7 +243,7 @@ func (w *ImageEditWorkflow) execute(ctx context.Context, job ImageEditJob, req I
 		job.OutputBytes = res.OutputBytes
 		job.ProviderRequestID = res.ProviderRequestID
 		job.UpdatedAt = w.now().UTC()
-		w.recordMetric(req.Action, name, "ok", w.now().Sub(start), req.SourceBytes, res.OutputBytes)
+		w.recordMetric(req, name, "ok", w.now().Sub(start), res.OutputBytes)
 		return w.saveJob(job), nil
 	}
 	if len(job.AttemptedProviders) == 0 {
@@ -268,16 +294,18 @@ func (w *ImageEditWorkflow) loadJob(id string) (ImageEditJob, error) {
 	return job, nil
 }
 
-func (w *ImageEditWorkflow) recordMetric(action ImageEditAction, provider, status string, duration time.Duration, sourceBytes int64, outputBytes int) {
+func (w *ImageEditWorkflow) recordMetric(req ImageEditRequest, provider, status string, duration time.Duration, outputBytes int) {
 	if w.imageEditMetrics == nil {
 		return
 	}
 	w.imageEditMetrics(ImageEditMetric{
-		Action:      action,
+		TenantID:    strings.TrimSpace(req.TenantID),
+		ProductID:   strings.TrimSpace(req.ProductID),
+		Action:      req.Action,
 		Provider:    provider,
 		Status:      status,
 		Duration:    duration,
-		SourceBytes: sourceBytes,
+		SourceBytes: req.SourceBytes,
 		OutputBytes: outputBytes,
 	})
 }
