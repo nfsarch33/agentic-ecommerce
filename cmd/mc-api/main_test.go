@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -15,8 +16,11 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/notification"
 	stripeadapter "github.com/nfsarch33/agentic-ecommerce/internal/adapter/stripe"
+	"github.com/nfsarch33/agentic-ecommerce/internal/agent"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/agentic-ecommerce/internal/observability/hooks"
 	"github.com/nfsarch33/agentic-ecommerce/internal/security"
 )
 
@@ -71,6 +75,34 @@ func addProduct(t *testing.T, repo *inmemory.ProductRepository, sku, title strin
 		t.Fatalf("repo create: %v", err)
 	}
 	return p
+}
+
+func TestSchedulerOptionsUsesCurrentObservabilityHooks(t *testing.T) {
+	h := hooks.FromRegistry(metrics.NewRegistry("scheduler-options-test"))
+	ecHooks.Store(h)
+	t.Cleanup(func() { ecHooks.Store(nil) })
+
+	opts := schedulerOptions(3)
+	if opts.MaxConcurrent != 3 {
+		t.Fatalf("MaxConcurrent=%d want 3", opts.MaxConcurrent)
+	}
+	if opts.Metrics == nil {
+		t.Fatal("Metrics nil; scheduler workerpool will not emit ec_workerpool_* samples")
+	}
+}
+
+func TestServerCloseClosesAgentScheduler(t *testing.T) {
+	srv, _ := testServer(t)
+	srv.ensureAgentScheduler()
+	if srv.agentScheduler == nil {
+		t.Fatal("agentScheduler nil after ensure")
+	}
+
+	srv.Close()
+
+	if _, err := srv.agentScheduler.Submit(context.Background(), agent.SubmitRequest{AgentID: "pricing"}); !errors.Is(err, agent.ErrSchedulerClosed) {
+		t.Fatalf("submit after server close err=%v want ErrSchedulerClosed", err)
+	}
 }
 
 func TestHealthz(t *testing.T) {
