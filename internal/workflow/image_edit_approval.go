@@ -190,5 +190,8 @@ func (a *ImageEditApprovalActivities) Reject(ctx context.Context, input ImageEdi
 	if strings.TrimSpace(input.JobID) == "" {
 		return media.ImageEditJob{}, fmt.Errorf("%w: job id required", media.ErrImageEditInvalid)
 	}
+	if strings.TrimSpace(input.Reason) == "" {
+		return media.ImageEditJob{}, fmt.Errorf("%w: rejection reason required", media.ErrImageEditInvalid)
+	}
 	return a.editor.Reject(ctx, input.JobID, input.Reason)
 }
