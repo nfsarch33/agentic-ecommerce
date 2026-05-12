@@ -24,15 +24,17 @@ const (
 var (
 	ErrUnsupportedEvent   = errors.New("shopee: unsupported marketplace event")
 	ErrInvalidProductData = errors.New("shopee: invalid product data")
+	ErrLiveCallsDisabled  = errors.New("shopee: live calls disabled")
 )
 
 type Config struct {
-	BaseURL     string
-	PartnerID   int64
-	PartnerKey  string
-	AccessToken string
-	ShopID      int64
-	Now         func() int64
+	BaseURL          string
+	PartnerID        int64
+	PartnerKey       string
+	AccessToken      string
+	ShopID           int64
+	Now              func() int64
+	AllowLiveBaseURL bool
 }
 
 type Client struct {
@@ -96,6 +98,9 @@ func (c *Client) Apply(ctx context.Context, event marketplacesync.ProductEvent) 
 }
 
 func validateConfig(cfg Config) error {
+	if err := validateBaseURLPolicy(cfg); err != nil {
+		return err
+	}
 	switch {
 	case strings.TrimSpace(cfg.BaseURL) == "":
 		return fmt.Errorf("%w: base url required", ErrInvalidConfig)
@@ -110,6 +115,33 @@ func validateConfig(cfg Config) error {
 	default:
 		return nil
 	}
+}
+
+func validateBaseURLPolicy(cfg Config) error {
+	base := strings.TrimSpace(cfg.BaseURL)
+	if base == "" {
+		return nil
+	}
+	parsed, err := url.Parse(base)
+	if err != nil {
+		return fmt.Errorf("%w: base url: %w", ErrInvalidConfig, err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("%w: base url must include scheme and host", ErrInvalidConfig)
+	}
+	if isOfficialShopeeHost(parsed.Hostname()) && !cfg.AllowLiveBaseURL {
+		return fmt.Errorf("%w: %s", ErrLiveCallsDisabled, parsed.Hostname())
+	}
+	return nil
+}
+
+func isOfficialShopeeHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	return hasDomain(host, "shopee.com") || hasDomain(host, "shopeemobile.com")
+}
+
+func hasDomain(host, domain string) bool {
+	return host == domain || strings.HasSuffix(host, "."+domain)
 }
 
 func boundedHTTPClient(client *http.Client) *http.Client {
