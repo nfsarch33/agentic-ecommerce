@@ -3,7 +3,10 @@
 package spine
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -135,6 +138,7 @@ func SnapshotFromCapsule(c evomap.Capsule) DashboardSnapshot {
 			{Name: "goroutine_count", Value: float64(k.GoroutineCount), Unit: "count"},
 			{Name: "heap_in_use_bytes", Value: float64(k.HeapInUseBytes), Unit: "bytes"},
 			{Name: "agentrace_available", Value: boolFloat(k.AgentraceAvailable), Unit: "bool"},
+			{Name: "agentrace_session_duration_seconds", Value: k.AgentraceSessionDurationSec, Unit: "seconds"},
 			{Name: "agentrace_tool_call_count", Value: float64(k.AgentraceToolCallCount), Unit: "count"},
 			{Name: "agentrace_cost_usd", Value: k.AgentraceCostUSD, Unit: "usd"},
 			{Name: "agentrace_bottleneck_count", Value: float64(k.AgentraceBottleneckCount), Unit: "count"},
@@ -163,6 +167,62 @@ func ValidateDashboardSnapshot(s DashboardSnapshot) error {
 			return fmt.Errorf("duplicate KPI field %q", field.Name)
 		}
 		seen[field.Name] = struct{}{}
+	}
+	return nil
+}
+
+// DecodeCapsuleSnapshots replays EvoMap NDJSON capsules into dashboard snapshots.
+func DecodeCapsuleSnapshots(r io.Reader) ([]DashboardSnapshot, error) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	var snapshots []DashboardSnapshot
+	line := 0
+	for scanner.Scan() {
+		line++
+		raw := strings.TrimSpace(scanner.Text())
+		if raw == "" {
+			continue
+		}
+		var capsule evomap.Capsule
+		if err := json.Unmarshal([]byte(raw), &capsule); err != nil {
+			return nil, fmt.Errorf("decode capsule line %d: %w", line, err)
+		}
+		snapshot := SnapshotFromCapsule(capsule)
+		if err := ValidateDashboardSnapshot(snapshot); err != nil {
+			return nil, fmt.Errorf("snapshot line %d: %w", line, err)
+		}
+		snapshots = append(snapshots, snapshot)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan capsules: %w", err)
+	}
+	return snapshots, nil
+}
+
+// ValidateInventoryAgainstPrometheus checks that inventory metrics appear in Prometheus text.
+func ValidateInventoryAgainstPrometheus(inventory []MetricContract, text string) error {
+	seen := prometheusMetricNames(text)
+	for _, metric := range inventory {
+		if metricSeen(metric, seen) {
+			continue
+		}
+		return fmt.Errorf("metric %q missing from prometheus text", metric.Name)
+	}
+	return nil
+}
+
+// ValidateDashboardFields checks that declared dashboard fields exist in a snapshot.
+func ValidateDashboardFields(inventory []MetricContract, snapshot DashboardSnapshot) error {
+	fields := make(map[string]struct{}, len(snapshot.Fields))
+	for _, field := range snapshot.Fields {
+		fields[field.Name] = struct{}{}
+	}
+	for _, metric := range inventory {
+		for _, field := range metric.DashboardFields {
+			if _, ok := fields[field]; !ok {
+				return fmt.Errorf("dashboard field %q for metric %q missing from snapshot", field, metric.Name)
+			}
+		}
 	}
 	return nil
 }
@@ -236,6 +296,39 @@ func boolFloat(v bool) float64 {
 		return 1
 	}
 	return 0
+}
+
+func prometheusMetricNames(text string) map[string]struct{} {
+	names := make(map[string]struct{})
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		name := line
+		if idx := strings.IndexAny(name, "{ \t"); idx >= 0 {
+			name = name[:idx]
+		}
+		if name != "" {
+			names[name] = struct{}{}
+		}
+	}
+	return names
+}
+
+func metricSeen(metric MetricContract, seen map[string]struct{}) bool {
+	if _, ok := seen[metric.Name]; ok {
+		return true
+	}
+	if metric.Kind != Histogram {
+		return false
+	}
+	for _, suffix := range []string{"_bucket", "_sum", "_count"} {
+		if _, ok := seen[metric.Name+suffix]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func sortedKeys(m map[string]int) []string {
