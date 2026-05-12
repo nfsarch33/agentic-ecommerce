@@ -174,6 +174,13 @@ type KPIs struct {
 	BreakerOpenTotal        int `json:"breaker_open_total,omitempty"`
 	CoordConflictsTotal     int `json:"coord_conflicts_total,omitempty"`
 
+	// v8.0.0 Pair 8 OOM observability KPIs. These fields are populated
+	// from runtimeobs.ResourceGuard and adaptive workerpool metrics.
+	ResourceGuardAlertsTotal   int `json:"resource_guard_alerts_total,omitempty"`
+	SentruxDesktopProcessCount int `json:"sentrux_desktop_process_count,omitempty"`
+	WorkerpoolSize             int `json:"workerpool_size,omitempty"`
+	WorkerpoolResizeTotal      int `json:"workerpool_resize_total,omitempty"`
+
 	// v8.0.0 Pair 1 marketplace sync KPIs. These are aggregated
 	// counters intended for dashboard snapshots and EvoLoop reward
 	// artifacts; provider/entity drill-down stays in Prometheus labels.
@@ -418,6 +425,12 @@ type AggregateResult struct {
 	TotalMinimaxQuotaExhaust2 int
 	MeanMinimaxLatencyMsKey1  float64
 	MeanMinimaxLatencyMsKey2  float64
+
+	// v8.0.0 Pair 8 OOM observability KPIs aggregated into the
+	// daily roll-up.
+	TotalResourceGuardAlerts      int
+	MaxSentruxDesktopProcessCount int
+	TotalWorkerpoolResizes        int
 }
 
 // aggregateAccumulator carries the per-iteration running sums + sample
@@ -471,6 +484,7 @@ func Aggregate(caps []Capsule) AggregateResult {
 		accumulateV390(c, &res, &acc)
 		accumulateV391(c, &res)
 		accumulateMinimax(c, &res, &acc)
+		accumulateV8OOMObservability(c, &res)
 	}
 	n := float64(len(caps))
 	res.MeanThroughputRPS = acc.sumRPS / n
@@ -498,6 +512,14 @@ func Aggregate(caps []Capsule) AggregateResult {
 		res.MeanMinimaxLatencyMsKey2 = acc.sumMinimaxLatencyKey2 / float64(acc.minimaxLatencyKey2Samples)
 	}
 	return res
+}
+
+func accumulateV8OOMObservability(c Capsule, res *AggregateResult) {
+	res.TotalResourceGuardAlerts += c.KPIs.ResourceGuardAlertsTotal
+	if c.KPIs.SentruxDesktopProcessCount > res.MaxSentruxDesktopProcessCount {
+		res.MaxSentruxDesktopProcessCount = c.KPIs.SentruxDesktopProcessCount
+	}
+	res.TotalWorkerpoolResizes += c.KPIs.WorkerpoolResizeTotal
 }
 
 // accumulateFoundational rolls in the throughput / error / heap /
