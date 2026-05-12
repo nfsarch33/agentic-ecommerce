@@ -31,3 +31,40 @@ func assertFileContains(t *testing.T, path, want string) {
 		t.Fatalf("%s missing %q", path, want)
 	}
 }
+
+func TestV800TerraformTargetsSkipWhenTerraformMissing(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile("../../Makefile")
+	if err != nil {
+		t.Fatalf("read Makefile: %v", err)
+	}
+	makefile := string(raw)
+
+	for _, target := range []string{"tf-validate", "tf-plan-contract"} {
+		recipe := makeTargetRecipe(t, makefile, target)
+		if !strings.Contains(recipe, "fi; \\\n\tset -e;") {
+			t.Fatalf("%s should keep the terraform-missing guard and terraform loop in one shell", target)
+		}
+		if strings.Contains(recipe, "\n\t@set -e;") {
+			t.Fatalf("%s starts the terraform loop in a second shell after the skip guard", target)
+		}
+	}
+}
+
+func makeTargetRecipe(t *testing.T, makefile, target string) string {
+	t.Helper()
+	startMarker := target + ":\n"
+	start := strings.Index(makefile, startMarker)
+	if start == -1 {
+		t.Fatalf("Makefile missing target %s", target)
+	}
+	rest := makefile[start+len(startMarker):]
+	end := len(rest)
+	for _, marker := range []string{"\n\n", "\n.PHONY"} {
+		if idx := strings.Index(rest, marker); idx >= 0 && idx < end {
+			end = idx
+		}
+	}
+	return rest[:end]
+}
