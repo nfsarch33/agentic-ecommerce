@@ -1,6 +1,7 @@
 package carrier
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -57,6 +58,8 @@ func NewAusPostClient(cfg AusPostConfig) (*AusPostClient, error) {
 		BaseURL:    cfg.BaseURL,
 		Timeout:    DefaultAusPostTimeout,
 		HTTPClient: cfg.HTTPClient,
+		MaxRetries: defaultCarrierMaxRetries,
+		RetryDelay: defaultCarrierRetryDelay,
 		RequestHooks: []httpclient.RequestHook{
 			httpclient.JSONRequestHook(),
 			func(req *http.Request) error {
@@ -86,18 +89,17 @@ func (c *AusPostClient) Quote(ctx context.Context, req QuoteRequest) (Quote, err
 	if err != nil {
 		return Quote{}, fmt.Errorf("auspost: marshal quote: %w", err)
 	}
-	resp, err := c.do(ctx, http.MethodPost, "/v3/shipping/quotes", body)
+	respBody, status, err := c.do(ctx, http.MethodPost, "/v3/shipping/quotes", body)
 	if err != nil {
 		return Quote{}, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 500 {
-		return Quote{}, fmt.Errorf("%w: AusPost quote status=%d", ErrCarrierUnavailable, resp.StatusCode)
+	if status >= 500 {
+		return Quote{}, fmt.Errorf("%w: AusPost quote status=%d", ErrCarrierUnavailable, status)
 	}
-	if resp.StatusCode >= 400 {
-		return Quote{}, fmt.Errorf("%w: AusPost quote status=%d", ErrLabelGenerationFailed, resp.StatusCode)
+	if status >= 400 {
+		return Quote{}, fmt.Errorf("%w: AusPost quote status=%d", ErrLabelGenerationFailed, status)
 	}
-	return parseAusPostQuote(resp.Body)
+	return parseAusPostQuote(bytes.NewReader(respBody))
 }
 
 // CreateLabel calls the AusPost label endpoint and returns the
@@ -110,35 +112,29 @@ func (c *AusPostClient) CreateLabel(ctx context.Context, req LabelRequest) (Labe
 	if err != nil {
 		return Label{}, fmt.Errorf("auspost: marshal label: %w", err)
 	}
-	resp, err := c.do(ctx, http.MethodPost, "/v3/shipping/labels", body)
+	respBody, status, err := c.do(ctx, http.MethodPost, "/v3/shipping/labels", body)
 	if err != nil {
 		return Label{}, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 500 {
-		return Label{}, fmt.Errorf("%w: AusPost label status=%d", ErrCarrierUnavailable, resp.StatusCode)
+	if status >= 500 {
+		return Label{}, fmt.Errorf("%w: AusPost label status=%d", ErrCarrierUnavailable, status)
 	}
-	if resp.StatusCode >= 400 {
-		return Label{}, fmt.Errorf("%w: AusPost label status=%d", ErrLabelGenerationFailed, resp.StatusCode)
+	if status >= 400 {
+		return Label{}, fmt.Errorf("%w: AusPost label status=%d", ErrLabelGenerationFailed, status)
 	}
-	return parseAusPostLabel(resp.Body, c.cfg.Now())
+	return parseAusPostLabel(bytes.NewReader(respBody), c.cfg.Now())
 }
 
 // do is the shared HTTP transport: context, signing, dispatch.
-func (c *AusPostClient) do(ctx context.Context, method, path string, body []byte) (*http.Response, error) {
-	url := strings.TrimRight(c.cfg.BaseURL, "/") + path
-	httpReq, err := http.NewRequestWithContext(ctx, method, url, strings.NewReader(string(body)))
+func (c *AusPostClient) do(ctx context.Context, method, path string, body []byte) ([]byte, int, error) {
+	respBody, status, err := c.hc.DoWithHooks(ctx, method, path, body, func(req *http.Request) error {
+		req.Header.Set("X-AusPost-Signature", signAusPost(c.cfg.APISecret, method, path, body))
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("auspost: build request: %w", err)
+		return nil, 0, fmt.Errorf("%w: AusPost transport: %v", ErrCarrierUnavailable, err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-AusPost-Key", c.cfg.APIKey)
-	httpReq.Header.Set("X-AusPost-Signature", signAusPost(c.cfg.APISecret, method, path, body))
-	resp, err := c.cfg.HTTPClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("%w: AusPost transport: %v", ErrCarrierUnavailable, err)
-	}
-	return resp, nil
+	return respBody, status, nil
 }
 
 // signAusPost is the v3.3.0 stdlib HMAC pattern: sha256 over the

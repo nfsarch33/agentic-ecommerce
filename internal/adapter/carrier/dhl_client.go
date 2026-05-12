@@ -1,6 +1,7 @@
 package carrier
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -126,6 +127,8 @@ func NewDHLClient(cfg DHLConfig) (*DHLClient, error) {
 		BaseURL:    cfg.BaseURL,
 		Timeout:    DefaultDHLTimeout,
 		HTTPClient: cfg.HTTPClient,
+		MaxRetries: defaultCarrierMaxRetries,
+		RetryDelay: defaultCarrierRetryDelay,
 		RequestHooks: []httpclient.RequestHook{
 			httpclient.JSONRequestHook(),
 		},
@@ -148,18 +151,17 @@ func (c *DHLClient) Quote(ctx context.Context, req QuoteRequest) (Quote, error) 
 	if err != nil {
 		return Quote{}, fmt.Errorf("dhl: marshal quote: %w", err)
 	}
-	resp, err := c.do(ctx, http.MethodPost, "/express/quotes", body)
+	respBody, status, err := c.do(ctx, http.MethodPost, "/express/quotes", body)
 	if err != nil {
 		return Quote{}, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 500 {
-		return Quote{}, fmt.Errorf("%w: DHL quote status=%d", ErrCarrierUnavailable, resp.StatusCode)
+	if status >= 500 {
+		return Quote{}, fmt.Errorf("%w: DHL quote status=%d", ErrCarrierUnavailable, status)
 	}
-	if resp.StatusCode >= 400 {
-		return Quote{}, fmt.Errorf("%w: DHL quote status=%d", ErrLabelGenerationFailed, resp.StatusCode)
+	if status >= 400 {
+		return Quote{}, fmt.Errorf("%w: DHL quote status=%d", ErrLabelGenerationFailed, status)
 	}
-	return parseDHLQuote(resp.Body)
+	return parseDHLQuote(bytes.NewReader(respBody))
 }
 
 // CreateLabel calls the DHL label endpoint.
@@ -171,37 +173,31 @@ func (c *DHLClient) CreateLabel(ctx context.Context, req LabelRequest) (Label, e
 	if err != nil {
 		return Label{}, fmt.Errorf("dhl: marshal label: %w", err)
 	}
-	resp, err := c.do(ctx, http.MethodPost, "/express/labels", body)
+	respBody, status, err := c.do(ctx, http.MethodPost, "/express/labels", body)
 	if err != nil {
 		return Label{}, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 500 {
-		return Label{}, fmt.Errorf("%w: DHL label status=%d", ErrCarrierUnavailable, resp.StatusCode)
+	if status >= 500 {
+		return Label{}, fmt.Errorf("%w: DHL label status=%d", ErrCarrierUnavailable, status)
 	}
-	if resp.StatusCode >= 400 {
-		return Label{}, fmt.Errorf("%w: DHL label status=%d", ErrLabelGenerationFailed, resp.StatusCode)
+	if status >= 400 {
+		return Label{}, fmt.Errorf("%w: DHL label status=%d", ErrLabelGenerationFailed, status)
 	}
-	return parseDHLLabel(resp.Body, c.cfg.Now())
+	return parseDHLLabel(bytes.NewReader(respBody), c.cfg.Now())
 }
 
-func (c *DHLClient) do(ctx context.Context, method, path string, body []byte) (*http.Response, error) {
+func (c *DHLClient) do(ctx context.Context, method, path string, body []byte) ([]byte, int, error) {
 	token, err := c.tokens.AccessToken(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	url := strings.TrimRight(c.cfg.BaseURL, "/") + path
-	httpReq, err := http.NewRequestWithContext(ctx, method, url, strings.NewReader(string(body)))
+	respBody, status, err := c.hc.DoWithHooks(ctx, method, path, body, httpclient.BearerAuthHook(func() string {
+		return token
+	}))
 	if err != nil {
-		return nil, fmt.Errorf("dhl: build request: %w", err)
+		return nil, 0, fmt.Errorf("%w: DHL transport: %v", ErrCarrierUnavailable, err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+token)
-	resp, err := c.cfg.HTTPClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("%w: DHL transport: %v", ErrCarrierUnavailable, err)
-	}
-	return resp, nil
+	return respBody, status, nil
 }
 
 type dhlQuoteResponse struct {

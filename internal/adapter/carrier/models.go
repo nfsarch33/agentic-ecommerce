@@ -9,6 +9,11 @@ const (
 	CarrierDHL     = "dhl"
 )
 
+const (
+	defaultCarrierMaxRetries = 1
+	defaultCarrierRetryDelay = 10 * time.Millisecond
+)
+
 // QuoteRequest is the shared input shape submitted to a carrier
 // client's Quote method.
 type QuoteRequest struct {
