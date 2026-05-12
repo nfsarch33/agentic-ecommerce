@@ -22,6 +22,9 @@ Temporal server, UI, and worker profiles are local/dev release-candidate tooling
 | `ContentGenerationWorkflow` | `POST /api/v1/workflows/content-generation` | Generate content through approved bridge, retrieve RAG evidence, fact-check claims, evaluate quality, approve/reject | `completed`, `failed`, `rejected` |
 | `MediaProcessingWorkflow` | `POST /api/v1/workflows/media-processing` | Source supplier image, process derivatives, run QA, store object, link to product | `completed`, `failed`, `needs_review` |
 | `SourcingWorkflow` | `POST /api/v1/workflows/sourcing` | Search suppliers, score candidates, compare prices, check margin rules, recommend | `completed`, `failed`, `needs_review` |
+| `MarketplaceSyncWorkflow` | internal worker/API trigger | Dispatch marketplace product event to `marketplace_sync.sync`; idempotency/retry/DLQ remains inside `internal/marketplacesync` activity executor | `applied`, `duplicate`, `dlq`, `failed` |
+| `MarketplaceReplayWorkflow` | internal worker/API trigger | Replay a DLQ record through `marketplace_sync.replay` | `applied`, `duplicate`, `dlq`, `failed` |
+| `ImageEditApprovalWorkflow` | internal worker/API trigger | Request image edit job, wait for approval signal or update when pending, then dispatch approve/reject activity | `requested`, `pending_approval`, `approved`, `rejected`, `failed` |
 
 All workflow start routes require bearer JWT authentication. Request bodies include the product, tenant, or agent input needed by the workflow. Responses return a workflow ID, run ID when available, status, and timestamps that the frontend can use for `/admin/workflows`.
 
@@ -29,6 +32,10 @@ All workflow start routes require bearer JWT authentication. Request bodies incl
 
 - `GET /api/v1/workflows/{id}` returns status, workflow type, run metadata, activity timeline, and error details when available.
 - `POST /api/v1/workflows/{id}/signals/review` sends the human-review decision for `ProductPublishWorkflow`.
+- Pair 6 image edit approval uses `image-edit-approval` for signal-based review
+  and `image-edit-approval-update` for update-based review.
+- Pair 6 query handlers are `marketplace-sync-status` and
+  `image-edit-approval-status`.
 - Frontend workflow timelines should poll the status endpoint until a terminal state is reached.
 
 Signals must be idempotent from the caller perspective. Repeated approval/rejection attempts should either return the accepted state or a clear conflict/error without duplicating external side effects.
