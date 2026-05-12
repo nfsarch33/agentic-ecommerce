@@ -97,6 +97,7 @@ func TestDashboardSnapshotFromCapsuleUsesStableSchema(t *testing.T) {
 		"goroutine_count",
 		"heap_in_use_bytes",
 		"agentrace_available",
+		"agentrace_session_duration_seconds",
 		"agentrace_tool_call_count",
 		"agentrace_cost_usd",
 		"agentrace_bottleneck_count",
