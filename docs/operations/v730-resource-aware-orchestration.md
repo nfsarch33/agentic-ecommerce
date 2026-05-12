@@ -7,9 +7,9 @@
 ## Scope
 
 This MVP starts the v7 Pair 4 resource-aware orchestration slice by replacing
-one production fan-out path that still scaled goroutine count with raw batch
-size. The goal is a small, evidence-backed change that keeps behavior stable
-while tightening the OOM-prevention contract.
+two production async paths that still relied on raw goroutine dispatch. The
+goal is a small, evidence-backed change that keeps behavior stable while
+tightening the OOM-prevention contract.
 
 ## Fix
 
@@ -18,6 +18,13 @@ while tightening the OOM-prevention contract.
   fallback to `DefaultPoolSize` and an upper bound of `len(skus)`.
 - The function still preserves per-SKU result ordering, circuit-breaker
   behavior, and context cancellation propagation.
+- `internal/agent.Scheduler` now dispatches agent runs through
+  `internal/workerpool.Pool` instead of raw `go s.execute(...)`.
+- `Scheduler.Close(ctx)` cancels queued and running work, rejects future
+  submissions with `ErrSchedulerClosed`, and drains the scheduler worker pool
+  under the caller's deadline.
+- Existing priority ordering, max-concurrency, wait/cancel, run-state, and
+  structured event contracts remain unchanged.
 
 ## TDD Evidence
 
@@ -31,6 +38,18 @@ goroutine delta=81 want <=18 for bounded worker queue
 
 After the fixed-worker refactor, the same test passes and confirms max
 in-flight upstream calls stays within `DefaultPoolSize`.
+
+`TestSchedulerCloseCancelsRunningAndQueuedRuns` was added before the scheduler
+implementation. The RED state failed to compile because the scheduler had no
+close contract and no closed-scheduler sentinel:
+
+```text
+scheduler.Close undefined
+undefined: ErrSchedulerClosed
+```
+
+The GREEN implementation adds owned worker-pool dispatch and verifies close
+cancels both queued and running work before rejecting new submissions.
 
 ## QA Carry-Forward
 
@@ -59,4 +78,10 @@ go test ./internal/adapter/china -run TestBatchGetProducts_BoundsWorkerGoroutine
 go test ./internal/adapter/china -count=1
 go test -race ./internal/adapter/china -count=1
 go test -race ./internal/adapter/china -run TestBatchGetProducts_BoundsWorkerGoroutines -count=3
+go test ./internal/agent -run TestSchedulerCloseCancelsRunningAndQueuedRuns -count=1
+go test ./internal/agent -count=1
+go test -race ./internal/agent -count=1 -timeout=30s
+go test -race ./internal/workerpool -count=1 -timeout=30s
+go test -race ./internal/lifecycle -count=1 -timeout=30s
+go test -race -p 1 -count=1 ./...
 ```

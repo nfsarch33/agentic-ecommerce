@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
 )
 
 var (
@@ -17,6 +18,7 @@ var (
 	ErrAgentNotFound          = errors.New("agent not found")
 	ErrRunNotFound            = errors.New("agent run not found")
 	ErrRunNotCancellable      = errors.New("agent run is not cancellable")
+	ErrSchedulerClosed        = errors.New("agent scheduler closed")
 )
 
 type RunState string
@@ -180,6 +182,8 @@ type Scheduler struct {
 	sequence      int64
 	waiters       map[string][]chan Run
 	cancels       map[string]context.CancelFunc
+	pool          *workerpool.Pool
+	closed        bool
 }
 
 func NewScheduler(registry *Registry, store Store, events EventSink, clock Clock, opts SchedulerOptions) *Scheduler {
@@ -202,6 +206,12 @@ func NewScheduler(registry *Registry, store Store, events EventSink, clock Clock
 		waiters:       make(map[string][]chan Run),
 		cancels:       make(map[string]context.CancelFunc),
 	}
+	s.pool = workerpool.New(nil, workerpool.Config{
+		Name:       "agent-scheduler",
+		MinWorkers: maxConcurrent,
+		MaxWorkers: maxConcurrent,
+		QueueDepth: maxConcurrent,
+	})
 	heap.Init(&s.queue)
 	return s
 }
@@ -223,6 +233,13 @@ func (s *Scheduler) Submit(ctx context.Context, req SubmitRequest) (Run, error) 
 	if _, ok := s.registry.Get(agentID); !ok {
 		return Run{}, ErrAgentNotFound
 	}
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return Run{}, ErrSchedulerClosed
+	}
+	s.mu.Unlock()
+
 	now := s.clock.Now()
 	if req.Payload == nil {
 		req.Payload = map[string]any{}
@@ -249,6 +266,11 @@ func (s *Scheduler) Submit(ctx context.Context, req SubmitRequest) (Run, error) 
 	_ = s.events.Emit(ctx, s.event(EventRunQueued, run, map[string]any{"priority": req.Priority}))
 
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		s.cancelRun(ctx, run, "scheduler_closed")
+		return run, ErrSchedulerClosed
+	}
 	s.sequence++
 	heap.Push(&s.queue, &queuedTask{runID: run.ID, task: task, priority: req.Priority, sequence: s.sequence})
 	s.dispatchLocked()
@@ -308,6 +330,9 @@ func (s *Scheduler) Wait(ctx context.Context, runID string) (Run, error) {
 }
 
 func (s *Scheduler) dispatchLocked() {
+	if s.closed {
+		return
+	}
 	for s.running < s.maxConcurrent && s.queue.Len() > 0 {
 		item := heap.Pop(&s.queue).(*queuedTask)
 		run, err := s.store.GetRun(context.Background(), item.runID)
@@ -321,8 +346,26 @@ func (s *Scheduler) dispatchLocked() {
 		s.running++
 		ctx, cancel := context.WithCancel(context.Background())
 		s.cancels[item.runID] = cancel
-		go s.execute(ctx, agent, item.task, run)
+		if err := s.pool.Submit(ctx, func(execCtx context.Context) error {
+			s.execute(execCtx, agent, item.task, run)
+			return nil
+		}); err != nil {
+			cancel()
+			delete(s.cancels, item.runID)
+			s.running--
+			s.failDispatch(run, err)
+		}
 	}
+}
+
+func (s *Scheduler) failDispatch(run Run, err error) {
+	now := s.clock.Now()
+	run.State = RunFailed
+	run.FinishedAt = &now
+	run.Error = RunError{Code: "scheduler_dispatch_failed", Detail: err.Error()}
+	_ = s.store.UpdateRun(context.Background(), run)
+	_ = s.events.Emit(context.Background(), s.event(EventRunFailed, run, map[string]any{"error_code": run.Error.Code}))
+	s.notifyLocked(run)
 }
 
 func (s *Scheduler) execute(ctx context.Context, agent Agent, task Task, run Run) {
@@ -358,6 +401,50 @@ func (s *Scheduler) execute(ctx context.Context, agent Agent, task Task, run Run
 	s.notify(run)
 }
 
+// Close cancels queued and running work, rejects future submissions, and
+// drains the scheduler worker pool. It is safe to call more than once.
+func (s *Scheduler) Close(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.closed = true
+	queued := make([]*queuedTask, 0, s.queue.Len())
+	for s.queue.Len() > 0 {
+		queued = append(queued, heap.Pop(&s.queue).(*queuedTask))
+	}
+	cancels := make([]context.CancelFunc, 0, len(s.cancels))
+	for _, cancel := range s.cancels {
+		cancels = append(cancels, cancel)
+	}
+	s.mu.Unlock()
+
+	for _, item := range queued {
+		if run, err := s.store.GetRun(ctx, item.runID); err == nil && run.State == RunQueued {
+			s.cancelRun(ctx, run, "scheduler_closed")
+		}
+	}
+	for _, cancel := range cancels {
+		cancel()
+	}
+	return s.pool.Close(ctx)
+}
+
+func (s *Scheduler) cancelRun(ctx context.Context, run Run, code string) {
+	now := s.clock.Now()
+	run.State = RunCancelled
+	run.FinishedAt = &now
+	run.Error = RunError{Code: code}
+	_ = s.store.UpdateRun(ctx, run)
+	_ = s.events.Emit(ctx, s.event(EventRunCancelled, run, map[string]any{"cancelled": true}))
+	s.notify(run)
+}
+
 func (s *Scheduler) event(eventType EventType, run Run, payload map[string]any) AgentEvent {
 	if payload == nil {
 		payload = map[string]any{}
@@ -375,9 +462,13 @@ func (s *Scheduler) event(eventType EventType, run Run, payload map[string]any) 
 
 func (s *Scheduler) notify(run Run) {
 	s.mu.Lock()
+	s.notifyLocked(run)
+	s.mu.Unlock()
+}
+
+func (s *Scheduler) notifyLocked(run Run) {
 	waiters := s.waiters[run.ID]
 	delete(s.waiters, run.ID)
-	s.mu.Unlock()
 	for _, ch := range waiters {
 		ch <- run
 		close(ch)
