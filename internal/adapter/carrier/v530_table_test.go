@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -88,6 +89,59 @@ func TestBothCarriers_ServerError5xx(t *testing.T) {
 			c, _ := NewDHLClient(DHLConfig{BaseURL: srv.URL, TokenSource: stubTokenSource{token: "t"}, HTTPClient: srv.Client()})
 			_, err := c.Quote(context.Background(), QuoteRequest{TenantID: "t1", DestPost: "3000", WeightGrams: 500})
 			require.True(t, errors.Is(err, ErrCarrierUnavailable))
+		})
+	}
+}
+
+func TestBothCarriers_QuoteRetriesTransient5xxThenSucceeds(t *testing.T) {
+	t.Parallel()
+
+	type quoter interface {
+		Quote(ctx context.Context, req QuoteRequest) (Quote, error)
+	}
+	tests := []struct {
+		name        string
+		wantCarrier string
+		build       func(baseURL string, hc *http.Client) (quoter, error)
+	}{
+		{
+			name:        "auspost",
+			wantCarrier: CarrierAusPost,
+			build: func(baseURL string, hc *http.Client) (quoter, error) {
+				return NewAusPostClient(AusPostConfig{BaseURL: baseURL, APIKey: "k", APISecret: "s", HTTPClient: hc})
+			},
+		},
+		{
+			name:        "dhl",
+			wantCarrier: CarrierDHL,
+			build: func(baseURL string, hc *http.Client) (quoter, error) {
+				return NewDHLClient(DHLConfig{BaseURL: baseURL, TokenSource: stubTokenSource{token: "t"}, HTTPClient: hc})
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var calls atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if calls.Add(1) == 1 {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"cost_aud_cents":100,"eta_days":1}`))
+			}))
+			t.Cleanup(srv.Close)
+
+			client, err := tc.build(srv.URL, srv.Client())
+			require.NoError(t, err)
+
+			quote, err := client.Quote(context.Background(), QuoteRequest{TenantID: "t1", DestPost: "3000", WeightGrams: 500})
+			require.NoError(t, err)
+			require.Equal(t, tc.wantCarrier, quote.Carrier)
+			require.Equal(t, int32(2), calls.Load())
 		})
 	}
 }
