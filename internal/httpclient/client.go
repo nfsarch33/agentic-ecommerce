@@ -100,6 +100,16 @@ func New(cfg Config) (*Client, error) {
 // request/response hooks, retry, and body size limits. Returns
 // the raw response body on success.
 func (c *Client) Do(ctx context.Context, method, path string, body []byte) ([]byte, int, error) {
+	return c.do(ctx, method, path, body, nil)
+}
+
+// DoWithHooks executes an HTTP request with additional per-call request
+// hooks appended after the client's configured hooks.
+func (c *Client) DoWithHooks(ctx context.Context, method, path string, body []byte, hooks ...RequestHook) ([]byte, int, error) {
+	return c.do(ctx, method, path, body, hooks)
+}
+
+func (c *Client) do(ctx context.Context, method, path string, body []byte, hooks []RequestHook) ([]byte, int, error) {
 	var respBody []byte
 	var statusCode int
 
@@ -109,7 +119,7 @@ func (c *Client) Do(ctx context.Context, method, path string, body []byte) ([]by
 			if err := c.waitRetry(ctx, attempt); err != nil {
 				return err
 			}
-			data, status, err := c.doOnce(ctx, method, path, body)
+			data, status, err := c.doOnce(ctx, method, path, body, hooks)
 			if err != nil {
 				lastErr = err
 				if attempt < c.maxRetries {
@@ -152,7 +162,7 @@ func (c *Client) waitRetry(ctx context.Context, attempt int) error {
 	}
 }
 
-func (c *Client) doOnce(ctx context.Context, method, path string, body []byte) ([]byte, int, error) {
+func (c *Client) doOnce(ctx context.Context, method, path string, body []byte, hooks []RequestHook) ([]byte, int, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		bodyReader = bytes.NewReader(body)
@@ -163,6 +173,11 @@ func (c *Client) doOnce(ctx context.Context, method, path string, body []byte) (
 		return nil, 0, fmt.Errorf("httpclient: build request: %w", err)
 	}
 	for _, hook := range c.requestHooks {
+		if err := hook(req); err != nil {
+			return nil, 0, fmt.Errorf("httpclient: request hook: %w", err)
+		}
+	}
+	for _, hook := range hooks {
 		if err := hook(req); err != nil {
 			return nil, 0, fmt.Errorf("httpclient: request hook: %w", err)
 		}
