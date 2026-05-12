@@ -166,6 +166,13 @@ type KPIs struct {
 	MinimaxAvgLatencyMsKey2 float64 `json:"minimax_avg_latency_ms_key2,omitempty"`
 	MinimaxQuotaExhaustKey1 int     `json:"minimax_quota_exhaust_key1,omitempty"`
 	MinimaxQuotaExhaustKey2 int     `json:"minimax_quota_exhaust_key2,omitempty"`
+
+	// v7.2.0 observability spine KPIs. Additive fields that make
+	// v6.2.0 resilience signals dashboard-ready for EvoMap/EvoLoop
+	// ingestion without changing historical capsule readers.
+	WorkerpoolRejectedTotal int `json:"workerpool_rejected_total,omitempty"`
+	BreakerOpenTotal        int `json:"breaker_open_total,omitempty"`
+	CoordConflictsTotal     int `json:"coord_conflicts_total,omitempty"`
 }
 
 // Config controls Sink construction.
