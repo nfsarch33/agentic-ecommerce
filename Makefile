@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage coverage-check integration-pg lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate tf-plan-contract uiauto-smoke uiauto-compare compose-uiauto-config uiauto-down uiauto-up
+.PHONY: test build vet coverage coverage-check integration-pg lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker testing-lane release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate tf-plan-contract uiauto-smoke uiauto-compare compose-uiauto-config uiauto-down uiauto-up
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -47,6 +47,7 @@ build:
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/temporal-worker ./cmd/temporal-worker
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/uiauto-compare ./cmd/uiauto-compare
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/ec-cli ./cmd/ec-cli
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/testing-lane ./cmd/testing-lane
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/evomap-rollup ./cmd/evomap-rollup
 
 coverage:
@@ -169,6 +170,10 @@ agent-worker:
 temporal-worker:
 	mkdir -p bin
 	go build -o bin/temporal-worker ./cmd/temporal-worker
+
+testing-lane:
+	mkdir -p bin
+	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o bin/testing-lane ./cmd/testing-lane
 
 agent-run-once:
 	ECOMMERCE_AGENT_WORKER_ENABLED=true ECOMMERCE_AGENT_WORKER_RUN_ONCE=true ECOMMERCE_AGENT_SCHEDULES_ENABLED=true go run ./cmd/agent-worker
