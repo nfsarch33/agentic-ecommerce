@@ -8,6 +8,11 @@ Sprint: v3.7.1 QA (PR pending) | follows v3.7.0 Epic 10 hardening MVP (PR #92, S
 
 ## Context
 
+> Operational note (2026-05-14): pre-v10 EC QA keeps merge-blocking Playwright
+> on `primary-testing` (`host-a/node-a`). UIAuto and live-AI remain advisory and
+> may spill to `secondary-testing` (`host-b/node-b`) only after the controller
+> activation gates pass.
+
 The v4.0.0 roadmap (ADR-028, PR #159) flagged a long-standing decision
 about the uiauto stack: do we keep the **Tier 1** offload pattern as
 production-canonical, or do we promote **Tier 2** (deeper chromedp
@@ -16,11 +21,13 @@ required CI gate?
 
 ### Tier 1 (current production)
 
-- `omniparser-bridge` HTTPS POST offload to the WSL1 fleet (signed HMAC
+- `omniparser-bridge` HTTPS POST offload to the primary EC testing pool
+  (`host-a/node-a`, with `host-b/node-b` as standby/overflow after activation) via
+  signed HMAC
   request envelope per v3.3.0 EC-3-5 + v3.4.0 EC-4-1).
 - Backend client facade in `internal/uiauto/...` (the v3.7.0 EC-10
   hardening surface).
-- Browser process lives entirely in the WSL1 fleet container; the EC
+- Browser process lives entirely in the testing-pool container; the EC
   backend never opens a chromedp session of its own.
 - Memory + concurrency budget is enforced at the EC backend (the v3.7.0
   EC-10-2 `memguard.MemGuard`); the bridge sees rate-limited request
@@ -252,7 +259,8 @@ by this decision document).
 ## Acceptance criteria for Tier 2 GA (v3.9.x cut-over)
 
 - 95%+ live agreement between Tier 1 and Tier 2 across all 22 specs
-  in `agentic-ecommerce-web/test/uiauto/scenarios` (per the existing
+  in the canonical frontend checkout at
+  `/Users/jason.lian/Code/agentic-ecommerce-web/test/uiauto/scenarios` (per the existing
   uiauto-comparison harness in `cmd/uiauto-compare`).
 - Zero CAPTCHA-pause backlog growth over a 7-day window of
   feature-flag-on traffic (per `ec_captcha_detections_total`

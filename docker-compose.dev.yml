@@ -515,9 +515,11 @@ services:
   # $HOME/Code/personal/uiauto-framework. The Makefile exports it for the
   # uiauto targets; ad-hoc compose users must set it explicitly.
   #
-  # UIAUTO_SCENARIOS_PATH points at agentic-ecommerce-web/test/uiauto/scenarios
-  # by default. UIAUTO_EXAMPLE_SCENARIOS_PATH points at this repo's bundled
-  # smoke scenario so `make uiauto-smoke` works without the frontend repo.
+  # UIAUTO_SCENARIOS_PATH points at the canonical testing-pool frontend
+  # checkout (`/home/jason/Code/agentic-ecommerce-web/test/uiauto/scenarios`)
+  # by default. Override it when a pool uses a different repo layout.
+  # UIAUTO_EXAMPLE_SCENARIOS_PATH points at this repo's bundled smoke scenario
+  # so `make uiauto-smoke` works without the frontend repo.
   uiauto-runner:
     image: ec-uiauto-runner:dev
     container_name: ec-uiauto-runner
@@ -547,7 +549,7 @@ services:
       OMNIPARSER_URL: ${UIAUTO_OMNIPARSER_URL:-http://uiauto-omniparser-stub:8080}
       UIAUTO_OUTPUT_DIR: /work/output
     volumes:
-      - ${UIAUTO_SCENARIOS_PATH:-../agentic-ecommerce-web/test/uiauto/scenarios}:/work/scenarios:ro
+      - ${UIAUTO_SCENARIOS_PATH:-/home/jason/Code/agentic-ecommerce-web/test/uiauto/scenarios}:/work/scenarios:ro
       - ${UIAUTO_EXAMPLE_SCENARIOS_PATH:-./test/uiauto/example}:/work/example-scenarios:ro
       - ec-uiauto-output:/work/output
     entrypoint: ["/ui-agent"]
