@@ -15,6 +15,9 @@ For the bridge-specific deploy contract see
 
 - Controller-driven backend, frontend, and staging QA must run through
   `runx test-lane`, not host-specific ad-hoc commands.
+- The backend-owned lane entrypoint is `go run ./cmd/testing-lane --lane=<name>`
+  from the repo root. `make testing-lane` builds the equivalent
+  `./bin/testing-lane` binary when a host wants a prebuilt runner.
 - `primary-testing` maps to `win1/wsl1` and remains the default for blocking
   backend integration and Playwright lanes.
 - `secondary-testing` maps to `win2/wsl2` and stays standby/overflow until
@@ -23,6 +26,10 @@ For the bridge-specific deploy contract see
 - `any-testing` may spill advisory or overflow work onto a healthy secondary
   pool, but blocking release gates still require primary until promotion is
   explicitly recorded.
+- `frontend-live-ai` and `staging-rollback` are intentionally fail-fast until
+  `EC_TESTING_LIVE_AI_COMMAND` and
+  `EC_TESTING_STAGING_ROLLBACK_COMMAND` are defined on the selected testing
+  pool. They stay advisory until that contract is promoted.
 - Every touched pool must finish with the cleanup lane and durable evidence for
   stopped containers, browsers, Sentrux, and remote jobs before handoff.
 
