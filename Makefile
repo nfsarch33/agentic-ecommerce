@@ -359,9 +359,13 @@ monitoring-validate:
 # CI gate. Driven by docker compose profile `uiauto` defined in
 # docker-compose.dev.yml. Uses host paths from $(HOME) for the framework
 # checkout and the frontend scenarios so canonical (non-worktree) checkouts
-# work out of the box. Override with `make UIAUTO_FRAMEWORK_PATH=... uiauto-smoke`.
+# work out of the box. The EC testing-pool contract expects the canonical
+# frontend checkout at /home/jason/Code/agentic-ecommerce-web on WSL hosts;
+# override FRONTEND_REPO_PATH or EC_FRONTEND_REPO_PATH when a pool uses a
+# different layout.
 UIAUTO_FRAMEWORK_PATH ?= $(HOME)/Code/personal/uiauto-framework
-UIAUTO_SCENARIOS_PATH ?= $(HOME)/Code/personal/agentic-ecommerce-web/test/uiauto/scenarios
+FRONTEND_REPO_PATH ?= $(if $(EC_FRONTEND_REPO_PATH),$(EC_FRONTEND_REPO_PATH),$(HOME)/Code/agentic-ecommerce-web)
+UIAUTO_SCENARIOS_PATH ?= $(FRONTEND_REPO_PATH)/test/uiauto/scenarios
 UIAUTO_EXAMPLE_SCENARIOS_PATH ?= $(CURDIR)/test/uiauto/example
 UIAUTO_HARNESS_PATH ?= $(CURDIR)/test/uiauto
 UIAUTO_PROFILE := --profile uiauto

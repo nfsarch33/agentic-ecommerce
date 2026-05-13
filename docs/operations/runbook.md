@@ -11,6 +11,21 @@ It is the canonical operator-facing companion to
 For the bridge-specific deploy contract see
 [`docs/operations/omniparser-bridge.md`](omniparser-bridge.md).
 
+## Testing pool lane operations
+
+- Controller-driven backend, frontend, and staging QA must run through
+  `runx test-lane`, not host-specific ad-hoc commands.
+- `primary-testing` maps to `host-a/node-a` and remains the default for blocking
+  backend integration and Playwright lanes.
+- `secondary-testing` maps to `host-b/node-b` and stays standby/overflow until
+  onboarding, SSH canaries, cleanup proof, and resource probes are green from
+  the controller.
+- `any-testing` may spill advisory or overflow work onto a healthy secondary
+  pool, but blocking release gates still require primary until promotion is
+  explicitly recorded.
+- Every touched pool must finish with the cleanup lane and durable evidence for
+  stopped containers, browsers, Sentrux, and remote jobs before handoff.
+
 ## OOM alarm response
 
 1. Pager fires on `increase(ec_oom_alarms_total[5m]) > 0`.
