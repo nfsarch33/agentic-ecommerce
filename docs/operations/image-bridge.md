@@ -26,9 +26,11 @@ Specifically:
 - Bedrock Titan lifestyle generation is multi-minute synchronous
   call with retries.
 
-All three classes of work belong on the WSL fleet (gpu-host-1 / gpu-host-2)
-behind a small HTTP bridge analogous to `omniparser-bridge`
-(already in use for OmniParser dynamic-element detection).
+All three classes of work belong on the EC testing pool behind a small HTTP
+bridge analogous to `omniparser-bridge`. `win1/wsl1` is the active
+`primary-testing` pool; `win2/wsl2` is standby/overflow once controller
+activation gates pass. GPU-capable bridge workers can sit behind either pool,
+but the MacBook must stay control-plane only.
 
 ## v3.2.0 contract (this PR)
 

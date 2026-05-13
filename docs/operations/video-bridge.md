@@ -28,10 +28,13 @@ directly. Specifically:
 - The temporary intermediate frames during 60-second clip
   assembly inflate the heap to ~600 MiB on a single product run.
 
-All three classes of work belong on the WSL fleet (gpu-host-1 / gpu-host-2)
-behind a small HTTP bridge analogous to `image-bridge`
-(v3.2.0 EC-2-2 stub-with-doc) and `omniparser-bridge` (v3.3.0
-EC-3-5 + v3.4.0 EC-4-1 RedNote facade).
+All three classes of work belong on the EC testing pool behind a small HTTP
+bridge analogous to `image-bridge` (v3.2.0 EC-2-2 stub-with-doc) and
+`omniparser-bridge` (v3.3.0 EC-3-5 + v3.4.0 EC-4-1 RedNote facade).
+`win1/wsl1` is the active `primary-testing` pool; `win2/wsl2` is
+standby/overflow once controller activation gates pass. GPU-capable bridge
+workers can sit behind either pool, but the MacBook must stay control-plane
+only.
 
 ## v3.4.0 contract (this PR)
 

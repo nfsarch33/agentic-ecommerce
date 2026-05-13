@@ -12,6 +12,18 @@ This document captures the deploy contract on the **caller side**
 (this repo) -- the bridge implementation lives at
 [`nfsarch33/omniparser-bridge`](https://github.com/nfsarch33/omniparser-bridge).
 
+## Testing pool placement
+
+Blocking live-AI and visual-parsing lanes must run on the EC testing pool, not
+on the MacBook controller:
+
+- `primary-testing` = `win1/wsl1`
+- `secondary-testing` = `win2/wsl2` once activation gates pass
+
+The MacBook may still use the deterministic stub or a local tunnel for
+contract-level debugging, but sustained OmniParser traffic belongs on the
+selected testing pool lane.
+
 ## How it composes with `cmd/uiauto-compare`
 
 `cmd/uiauto-compare` does NOT itself call OmniParser. It compares
