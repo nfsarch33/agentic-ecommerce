@@ -7,6 +7,11 @@ Sprint: v4.14.0 MVP (Pair 14 of 20)
 Implements: ADR-030 v5 roadmap "Pair 14: uiauto vs Playwright comparison harness"
 Depends on: `docs/decisions/uiauto-tier-2-promotion.md` (v3.7.1 Tier 2 GO decision)
 
+> Operational note (2026-05-14): Playwright remains the merge-blocking browser
+> gate on `primary-testing` (`win1/wsl1`). UIAuto stays advisory until parity
+> is proven and may overflow to `secondary-testing` (`win2/wsl2`) only after
+> controller activation gates pass.
+
 ## Purpose
 
 This decision matrix formalises the methodology for comparing the uiauto
@@ -56,7 +61,7 @@ that feed into this matrix.
 | Accuracy | **4** | 95%+ pass rate on replay cassettes (rednote, tiktok, captcha). Self-heal covers tier-light drift; tier-smart handles structural changes. Some false positives on dynamic content. |
 | Speed | **3** | Avg 1.2s per scenario via OmniParser bridge (VLM inference adds ~400ms over Playwright). Batch-5 scenarios at 4-concurrent cap. |
 | Maintenance | **4** | Self-healing reduces selector maintenance to quarterly review. Replay cassettes (YAML) need update only when scenarios change, not when DOM drifts. |
-| CI compatibility | **2** | Requires OmniParser bridge (`EC_OMNIPARSER_BRIDGE_URL`) on WSL fleet. Build-tag gated (`v4140_uiauto_compare`). Cannot run in default `make test`. |
+| CI compatibility | **2** | Requires OmniParser bridge (`EC_OMNIPARSER_BRIDGE_URL`) on the EC testing pool. Build-tag gated (`v4140_uiauto_compare`). Cannot run in default `make test`. |
 
 **uiauto weighted score**: (4×0.40) + (3×0.30) + (4×0.20) + (2×0.10) = 1.6 + 0.9 + 0.8 + 0.2 = **3.50**
 
@@ -89,7 +94,9 @@ provides ongoing quantitative evidence to validate this decision.
 1. **v4.14.0** (this sprint): Ship the comparison runner, metrics, and
    5 scenario definitions. Establish Prometheus + Grafana monitoring.
 2. **v4.15.0+**: Run comparison scenarios in CI (gated build) on every
-   PR. Track agreement rate trend via the Grafana dashboard.
+   PR. Keep Playwright blocking on `primary-testing`; allow advisory
+   UIAuto overflow to `secondary-testing` once healthy. Track agreement
+   rate trend via the Grafana dashboard.
 3. **v5.0.0 release gate**: Agreement rate must be >= 90% across all
    5 scenarios. Speed ratio must be <= 2.0 (uiauto no more than 2x
    slower than Playwright).
