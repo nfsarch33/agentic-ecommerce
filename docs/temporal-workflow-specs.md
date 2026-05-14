@@ -1,4 +1,4 @@
-# v2.0.0 Temporal Workflow Specs
+# v9.0.0 Temporal Workflow Specs
 
 The backend owns Temporal workflow contracts for long-running ecommerce and agent operations. Workflows run on the `ec-workflows` task queue through `cmd/temporal-worker`, use deterministic workflow code, and place I/O in activities. The local runbook for server and worker operations is `docs/temporal-local.md`.
 

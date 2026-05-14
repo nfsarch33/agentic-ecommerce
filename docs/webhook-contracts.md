@@ -1,4 +1,4 @@
-# v2.0.0 Webhook Contracts
+# v9.0.0 Webhook Contracts
 
 The backend supports inbound WooCommerce webhooks and outbound tenant-scoped event delivery for n8n or other approved automation receivers. n8n local operation is documented in `docs/n8n-local.md`; this file records the API and signing contract for release review.
 
@@ -30,7 +30,7 @@ The `data` object is event-specific and must not include secrets. Use stable ide
 | `/api/v1/webhooks/{id}` | `DELETE` | Delete a registration for the current tenant scope. |
 | `/api/v1/webhooks/{id}/test` | `POST` | Send a signed test event to the registered endpoint. |
 
-Supported event types in v2.0.0:
+Supported event types in v9.0.0:
 
 - `product.created`
 - `product.updated`
