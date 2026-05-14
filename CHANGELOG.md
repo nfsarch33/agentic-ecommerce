@@ -2,6 +2,37 @@
 
 All notable changes to the Agentic Ecommerce backend are documented here.
 
+## [9.0.0] - 2026-05-14 -- v9 platform baseline release
+
+### Release Summary
+
+v9.0.0 establishes the backend platform baseline for the post-v8 program. The
+current-release surfaces now track the controller-accurate release path,
+primary-testing on `host-a/node-a`, GKE/GCP as the staging environment, and the
+release evidence chain required before a semver-only `v9.0.0` tag is cut.
+
+### Pair 1: Controller and Release Metadata Baseline
+
+- Replaced the v8-only release metadata guard with
+  `TestV900ReleaseMetadataAligned` so stale `VERSION`, OpenAPI, README,
+  checklist, ADR, or final-evidence state fails before tag cut.
+- Added ADR-036 and the v9 release-final evidence doc to anchor the current
+  release chain without rewriting the v8 archive.
+
+### Pair 2: Testing Pool Baseline
+
+- Documented `host-a/node-a` as the backend's merge-blocking `primary-testing`
+  environment for integration, smoke, and cleanup lanes.
+- Kept `host-b/node-b` as advisory-only `secondary-testing` until controller SSH,
+  trust, cleanup, and resource-health gates are green.
+
+### Pair 3: GKE Staging Foundation
+
+- Promoted GKE/GCP as the authoritative staging environment for v9 release
+  validation while AWS stays parity-only and dry-run only.
+- Updated the API, Temporal, and webhook guides to describe the current v9
+  release baseline instead of the legacy v2.0.0 release label.
+
 ## [8.0.0] - 2026-05-13 -- v8 TDD implementation release
 
 ### Release Summary

@@ -1,6 +1,6 @@
-# v2.0.0 API Reference
+# v9.0.0 API Reference
 
-`api/openapi.yaml` is the source of truth for the backend API. This guide groups the v2.0.0 surface area for release review and frontend coordination; update both when a route, schema, auth boundary, or tenant behavior changes.
+`api/openapi.yaml` is the source of truth for the backend API. This guide groups the v9.0.0 release-baseline surface area for release review and frontend coordination; update both when a route, schema, auth boundary, or tenant behavior changes.
 
 ## Contract Ownership
 
@@ -18,7 +18,7 @@
 
 Protected routes use short-lived HMAC-signed JWT bearer tokens with `admin`, `operator`, or `viewer` roles. Tenant-aware admin routes accept `X-Tenant-ID` for MVP/local workflows when the JWT does not carry a tenant claim. Public docs and examples must not include live JWTs, WooCommerce credentials, bridge keys, object-store keys, n8n credentials, or private hosts.
 
-## v2.0.0 Capability Groups
+## v9.0.0 Capability Groups
 
 | Capability | Primary routes | Notes |
 | --- | --- | --- |
@@ -33,7 +33,7 @@ Protected routes use short-lived HMAC-signed JWT bearer tokens with `admin`, `op
 
 ## Tenant-Aware Contract
 
-The v2.0.0 API is tenant-aware but does not provision tenants. Tenant IDs are opaque strings used to scope repository operations, tenant settings, custom compliance rules, compliance history, webhook registrations, RAG documents, and release fixtures.
+The v9.0.0 API is tenant-aware but does not provision tenants. Tenant IDs are opaque strings used to scope repository operations, tenant settings, custom compliance rules, compliance history, webhook registrations, RAG documents, and release fixtures.
 
 Tenant IDs must not be used as raw Prometheus labels. Use structured logs, SQL exports, or bounded labels such as `tenant_scope` for observability. See `docs/tenant-isolation.md`.
 
@@ -47,4 +47,4 @@ go test ./cmd/mc-api -run 'Test.*OpenAPI|Test.*Contract' -count=1
 runx shell-leak-scan --repo ecommerce
 ```
 
-Run the broader release gates from `docs/release-checklist.md` before tagging v2.0.0.
+Run the broader release gates from `docs/release-checklist.md` before tagging v9.0.0.
