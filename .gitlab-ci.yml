@@ -1,0 +1,95 @@
+stages:
+  - status
+  - preflight
+  - contract
+  - integration
+  - local_stack
+  - cleanup
+  - notify
+
+variables:
+  GIT_STRATEGY: fetch
+  GIT_SUBMODULE_STRATEGY: none
+  EC_FRONTEND_REPO_PATH: "/home/jason/Code/agentic-ecommerce-web"
+
+default:
+  tags:
+    - node-a-shell-primary
+  interruptible: true
+  before_script:
+    - mkdir -p .gitlab-artifacts
+
+status_pending:
+  stage: status
+  script:
+    - bash scripts/ci/github_status.sh pending "GitLab pipeline started on node-a"
+  allow_failure: true
+
+preflight:
+  stage: preflight
+  resource_group: node-a-primary
+  script:
+    - bash scripts/ci/preflight.sh
+  artifacts:
+    when: always
+    paths:
+      - .gitlab-artifacts/preflight/
+
+contract_and_race:
+  stage: contract
+  resource_group: node-a-primary
+  script:
+    - GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test -race ./...
+    - make contract-test
+    - make build
+  artifacts:
+    when: always
+    paths:
+      - .gitlab-artifacts/preflight/
+
+backend_integration:
+  stage: integration
+  resource_group: node-a-primary
+  timeout: 30m
+  script:
+    - bash scripts/ci/backend_integration.sh
+  artifacts:
+    when: always
+    paths:
+      - .gitlab-artifacts/backend-integration/
+
+full_stack_e2e:
+  stage: local_stack
+  resource_group: node-a-primary
+  timeout: 45m
+  script:
+    - bash scripts/ci/full_stack_e2e.sh
+  artifacts:
+    when: always
+    paths:
+      - .gitlab-artifacts/full-stack-e2e/
+
+cleanup_testing:
+  stage: cleanup
+  resource_group: node-a-primary
+  script:
+    - bash scripts/ci/cleanup.sh
+  when: always
+  artifacts:
+    when: always
+    paths:
+      - .gitlab-artifacts/cleanup/
+
+status_success:
+  stage: notify
+  script:
+    - bash scripts/ci/github_status.sh success "GitLab pipeline passed on node-a"
+  when: on_success
+  allow_failure: true
+
+status_failure:
+  stage: notify
+  script:
+    - bash scripts/ci/github_status.sh failure "GitLab pipeline failed on node-a"
+  when: on_failure
+  allow_failure: true

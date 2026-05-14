@@ -1,12 +1,15 @@
 # Agentic Ecommerce
 
-[![CI](https://github.com/nfsarch33/agentic-ecommerce/actions/workflows/ci.yml/badge.svg)](https://github.com/nfsarch33/agentic-ecommerce/actions/workflows/ci.yml)
 ![Go](https://img.shields.io/badge/Go-1.26.3-00ADD8?logo=go)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 Production-ready agentic e-commerce platform with multi-channel selling, AI-driven pricing, 4-provider payment gateway, cloud-native K8s deployment, GDPR compliance, and MADRL agent coordination.
 
 Current release: **v9.0.0**. See `VERSION`, `CHANGELOG.md`, and `docs/release-checklist.md` for release gates.
+
+Active v8.x CI runs on self-hosted GitLab CE on `node-a`, with GitHub retained as
+the canonical repo and PR host. The GitLab pipeline posts commit status back to
+GitHub and drives the blocking local-CD lane on `host-a/node-a`.
 
 ## Features
 
@@ -86,7 +89,7 @@ The platform runs 8 production binaries: `mc-api`, `wc-sync`, `content-worker`, 
 | Observability | OpenTelemetry, Prometheus, Grafana |
 | Payments | Stripe, Alipay, WeChat Pay, PayPal |
 | Cloud | GKE Autopilot, EKS, OCI, Terraform, Helm, KEDA |
-| CI/CD | GitHub Actions, Docker (distroless) |
+| CI/CD | GitLab CE (self-hosted on `node-a`), GitHub status bridge, Docker (distroless) |
 
 ## Getting Started
 
@@ -148,6 +151,7 @@ make build
 make coverage-check          # >= 83% backend coverage
 make monitoring-validate
 make release-perf-smoke
+make full-stack-e2e          # local-CD smoke against host-a/node-a baseline
 sentrux gate .               # complex_fn=4 hard gate
 ```
 

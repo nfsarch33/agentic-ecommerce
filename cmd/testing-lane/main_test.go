@@ -114,6 +114,31 @@ func TestRunFrontendUIAutoCompareRunsConfigAndCompare(t *testing.T) {
 	assertCalls(t, runner.calls, want)
 }
 
+func TestRunFullStackE2ERunsRepoScript(t *testing.T) {
+	t.Parallel()
+	runner := &fakeRunner{}
+	var stdout, stderr bytes.Buffer
+	err := run(
+		[]string{"--lane=full-stack-e2e", "--repo-root=/repo", "--frontend-repo=/frontend"},
+		&stdout,
+		&stderr,
+		func(string) string { return "" },
+		runner,
+		nil,
+		func(context.Context, string, commandRunner, ioWriterPair) (cleanupSummary, error) {
+			t.Fatal("cleanup should not run")
+			return cleanupSummary{}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("run: %v\nstderr=%s", err, stderr.String())
+	}
+	want := []commandCall{
+		{dir: "/repo", name: "bash", args: []string{"scripts/ci/full_stack_e2e.sh"}},
+	}
+	assertCalls(t, runner.calls, want)
+}
+
 func TestRunCleanupTestingWritesJSONSummary(t *testing.T) {
 	t.Parallel()
 	runner := &fakeRunner{}
