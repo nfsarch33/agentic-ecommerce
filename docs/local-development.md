@@ -150,4 +150,7 @@ bun run dev
 
 Set the frontend API base URL to the local backend, typically `http://127.0.0.1:8080`. The v0.2.0 QA flow will validate browse products, add to cart, checkout, and order confirmation after the backend and frontend feature branches are merged.
 
-Do not run full end-to-end tests for this infra slice; v0.2.0 QA owns the final Playwright flow.
+The active self-hosted CI path uses `wsl1` as the blocking Linux runner and
+expects the frontend checkout at `/home/jason/Code/agentic-ecommerce-web`. Use
+`make full-stack-e2e` to exercise the loopback-only local-CD smoke against that
+canonical tester layout.

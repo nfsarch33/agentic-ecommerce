@@ -114,6 +114,12 @@ func run(args []string, stdout io.Writer, stderr io.Writer, getenv func(string) 
 				{Dir: cfg.RepoRoot, Name: "make", Args: []string{"uiauto-compare"}},
 			},
 		)
+	case "full-stack-e2e":
+		return runCommands(ctx, runner, cfg.RepoRoot,
+			[]commandSpec{
+				{Dir: cfg.RepoRoot, Name: "bash", Args: []string{"scripts/ci/full_stack_e2e.sh"}},
+			},
+		)
 	case "frontend-live-ai":
 		return fmt.Errorf("frontend-live-ai requires EC_TESTING_LIVE_AI_COMMAND")
 	case "cleanup-testing":

@@ -1,0 +1,11 @@
+services:
+  frontend:
+    image: ghcr.io/nfsarch33/agentic-ecommerce-web:${WEB_IMAGE_TAG:-gitlab-local}
+    build:
+      context: ${EC_FRONTEND_REPO_PATH:-/home/jason/Code/agentic-ecommerce-web}
+      dockerfile: Dockerfile
+    environment:
+      MC_API_BASE_URL: ${MC_API_BASE_URL:-http://mc-api:8080}
+      NEXT_PUBLIC_MC_API_BASE_URL: ${NEXT_PUBLIC_MC_API_BASE_URL:-https://127.0.0.1:8080}
+      NEXT_PUBLIC_APP_ORIGIN: ${NEXT_PUBLIC_APP_ORIGIN:-https://127.0.0.1:3000}
+      FLEET_AI_BRIDGE_URL: ${FLEET_AI_BRIDGE_URL:-}
