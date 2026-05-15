@@ -36,6 +36,16 @@ cut.
   release baseline instead of the legacy v2.0.0 release label and retired
   staging-only assumptions from the v9 release contract.
 
+### Pair 5: Agent Runtime Bootstrap
+
+- Added the `EC_AGENT_RUNTIME_MODE` bootstrap seam to `agent-worker` so the
+  current scheduler path stays the default while EINO-backed `shadow` and
+  `primary` modes can be promoted behind evidence rather than another worker
+  contract rewrite.
+- Added the initial `internal/agent/runtime` and `internal/adapter/llm`
+  surfaces so the runtime bootstrap is testable without changing public HTTP or
+  OpenAPI contracts.
+
 ## [8.0.0] - 2026-05-13 -- v8 TDD implementation release
 
 ### Release Summary

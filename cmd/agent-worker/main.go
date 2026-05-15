@@ -16,11 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
-	complianceagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/compliance"
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
-	pricingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/pricing"
-	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
+	agentruntime "github.com/nfsarch33/agentic-ecommerce/internal/agent/runtime"
 	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
 	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
@@ -77,6 +73,14 @@ type Config struct {
 	EventBusDB                string
 	SyncChannel               string
 	DLQChannel                string
+	RuntimeMode               agentruntime.Mode
+}
+
+func (c Config) resolvedRuntimeMode() agentruntime.Mode {
+	if c.RuntimeMode == "" {
+		return agentruntime.ModeLegacy
+	}
+	return c.RuntimeMode
 }
 
 func main() {
@@ -142,6 +146,10 @@ func loadConfig(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("ECOMMERCE_AGENT_SCHEDULES_MAX_CONCURRENT_RUNS: %w", err)
 	}
+	runtimeMode, err := agentruntime.ParseMode(getenv("EC_AGENT_RUNTIME_MODE"))
+	if err != nil {
+		return Config{}, fmt.Errorf("EC_AGENT_RUNTIME_MODE: %w", err)
+	}
 
 	return Config{
 		Enabled:                   enabled,
@@ -158,6 +166,7 @@ func loadConfig(getenv func(string) string) (Config, error) {
 		EventBusDB:                getenvDefault(getenv, "ECOMMERCE_EVENTBUS_REDIS_DB", "0"),
 		SyncChannel:               getenvDefault(getenv, "ECOMMERCE_EVENTBUS_CHANNEL_SYNC", "ec.sync.events"),
 		DLQChannel:                getenvDefault(getenv, "ECOMMERCE_EVENTBUS_CHANNEL_DLQ", "ec.sync.deadletter"),
+		RuntimeMode:               runtimeMode,
 	}, nil
 }
 
@@ -172,6 +181,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
 			"concurrency", cfg.Concurrency,
 			"agent_schedules_enabled", cfg.ScheduleEnabled,
 			"agent_schedule_task_queue", cfg.ScheduleTaskQueue,
+			"agent_runtime_mode", cfg.resolvedRuntimeMode(),
 			"eventbus_driver", cfg.EventBusDriver,
 		)
 		if !cfg.ScheduleEnabled {
@@ -208,6 +218,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		"agent_schedule_default_interval", cfg.ScheduleDefaultInterval.String(),
 		"agent_schedule_max_concurrent_runs", cfg.ScheduleMaxConcurrentRuns,
 		"agent_schedule_task_queue", cfg.ScheduleTaskQueue,
+		"agent_runtime_mode", cfg.resolvedRuntimeMode(),
 		"eventbus_driver", cfg.EventBusDriver,
 	)
 
@@ -245,8 +256,14 @@ func runScheduledJobs(ctx context.Context, logger *slog.Logger, cfg Config) erro
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	runtime := newOrchestratorRuntime(cfg)
-	summary, err := runtime.RunOnce(ctx, logger)
+	summary, err := agentruntime.RunOnce(ctx, logger, agentruntime.Config{
+		Mode:                      cfg.resolvedRuntimeMode(),
+		ScheduleMaxConcurrentRuns: cfg.ScheduleMaxConcurrentRuns,
+	})
+	agentWorkerRunsSucceededTotal.Add(int64(summary.Succeeded))
+	agentScheduledRunsSucceededTotal.Add(int64(summary.Succeeded))
+	agentWorkerRunsFailedTotal.Add(int64(summary.Failed))
+	agentScheduledRunsFailedTotal.Add(int64(summary.Failed))
 	if err != nil {
 		return err
 	}
@@ -255,106 +272,13 @@ func runScheduledJobs(ctx context.Context, logger *slog.Logger, cfg Config) erro
 		"submitted", summary.Submitted,
 		"succeeded", summary.Succeeded,
 		"failed", summary.Failed,
+		"agent_runtime_mode", cfg.resolvedRuntimeMode(),
 		"eventbus_driver", cfg.EventBusDriver,
 		"sync_channel", cfg.SyncChannel,
 		"dlq_channel", cfg.DLQChannel,
 		"agent_schedule_task_queue", cfg.ScheduleTaskQueue,
 	)
 	return nil
-}
-
-type workerRuntime struct {
-	scheduler *orchestrator.Scheduler
-	jobs      []workerJob
-}
-
-type workerJob struct {
-	AgentID  string
-	Priority int
-	Payload  map[string]any
-}
-
-type workerRunSummary struct {
-	Submitted int
-	Succeeded int
-	Failed    int
-}
-
-func newOrchestratorRuntime(cfg Config) workerRuntime {
-	registry := orchestrator.NewRegistry()
-	for _, candidate := range []orchestrator.Agent{
-		complianceagent.NewAgent(),
-		pricingagent.NewAgent(),
-		sourcingagent.NewAgent(),
-	} {
-		_ = registry.Register(candidate)
-	}
-	return workerRuntime{
-		scheduler: orchestrator.NewScheduler(
-			registry,
-			orchestrator.NewInMemoryStore(),
-			orchestrator.NewEventRecorder(),
-			nil,
-			orchestrator.SchedulerOptions{MaxConcurrent: cfg.ScheduleMaxConcurrentRuns},
-		),
-		jobs: []workerJob{defaultComplianceProbeJob()},
-	}
-}
-
-func (r workerRuntime) RunOnce(ctx context.Context, logger *slog.Logger) (workerRunSummary, error) {
-	summary := workerRunSummary{}
-	for _, job := range r.jobs {
-		run, err := r.scheduler.Submit(ctx, orchestrator.SubmitRequest{
-			AgentID:  job.AgentID,
-			Priority: job.Priority,
-			Payload:  job.Payload,
-		})
-		if err != nil {
-			return summary, err
-		}
-		summary.Submitted++
-		completed, err := r.scheduler.Wait(ctx, run.ID)
-		if err != nil {
-			return summary, err
-		}
-		if completed.State == orchestrator.RunSucceeded {
-			summary.Succeeded++
-			agentWorkerRunsSucceededTotal.Add(1)
-			agentScheduledRunsSucceededTotal.Add(1)
-			logger.Info("agent-worker.scheduler_run_succeeded", "agent_id", completed.AgentID, "run_id", completed.ID)
-			continue
-		}
-		summary.Failed++
-		agentWorkerRunsFailedTotal.Add(1)
-		agentScheduledRunsFailedTotal.Add(1)
-		logger.Error("agent-worker.scheduler_run_failed", "agent_id", completed.AgentID, "run_id", completed.ID, "state", completed.State, "error_code", completed.Error.Code)
-	}
-	return summary, nil
-}
-
-func defaultComplianceProbeJob() workerJob {
-	output := contentagent.GeneratedContent{
-		Description:     "Professional resistance training kit for home workouts, mobility drills, and progressive strength routines.",
-		SEOTitle:        "Resistance Training Kit",
-		MetaDescription: "A professional resistance training kit for home workouts and mobility drills.",
-	}
-	return workerJob{
-		AgentID:  "compliance",
-		Priority: 1,
-		Payload: map[string]any{
-			"product": map[string]any{
-				"ID":          "worker-probe",
-				"SKU":         "RB-SET",
-				"Title":       "Resistance Band Set",
-				"Description": "Resistance bands for training and mobility.",
-				"Currency":    "AUD",
-			},
-			"output":    output,
-			"style":     contentagent.StyleProfessional,
-			"max_words": 80,
-			"keywords":  []string{"resistance", "training"},
-		},
-	}
 }
 
 func workerMux(cfg Config) http.Handler {
@@ -412,6 +336,9 @@ agentic_ecommerce_agent_schedule_max_concurrent_runs %d
 # HELP agentic_ecommerce_agent_schedule_config_info Temporal schedule routing metadata.
 # TYPE agentic_ecommerce_agent_schedule_config_info gauge
 agentic_ecommerce_agent_schedule_config_info{task_queue=%q} 1
+# HELP agentic_ecommerce_agent_runtime_mode_info Selected bootstrap runtime mode for agent-worker.
+# TYPE agentic_ecommerce_agent_runtime_mode_info gauge
+agentic_ecommerce_agent_runtime_mode_info{mode=%q} 1
 # HELP agentic_ecommerce_agent_scheduled_runs_total Temporal scheduled agent runs observed by status.
 # TYPE agentic_ecommerce_agent_scheduled_runs_total counter
 agentic_ecommerce_agent_scheduled_runs_total{task_queue=%q,status="succeeded"} %d
@@ -429,7 +356,7 @@ agentic_ecommerce_agent_worker_compliance_failures_total{eventbus_driver=%q,sync
 # HELP agentic_ecommerce_agent_worker_media_validation_failures_total Media validations rejected by this worker.
 # TYPE agentic_ecommerce_agent_worker_media_validation_failures_total counter
 agentic_ecommerce_agent_worker_media_validation_failures_total{eventbus_driver=%q,sync_channel=%q} 0
-`, version, commit, enabled, cfg.Concurrency, cfg.Interval.Seconds(), schedulesEnabled, cfg.ScheduleDefaultInterval.Seconds(), cfg.ScheduleMaxConcurrentRuns, cfg.ScheduleTaskQueue, cfg.ScheduleTaskQueue, agentScheduledRunsSucceededTotal.Load(), cfg.ScheduleTaskQueue, agentScheduledRunsFailedTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsSucceededTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsFailedTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel)
+`, version, commit, enabled, cfg.Concurrency, cfg.Interval.Seconds(), schedulesEnabled, cfg.ScheduleDefaultInterval.Seconds(), cfg.ScheduleMaxConcurrentRuns, cfg.ScheduleTaskQueue, cfg.resolvedRuntimeMode(), cfg.ScheduleTaskQueue, agentScheduledRunsSucceededTotal.Load(), cfg.ScheduleTaskQueue, agentScheduledRunsFailedTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsSucceededTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, agentWorkerRunsFailedTotal.Load(), cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel, cfg.EventBusDriver, cfg.SyncChannel)
 		if reg := agentEcRegistry.Load(); reg != nil {
 			reg.Handler().ServeHTTP(noopHeader{w}, r)
 		}

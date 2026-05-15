@@ -21,6 +21,10 @@ v9.0.0 establishes the backend platform baseline for the post-v8 program:
 - Cloud-native deployment material under `deploy/terraform`, `deploy/helm`, and
   `deploy/otel` remains reference-only for `v9.0.0`; it is maintained but no
   longer blocks the semver tag.
+- Pair 5 bootstrap is landed behind `EC_AGENT_RUNTIME_MODE`: backend now pins
+  `github.com/cloudwego/eino v0.8.13`, exposes an internal EINO adapter/runtime
+  seam, and keeps `legacy` as the default business path while `shadow` and
+  `primary` remain explicit opt-ins.
 - Release-facing API, Temporal, and webhook docs aligned with the v9 current
   release baseline instead of the legacy v2.0.0 release label.
 - Support-tool provenance, mirrored pool evidence, and cross-repo handoff docs
