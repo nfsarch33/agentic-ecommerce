@@ -1,19 +1,19 @@
 # v9.0.0 Release Checklist
 
 Use this checklist before tagging `agentic-ecommerce` v9.0.0. The semver tag
-remains uncut until the full mirrored self-hosted regression is green on
-`primary-testing and secondary-testing`.
+remains uncut until the self-hosted regression is green on `primary-testing`,
+which is the only blocking release lane in the active EC programme.
 
 ## Version and Docs
 
 - `VERSION` contains `9.0.0`.
 - `api/openapi.yaml` has `info.version: 9.0.0`.
-- `CHANGELOG.md` includes the v9.0.0 platform-baseline entry summarising the backend release path, mirrored self-hosted regression, and current secondary-pool blocker state.
+- `CHANGELOG.md` includes the v9.0.0 platform-baseline entry summarising the backend release path, the primary-only self-hosted regression, and current secondary-pool blocker state.
 - `README.md` links quickstart, architecture, API docs, Temporal, n8n, media storage, cloud deployment, and security boundaries.
-- `README.md` also records that `v9.0.0` is still RC-only until both pools pass the mirrored release gate.
+- `README.md` also records that `v9.0.0` is still RC-only until `primary-testing` passes the release gate.
 - `.env.example` documents `EC_AGENT_RUNTIME_MODE=legacy`, and any use of
-  `shadow` or `primary` is backed by mirrored QA evidence before promotion.
-- `docs/api-reference.md`, `docs/temporal-workflow-specs.md`, and `docs/webhook-contracts.md` reflect the v9.0.0 API, workflow, automation surfaces, and mirrored self-hosted release contract.
+  `shadow` or `primary` is backed by release QA evidence before promotion.
+- `docs/api-reference.md`, `docs/temporal-workflow-specs.md`, and `docs/webhook-contracts.md` reflect the v9.0.0 API, workflow, automation surfaces, and the primary-only self-hosted release contract.
 - `docs/adr/adr-036-v9-release-decisions.md` is accepted and linked from `docs/adr/README.md`.
 - `docs/operations/v9-release-final.md` records final release evidence, current pool status, skipped gates, and carry-forwards.
 
@@ -70,28 +70,37 @@ docker compose --env-file .env.compose -f docker-compose.yml down
 
 Expected result: the stack boots in under 90 seconds on a healthy local Docker runtime, `mc-api` is live, configured dependencies are ready, and metrics expose build information plus HTTP RED counters.
 
-## Mirrored Pool Gates
+## Primary Pool Gates
 
 ```bash
 runx ssh exec --target node-a-travel --cmd ssh-canary-wsl
 runx ssh exec --target host-a-travel --cmd ssh-canary-win
+runx test-lane run --lane backend-integration --pool primary-testing
+runx test-lane run --lane full-stack-e2e --pool primary-testing
+runx test-lane run --lane cleanup-testing --pool primary-testing
+```
+
+Expected result: blocking host canaries are green on `primary-testing`, backend
+integration and full-stack E2E are reproducible on the primary pool, cleanup
+evidence is durable there, and the frontend checklist carries the
+`frontend-playwright-stable` plus `frontend-uiauto-compare` proof required for
+the stack tag.
+
+Optional secondary-pool evidence:
+
+```bash
 runx ssh exec --target node-b-travel --cmd ssh-canary-wsl
 runx ssh exec --target node-b --cmd ssh-canary-wsl
 runx ssh exec --target host-b --cmd ssh-canary-win
 runx ssh exec --target host-b-travel --cmd ssh-canary-win
-runx test-lane run --lane backend-integration --pool primary-testing
 runx test-lane run --lane backend-integration --pool secondary-testing
-runx test-lane run --lane full-stack-e2e --pool primary-testing
 runx test-lane run --lane full-stack-e2e --pool secondary-testing
-runx test-lane run --lane cleanup-testing --pool primary-testing
 runx test-lane run --lane cleanup-testing --pool secondary-testing
 ```
 
-Expected result: host canaries are green on both pools, backend integration and
-full-stack E2E are reproducible on both pools, cleanup evidence is durable on
-both pools, and the frontend checklist carries the mirrored
-`frontend-playwright-stable` plus `frontend-uiauto-compare` proof required for
-the stack tag.
+Expected result: secondary-pool gaps are visible and reproducible, but they do
+not block the v9.0.0 semver tag until the EC programme explicitly promotes that
+pool again.
 
 ## Security and Public Boundary Gates
 

@@ -11,8 +11,8 @@ into a platform-baseline release path. The backend owns the current-release
 metadata guard, OpenAPI version policy, release checklist, release-final
 evidence chain, and the release-facing API, Temporal, and webhook contract
 docs. The broader program also standardizes `host-a/node-a` as `primary-testing`,
-keeps `host-b/node-b` as `secondary-testing`, and now treats both pools as mirrored
-self-hosted release gates while cloud deployment material stays reference-only.
+keeps `host-b/node-b` as `secondary-testing` evidence, and treats only the primary
+pool as release-blocking while cloud deployment material stays reference-only.
 
 ## Decisions
 
@@ -21,13 +21,14 @@ self-hosted release gates while cloud deployment material stays reference-only.
    `TestV900ReleaseMetadataAligned`.
 2. Keep OpenAPI v1 endpoints stable through host v9.x; v2 preview endpoints
    remain opt-in and explicitly unstable.
-3. Treat `host-a/node-a` and `host-b/node-b` as mirrored self-hosted release
-   environments for backend integration, full-stack E2E, cleanup, and
-   cross-repo frontend/UIAuto evidence. `v9.0.0` stays RC-only until both pools
-   satisfy the controller SSH, trust, cleanup, and resource-health gates.
+3. Treat `host-a/node-a` as the only blocking self-hosted release environment for
+   backend integration, full-stack E2E, cleanup, and cross-repo
+   frontend/UIAuto evidence. `v9.0.0` stays RC-only until `primary-testing`
+   satisfies the controller SSH, trust, cleanup, and resource-health gates.
 4. Treat cloud deployment artifacts as maintained reference material for later
    work, but not as blocking release gates for `v9.0.0`.
-5. Treat controller provenance, canary results, mirrored regression evidence,
+5. Treat controller provenance, canary results, primary-lane regression
+   evidence, and secondary-pool carry-forward notes,
    and release handoff artifacts as release-gating evidence, not optional
    documentation.
 6. Seed v10 only after backend, frontend, tooling, and global-kb v9 release
@@ -35,8 +36,9 @@ self-hosted release gates while cloud deployment material stays reference-only.
 
 ## Consequences
 
-- Release notes must identify both testing pools, the current secondary-pool
-  gap state, and any remaining operator-gated external dependencies.
+- Release notes must identify the blocking primary pool, the current
+  secondary-pool gap state, and any remaining operator-gated external
+  dependencies.
 - Future release branches must start with a RED metadata guard test before
   current-release docs or version files change.
 - Live marketplace, payment, carrier, social, and remote-vision execution
