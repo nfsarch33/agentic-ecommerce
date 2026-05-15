@@ -7,6 +7,10 @@ Production-ready agentic e-commerce platform with multi-channel selling, AI-driv
 
 Current release: **v9.0.0**. See `VERSION`, `CHANGELOG.md`, and `docs/release-checklist.md` for release gates.
 
+Release candidate note: semver tags still stop at `v8.0.0`. `v9.0.0` cuts only
+after `primary-testing` and `secondary-testing` both pass the mirrored
+self-hosted regression and cleanup/UIAuto evidence is complete.
+
 Active v8.x CI runs on self-hosted GitLab CE on `wsl1`, with GitHub retained as
 the canonical repo and PR host. The GitLab pipeline posts commit status back to
 GitHub and drives the blocking local-CD lane on `win1/wsl1`.
