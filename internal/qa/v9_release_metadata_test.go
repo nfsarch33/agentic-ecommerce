@@ -14,17 +14,29 @@ func TestV900ReleaseMetadataAligned(t *testing.T) {
 	assertFileContains(t, "../../api/openapi.yaml", "stable through host v9.x")
 	assertFileContains(t, "../../README.md", "Current release: **v9.0.0**")
 	assertFileContains(t, "../../CHANGELOG.md", "## [9.0.0] - 2026-05-14 -- v9 platform baseline release")
-	assertFileContains(t, "../../docs/release-checklist.md", "# v9.0.0 Release Checklist")
-	assertFileContains(t, "../../docs/release-checklist.md", "docs/operations/v9-release-final.md")
-	assertFileContains(t, "../../docs/release-checklist.md", "primary-testing and secondary-testing")
-	assertFileContains(t, "../../docs/release-checklist.md", "full mirrored self-hosted regression")
 	assertFileContains(t, "../../docs/adr/README.md", "ADR-036 | v9.0.0 Release Decisions")
 	assertFileContains(t, "../../docs/adr/adr-036-v9-release-decisions.md", "# ADR-036: v9.0.0 Release Decisions")
-	assertFileContains(t, "../../docs/operations/v9-release-final.md", "# EC v9.0.0 Release Final Evidence")
-	assertFileContains(t, "../../docs/operations/v9-release-final.md", "primary-testing and secondary-testing")
-	assertFileContains(t, "../../docs/operations/v9-release-final.md", "UIAuto evidence is mirrored")
-	assertFileNotContains(t, "../../docs/release-checklist.md", "EC_STAGING_BASE_URL")
-	assertFileNotContains(t, "../../docs/operations/v9-release-final.md", "GKE/GCP as the authoritative staging environment")
+	assertFileContainsAll(t, "../../docs/release-checklist.md",
+		"# v9.0.0 Release Checklist",
+		"docs/operations/v9-release-final.md",
+		"primary-testing",
+		"only blocking release lane",
+	)
+	assertFileNotContainsAll(t, "../../docs/release-checklist.md",
+		"EC_STAGING_BASE_URL",
+		"primary-testing and secondary-testing",
+		"full mirrored self-hosted regression",
+	)
+	assertFileContainsAll(t, "../../docs/operations/v9-release-final.md",
+		"# EC v9.0.0 Release Final Evidence",
+		"primary-testing",
+		"only release blocker",
+	)
+	assertFileNotContainsAll(t, "../../docs/operations/v9-release-final.md",
+		"GKE/GCP as the authoritative staging environment",
+		"primary-testing and secondary-testing",
+		"UIAuto evidence is mirrored",
+	)
 }
 
 func assertFileContains(t *testing.T, path, want string) {
@@ -46,6 +58,20 @@ func assertFileNotContains(t *testing.T, path, want string) {
 	}
 	if strings.Contains(string(raw), want) {
 		t.Fatalf("%s unexpectedly contains %q", path, want)
+	}
+}
+
+func assertFileContainsAll(t *testing.T, path string, wants ...string) {
+	t.Helper()
+	for _, want := range wants {
+		assertFileContains(t, path, want)
+	}
+}
+
+func assertFileNotContainsAll(t *testing.T, path string, wants ...string) {
+	t.Helper()
+	for _, want := range wants {
+		assertFileNotContains(t, path, want)
 	}
 }
 

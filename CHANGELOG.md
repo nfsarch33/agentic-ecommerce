@@ -8,9 +8,8 @@ All notable changes to the Agentic Ecommerce backend are documented here.
 
 v9.0.0 establishes the backend platform baseline for the post-v8 program. The
 current-release surfaces now track the controller-accurate release path,
-mirrored self-hosted regression on `primary-testing` and `secondary-testing`,
-and the release evidence chain required before a semver-only `v9.0.0` tag is
-cut.
+`primary-testing` as the only blocking release lane, and the release evidence
+chain required before a semver-only `v9.0.0` tag is cut.
 
 ### Pair 1: Controller and Release Metadata Baseline
 
@@ -24,14 +23,16 @@ cut.
 
 - Documented `win1/wsl1` as the backend's merge-blocking `primary-testing`
   environment for integration, smoke, and cleanup lanes.
-- Promoted `win2/wsl2` from advisory evidence to a mirrored self-hosted release
-  gate; `v9.0.0` now stays RC-only until both pools are green.
+- Kept `win2/wsl2` as non-blocking evidence and overflow capacity while
+  `primary-testing` remains the only release blocker in the active EC
+  programme.
 
-### Pair 3: Mirrored Self-Hosted Release Contract
+### Pair 3: Primary Self-Hosted Release Contract
 
-- Replaced the old staging-first gate with mirrored canary, backend
+- Replaced the old staging-first gate with self-hosted canary, backend
   integration, full-stack E2E, cleanup, and cross-repo frontend/UIAuto proof on
-  both pools.
+  `primary-testing`, while keeping secondary-pool evidence explicit but
+  non-blocking.
 - Updated the API, Temporal, and webhook guides to describe the current v9
   release baseline instead of the legacy v2.0.0 release label and retired
   staging-only assumptions from the v9 release contract.
