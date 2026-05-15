@@ -108,6 +108,11 @@ curl http://127.0.0.1:8080/readyz
 
 The stack runs PostgreSQL + pgvector, Redis 7, and `mc-api` with ports bound to `127.0.0.1`. Profiles gate optional services (workers, Temporal, n8n) so they do not make live external calls by default.
 
+`agent-worker` now boots through an internal runtime seam that is ready for the
+EINO migration bootstrap. `EC_AGENT_RUNTIME_MODE` defaults to `legacy`; the
+`shadow` and `primary` modes are opt-in until domain-specific QA evidence is
+captured. This bootstrap slice does not change public HTTP or OpenAPI surfaces.
+
 ### Full stack compose
 
 ```bash

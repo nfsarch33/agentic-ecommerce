@@ -11,6 +11,8 @@ remains uncut until the full mirrored self-hosted regression is green on
 - `CHANGELOG.md` includes the v9.0.0 platform-baseline entry summarising the backend release path, mirrored self-hosted regression, and current secondary-pool blocker state.
 - `README.md` links quickstart, architecture, API docs, Temporal, n8n, media storage, cloud deployment, and security boundaries.
 - `README.md` also records that `v9.0.0` is still RC-only until both pools pass the mirrored release gate.
+- `.env.example` documents `EC_AGENT_RUNTIME_MODE=legacy`, and any use of
+  `shadow` or `primary` is backed by mirrored QA evidence before promotion.
 - `docs/api-reference.md`, `docs/temporal-workflow-specs.md`, and `docs/webhook-contracts.md` reflect the v9.0.0 API, workflow, automation surfaces, and mirrored self-hosted release contract.
 - `docs/adr/adr-036-v9-release-decisions.md` is accepted and linked from `docs/adr/README.md`.
 - `docs/operations/v9-release-final.md` records final release evidence, current pool status, skipped gates, and carry-forwards.
