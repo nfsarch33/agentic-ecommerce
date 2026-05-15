@@ -8,8 +8,9 @@ All notable changes to the Agentic Ecommerce backend are documented here.
 
 v9.0.0 establishes the backend platform baseline for the post-v8 program. The
 current-release surfaces now track the controller-accurate release path,
-primary-testing on `host-a/node-a`, GKE/GCP as the staging environment, and the
-release evidence chain required before a semver-only `v9.0.0` tag is cut.
+mirrored self-hosted regression on `primary-testing` and `secondary-testing`,
+and the release evidence chain required before a semver-only `v9.0.0` tag is
+cut.
 
 ### Pair 1: Controller and Release Metadata Baseline
 
@@ -23,15 +24,17 @@ release evidence chain required before a semver-only `v9.0.0` tag is cut.
 
 - Documented `host-a/node-a` as the backend's merge-blocking `primary-testing`
   environment for integration, smoke, and cleanup lanes.
-- Kept `host-b/node-b` as advisory-only `secondary-testing` until controller SSH,
-  trust, cleanup, and resource-health gates are green.
+- Promoted `host-b/node-b` from advisory evidence to a mirrored self-hosted release
+  gate; `v9.0.0` now stays RC-only until both pools are green.
 
-### Pair 3: GKE Staging Foundation
+### Pair 3: Mirrored Self-Hosted Release Contract
 
-- Promoted GKE/GCP as the authoritative staging environment for v9 release
-  validation while AWS stays parity-only and dry-run only.
+- Replaced the old staging-first gate with mirrored canary, backend
+  integration, full-stack E2E, cleanup, and cross-repo frontend/UIAuto proof on
+  both pools.
 - Updated the API, Temporal, and webhook guides to describe the current v9
-  release baseline instead of the legacy v2.0.0 release label.
+  release baseline instead of the legacy v2.0.0 release label and retired
+  staging-only assumptions from the v9 release contract.
 
 ## [8.0.0] - 2026-05-13 -- v8 TDD implementation release
 

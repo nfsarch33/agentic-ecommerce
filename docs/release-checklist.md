@@ -1,16 +1,19 @@
 # v9.0.0 Release Checklist
 
-Use this checklist before tagging `agentic-ecommerce` v9.0.0.
+Use this checklist before tagging `agentic-ecommerce` v9.0.0. The semver tag
+remains uncut until the full mirrored self-hosted regression is green on
+`primary-testing and secondary-testing`.
 
 ## Version and Docs
 
 - `VERSION` contains `9.0.0`.
 - `api/openapi.yaml` has `info.version: 9.0.0`.
-- `CHANGELOG.md` includes the v9.0.0 platform-baseline entry summarising the backend release path, testing-pool contract, and staging baseline.
+- `CHANGELOG.md` includes the v9.0.0 platform-baseline entry summarising the backend release path, mirrored self-hosted regression, and current secondary-pool blocker state.
 - `README.md` links quickstart, architecture, API docs, Temporal, n8n, media storage, cloud deployment, and security boundaries.
-- `docs/api-reference.md`, `docs/temporal-workflow-specs.md`, and `docs/webhook-contracts.md` reflect the v9.0.0 API, workflow, and automation surfaces.
+- `README.md` also records that `v9.0.0` is still RC-only until both pools pass the mirrored release gate.
+- `docs/api-reference.md`, `docs/temporal-workflow-specs.md`, and `docs/webhook-contracts.md` reflect the v9.0.0 API, workflow, automation surfaces, and mirrored self-hosted release contract.
 - `docs/adr/adr-036-v9-release-decisions.md` is accepted and linked from `docs/adr/README.md`.
-- `docs/operations/v9-release-final.md` records final release evidence, skipped gates, and carry-forwards.
+- `docs/operations/v9-release-final.md` records final release evidence, current pool status, skipped gates, and carry-forwards.
 
 ## Backend Quality Gates
 
@@ -38,24 +41,19 @@ make n8n-workflows-validate
 
 Expected result: Temporal workflow specs remain deterministic, the `ec-workflows` task queue is documented, n8n templates stay inactive and credential-free, and outbound webhook contracts match `api/openapi.yaml`.
 
-## Compose and Deployment Gates
+## Self-Hosted Stack Gates
 
 ```bash
 docker compose --env-file .env.compose -f docker-compose.yml config --quiet
 make compose-config
 make compose-config-prod
-helm lint deploy/helm/agentic-ecommerce
 make compose-workers-config
-make tf-fmt-check
-make tf-validate
-make tf-plan-contract
 ```
 
-GKE/GCP is the authoritative staging target for v9.0.0, but live provider
-roots remain operator-gated until credentials, state backend ownership, IAM,
-TLS, DNS, secret-manager mappings, Temporal persistence topology, and rollback
-docs are approved. `make tf-plan-contract` remains the credential-free parity
-proof for dry-run roots while Helm lint keeps the checked-in chart aligned.
+Expected result: the self-hosted Docker and worker configuration stays
+deterministic, credential-free, and reproducible on both local and remote test
+hosts. Cloud deployment assets remain maintained as reference-only material and
+do not block the `v9.0.0` tag.
 
 ## Runtime Smoke Gates
 
@@ -70,15 +68,28 @@ docker compose --env-file .env.compose -f docker-compose.yml down
 
 Expected result: the stack boots in under 90 seconds on a healthy local Docker runtime, `mc-api` is live, configured dependencies are ready, and metrics expose build information plus HTTP RED counters.
 
-Remote staging validation also requires:
+## Mirrored Pool Gates
 
 ```bash
-runx test-lane run --lane staging-smoke --pool primary-testing
+runx ssh exec --target node-a-travel --cmd ssh-canary-wsl
+runx ssh exec --target host-a-travel --cmd ssh-canary-win
+runx ssh exec --target node-b-travel --cmd ssh-canary-wsl
+runx ssh exec --target node-b --cmd ssh-canary-wsl
+runx ssh exec --target host-b --cmd ssh-canary-win
+runx ssh exec --target host-b-travel --cmd ssh-canary-win
+runx test-lane run --lane backend-integration --pool primary-testing
+runx test-lane run --lane backend-integration --pool secondary-testing
+runx test-lane run --lane full-stack-e2e --pool primary-testing
+runx test-lane run --lane full-stack-e2e --pool secondary-testing
+runx test-lane run --lane cleanup-testing --pool primary-testing
+runx test-lane run --lane cleanup-testing --pool secondary-testing
 ```
 
-Expected result: once `EC_STAGING_BASE_URL` is provisioned, the primary-testing
-lane reaches the staging ingress instead of failing on path drift or timeout
-drift.
+Expected result: host canaries are green on both pools, backend integration and
+full-stack E2E are reproducible on both pools, cleanup evidence is durable on
+both pools, and the frontend checklist carries the mirrored
+`frontend-playwright-stable` plus `frontend-uiauto-compare` proof required for
+the stack tag.
 
 ## Security and Public Boundary Gates
 
@@ -94,7 +105,8 @@ Review docs-inclusive output before merge. Public docs must not contain live cre
 The GitHub release notes should include:
 
 - Backend and frontend commit SHAs used for promotion.
+- Primary and secondary pool canary plus lane results.
 - Docker image tags and whether they are SHA-based or release tags.
 - OpenAPI contract path: `api/openapi.yaml`.
-- Required environment variables and secret-manager ownership.
+- Support-tool provenance for the controller and both remote pools.
 - Any skipped gates with operator-approved rationale.
