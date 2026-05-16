@@ -16,6 +16,7 @@ import (
 
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
+	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 )
@@ -63,6 +64,32 @@ type startSourcingWorkflowRequest struct {
 	RequestedBy             string                    `json:"requested_by,omitempty"`
 	CandidateLimit          int                       `json:"candidate_limit,omitempty"`
 	Candidates              []sourcingagent.Candidate `json:"candidates,omitempty"`
+}
+
+type marketplaceSyncEventPayload struct {
+	TenantID   string         `json:"tenant_id"`
+	Provider   string         `json:"provider"`
+	EntityType string         `json:"entity_type"`
+	EntityID   string         `json:"entity_id"`
+	ExternalID string         `json:"external_id,omitempty"`
+	Operation  string         `json:"operation"`
+	Version    string         `json:"version"`
+	Payload    map[string]any `json:"payload,omitempty"`
+}
+
+type marketplaceDLQRecordPayload struct {
+	ID       string                      `json:"id,omitempty"`
+	Event    marketplaceSyncEventPayload `json:"event"`
+	Attempts int                         `json:"attempts,omitempty"`
+	Reason   string                      `json:"reason,omitempty"`
+}
+
+type startMarketplaceSyncWorkflowRequest struct {
+	Event marketplaceSyncEventPayload `json:"event"`
+}
+
+type startMarketplaceReplayWorkflowRequest struct {
+	Record marketplaceDLQRecordPayload `json:"record"`
 }
 
 type workflowStartResponse struct {
@@ -116,6 +143,10 @@ func (s *server) workflowsHandler(w http.ResponseWriter, r *http.Request) {
 		s.startMediaProcessingWorkflow(w, r)
 	case path == "sourcing" && r.Method == http.MethodPost:
 		s.startSourcingWorkflow(w, r)
+	case path == "marketplace-sync" && r.Method == http.MethodPost:
+		s.startMarketplaceSyncWorkflow(w, r)
+	case path == "marketplace-replay" && r.Method == http.MethodPost:
+		s.startMarketplaceReplayWorkflow(w, r)
 	case strings.HasSuffix(path, "/signals/review") && r.Method == http.MethodPost:
 		s.signalProductPublishReview(w, r, path)
 	case path != "" && r.Method == http.MethodGet:
@@ -288,6 +319,78 @@ func sanitizeWorkflowIDPart(value string) string {
 	return value
 }
 
+func (s *server) startMarketplaceSyncWorkflow(w http.ResponseWriter, r *http.Request) {
+	if s.workflowClient == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporal_not_configured"})
+		return
+	}
+	var req startMarketplaceSyncWorkflowRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		return
+	}
+	event, errCode := req.Event.toProductEvent()
+	if errCode != "" {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": errCode})
+		return
+	}
+	input := ecworkflow.MarketplaceSyncInput{Event: event}
+	workflowID := fmt.Sprintf("marketplace-sync-%s-%s-%s", sanitizeWorkflowIDPart(event.Provider), sanitizeWorkflowIDPart(event.EntityID), uuid.NewString())
+	run, err := s.workflowClient.ExecuteWorkflow(
+		r.Context(),
+		client.StartWorkflowOptions{ID: workflowID, TaskQueue: ecworkflow.TaskQueue},
+		ecworkflow.MarketplaceSyncWorkflow,
+		input,
+	)
+	if err != nil {
+		s.log.Error("start marketplace sync workflow", "provider", event.Provider, "entity_id", event.EntityID, "error", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "workflow_start_failed"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, workflowStartResponse{
+		WorkflowID: run.GetID(),
+		RunID:      run.GetRunID(),
+		Status:     "started",
+		TaskQueue:  ecworkflow.TaskQueue,
+	})
+}
+
+func (s *server) startMarketplaceReplayWorkflow(w http.ResponseWriter, r *http.Request) {
+	if s.workflowClient == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporal_not_configured"})
+		return
+	}
+	var req startMarketplaceReplayWorkflowRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		return
+	}
+	record, errCode := req.Record.toDLQRecord()
+	if errCode != "" {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": errCode})
+		return
+	}
+	input := ecworkflow.MarketplaceReplayInput{Record: record}
+	workflowID := fmt.Sprintf("marketplace-replay-%s-%s-%s", sanitizeWorkflowIDPart(record.Event.Provider), sanitizeWorkflowIDPart(firstNonEmpty(record.ID, record.Event.EntityID)), uuid.NewString())
+	run, err := s.workflowClient.ExecuteWorkflow(
+		r.Context(),
+		client.StartWorkflowOptions{ID: workflowID, TaskQueue: ecworkflow.TaskQueue},
+		ecworkflow.MarketplaceReplayWorkflow,
+		input,
+	)
+	if err != nil {
+		s.log.Error("start marketplace replay workflow", "record_id", record.ID, "provider", record.Event.Provider, "error", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "workflow_start_failed"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, workflowStartResponse{
+		WorkflowID: run.GetID(),
+		RunID:      run.GetRunID(),
+		Status:     "started",
+		TaskQueue:  ecworkflow.TaskQueue,
+	})
+}
+
 func (s *server) startProductPublishWorkflow(w http.ResponseWriter, r *http.Request) {
 	if s.workflowClient == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporal_not_configured"})
@@ -410,5 +513,73 @@ func workflowStatus(status enumspb.WorkflowExecutionStatus) string {
 		return "timed_out"
 	default:
 		return "unspecified"
+	}
+}
+
+func (p marketplaceSyncEventPayload) toProductEvent() (marketplacesync.ProductEvent, string) {
+	event := marketplacesync.ProductEvent{
+		TenantID:   strings.TrimSpace(p.TenantID),
+		Provider:   strings.TrimSpace(p.Provider),
+		EntityType: marketplacesync.EntityType(strings.TrimSpace(p.EntityType)),
+		EntityID:   strings.TrimSpace(p.EntityID),
+		ExternalID: strings.TrimSpace(p.ExternalID),
+		Operation:  marketplacesync.Operation(strings.TrimSpace(p.Operation)),
+		Version:    strings.TrimSpace(p.Version),
+		Payload:    p.Payload,
+	}
+	switch {
+	case event.TenantID == "":
+		return marketplacesync.ProductEvent{}, "tenant_id_required"
+	case event.Provider == "":
+		return marketplacesync.ProductEvent{}, "provider_required"
+	case event.EntityType == "":
+		return marketplacesync.ProductEvent{}, "entity_type_required"
+	case event.EntityID == "":
+		return marketplacesync.ProductEvent{}, "entity_id_required"
+	case event.Operation == "":
+		return marketplacesync.ProductEvent{}, "operation_required"
+	case event.Version == "":
+		return marketplacesync.ProductEvent{}, "version_required"
+	default:
+		return event, ""
+	}
+}
+
+func (p marketplaceDLQRecordPayload) toDLQRecord() (marketplacesync.DLQRecord, string) {
+	event, errCode := p.Event.toProductEvent()
+	if errCode != "" {
+		return marketplacesync.DLQRecord{}, errCode
+	}
+	attempts := p.Attempts
+	if attempts < 1 {
+		attempts = 1
+	}
+	return marketplacesync.DLQRecord{
+		ID:       strings.TrimSpace(p.ID),
+		Event:    event,
+		Attempts: attempts,
+		Reason:   strings.TrimSpace(p.Reason),
+	}, ""
+}
+
+func marketplaceSyncEventFromDomain(event marketplacesync.ProductEvent) marketplaceSyncEventPayload {
+	return marketplaceSyncEventPayload{
+		TenantID:   event.TenantID,
+		Provider:   event.Provider,
+		EntityType: string(event.EntityType),
+		EntityID:   event.EntityID,
+		ExternalID: event.ExternalID,
+		Operation:  string(event.Operation),
+		Version:    event.Version,
+		Payload:    event.Payload,
+	}
+}
+
+func marketplaceDLQRecordFromDomain(record marketplacesync.DLQRecord) marketplaceDLQRecordPayload {
+	return marketplaceDLQRecordPayload{
+		ID:       record.ID,
+		Event:    marketplaceSyncEventFromDomain(record.Event),
+		Attempts: record.Attempts,
+		Reason:   record.Reason,
 	}
 }

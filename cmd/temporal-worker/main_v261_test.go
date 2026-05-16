@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
+	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 )
@@ -128,6 +130,38 @@ func TestBuildWorkerDeps_FillsTaskQueueFromEnv(t *testing.T) {
 		deps.SourcingActivities == nil || deps.OnboardingActivities == nil ||
 		deps.RepoCleanup == nil {
 		t.Errorf("deps fields must be wired: %+v", deps)
+	}
+}
+
+func TestBuildWorkerDeps_WiresMarketplaceExecutor(t *testing.T) {
+	t.Setenv("ECOMMERCE_DB_URL", "")
+	t.Setenv("ECOMMERCE_AI_BRIDGE_URL", "")
+	t.Setenv("MINIMAX_BRIDGE_URL", "")
+
+	deps, err := buildWorkerDeps(context.Background(), discardLogger(), agentScheduleConfig{})
+	if err != nil {
+		t.Fatalf("buildWorkerDeps: %v", err)
+	}
+	t.Cleanup(deps.RepoCleanup)
+
+	got, err := deps.MarketplaceActivities.Sync(context.Background(), ecworkflow.MarketplaceSyncInput{
+		Event: marketplacesync.ProductEvent{
+			TenantID:   "tenant-a",
+			Provider:   "unsupported-provider",
+			EntityType: marketplacesync.EntityProduct,
+			EntityID:   "sku-unsupported",
+			Operation:  marketplacesync.OperationUpsert,
+			Version:    "v1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marketplace sync returned err = %v, want bounded DLQ outcome", err)
+	}
+	if got.Status != ecworkflow.MarketplaceSyncWorkflowStatusDLQ {
+		t.Fatalf("workflow status = %q, want %q", got.Status, ecworkflow.MarketplaceSyncWorkflowStatusDLQ)
+	}
+	if got.Sync.Status != marketplacesync.StatusDLQ {
+		t.Fatalf("sync status = %q, want %q", got.Sync.Status, marketplacesync.StatusDLQ)
 	}
 }
 

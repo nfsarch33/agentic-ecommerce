@@ -329,6 +329,125 @@
       ],
       "title": "Error Rate per Tool",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 600
+              },
+              {
+                "color": "red",
+                "value": 1800
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "max by (sprint_id, story_id, repo) (ec_agentrace_story_wall_seconds)",
+          "legendFormat": "{{sprint_id}}/{{story_id}} wall",
+          "refId": "A"
+        },
+        {
+          "expr": "max by (sprint_id, story_id, repo) (ec_agentrace_story_blocked_seconds)",
+          "legendFormat": "{{sprint_id}}/{{story_id}} blocked",
+          "refId": "B"
+        }
+      ],
+      "title": "Story Wall vs Blocked Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 8,
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "expr": "sum by (story_id, outcome) (ec_agentrace_story_outcomes_total)",
+          "legendFormat": "{{story_id}} {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Story Outcomes",
+      "type": "bargauge"
     }
   ],
   "refresh": "30s",
@@ -349,7 +468,6 @@
   "timezone": "browser",
   "title": "Agentrace Insights",
   "uid": "agentrace-insights-v4110",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
-
