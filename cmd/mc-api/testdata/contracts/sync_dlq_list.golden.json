@@ -1,0 +1,25 @@
+{
+  "records": [
+    {
+      "attempts": 3,
+      "event": {
+        "entity_id": "sku-contract",
+        "entity_type": "product",
+        "external_id": "gid://shopify/Product/1",
+        "operation": "upsert",
+        "payload": {
+          "description": "Five resistance levels",
+          "price": 49.95,
+          "stock": 12,
+          "title": "Resistance Band Set"
+        },
+        "provider": "shopify",
+        "tenant_id": "tenant-contract",
+        "version": "v1"
+      },
+      "id": "dlq-contract-1",
+      "reason": "transient timeout"
+    }
+  ],
+  "total": 1
+}

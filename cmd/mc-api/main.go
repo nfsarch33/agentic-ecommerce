@@ -37,6 +37,7 @@ import (
 	digitaldomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/digital"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
+	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 	"github.com/nfsarch33/agentic-ecommerce/internal/observability/hooks"
@@ -150,6 +151,7 @@ type server struct {
 	digitalSvc            *digital.Service
 	eventBus              eventHistory
 	syncEngine            *enginesync.Engine
+	marketplaceSync       *marketplacesync.Router
 	contentAgent          contentGenerator
 	rag                   *rag.Service
 	factChecker           *contentagent.FactChecker
@@ -424,6 +426,10 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	if loadMatrixErr != nil {
 		logger.Warn("load matrix handlers disabled", "error", loadMatrixErr)
 	}
+	marketplaceSyncRouter, marketplaceSyncErr := buildMarketplaceSyncRouter()
+	if marketplaceSyncErr != nil {
+		logger.Warn("marketplace sync router disabled", "error", marketplaceSyncErr)
+	}
 
 	srv := &server{
 		cfg: serverConfig{
@@ -457,6 +463,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		digitalSvc:            digitalSvc,
 		eventBus:              bus,
 		syncEngine:            enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"}),
+		marketplaceSync:       marketplaceSyncRouter,
 		contentAgent:          generator,
 		rag:                   ragService,
 		factChecks:            map[string]contentagent.FactCheckResult{},
@@ -579,6 +586,8 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/cart/", cartAPI)
 	syncAPI := s.withCORS(s.withRateLimit(s.withRBAC(syncRole, s.withAudit(syncAuditAction, s.syncHandler))))
 	mux.HandleFunc("/api/v1/sync/status", syncAPI)
+	mux.HandleFunc("/api/v1/sync/dlq", syncAPI)
+	mux.HandleFunc("/api/v1/sync/dlq/", syncAPI)
 	mux.HandleFunc("/api/v1/sync/conflicts", syncAPI)
 	mux.HandleFunc("/api/v1/sync/conflicts/", syncAPI)
 	mux.HandleFunc("/api/v1/sync/products/", syncAPI)
@@ -611,11 +620,13 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/agent-schedules/", agentSchedulesAPI)
 	eventsAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.recentEventsHandler)))
 	mux.HandleFunc("/api/v1/events/recent", eventsAPI)
-	workflowsAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.withAudit(workflowAuditAction, s.workflowsHandler))))
+	workflowsAPI := s.withCORS(s.withRateLimit(s.withRBAC(workflowRole, s.withAudit(workflowAuditAction, s.workflowsHandler))))
 	mux.HandleFunc("/api/v1/workflows/product-publish", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/content-generation", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/media-processing", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/sourcing", workflowsAPI)
+	mux.HandleFunc("/api/v1/workflows/marketplace-sync", workflowsAPI)
+	mux.HandleFunc("/api/v1/workflows/marketplace-replay", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/", workflowsAPI)
 	ragAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.ragHandler)))
 	mux.HandleFunc("/api/v1/rag/documents", ragAPI)
@@ -762,6 +773,20 @@ func seedMarketplaceManifests(svc *marketplace.Service) {
 	for _, m := range manifests {
 		_ = svc.Catalog().RegisterManifest(nil, m)
 	}
+}
+
+func buildMarketplaceSyncRouter() (*marketplacesync.Router, error) {
+	var marketplaceMetrics *marketplacesync.RegistryMetrics
+	if reg := ecRegistry.Load(); reg != nil {
+		marketplaceMetrics = marketplacesync.NewRegistryMetrics(reg)
+	}
+	return marketplacesync.NewRouter(marketplacesync.RouterConfig{
+		Connectors:  map[string]marketplacesync.Connector{},
+		Ledger:      marketplacesync.NewInMemoryLedger(),
+		DLQ:         marketplacesync.NewInMemoryDLQ(),
+		Metrics:     marketplaceMetrics,
+		MaxAttempts: parseIntEnv("ECOMMERCE_MARKETPLACE_SYNC_MAX_ATTEMPTS", 3),
+	})
 }
 
 // buildStripeWebhookVerifier returns the Stripe webhook signature

@@ -396,11 +396,15 @@ type Registry struct {
 	// v4.11.0 Agentrace deep-integration metrics. Populated by
 	// AgentraceAdapter during each evomap emission cycle.
 	// See RegisterAgentraceMetrics for cardinality budget (~92 series).
-	AgentraceSessionDuration  *Histogram
-	AgentraceToolCallsTotal   *Counter
-	AgentraceCostUSDTotal     *Counter
-	AgentraceBottlenecksTotal *Counter
-	AgentraceParallelismRatio *Gauge
+	AgentraceSessionDuration     *Histogram
+	AgentraceToolCallsTotal      *Counter
+	AgentraceCostUSDTotal        *Counter
+	AgentraceBottlenecksTotal    *Counter
+	AgentraceParallelismRatio    *Gauge
+	AgentraceStoryWallSeconds    *Gauge
+	AgentraceStoryActiveSeconds  *Gauge
+	AgentraceStoryBlockedSeconds *Gauge
+	AgentraceStoryOutcomesTotal  *Counter
 
 	// v4.13.0 MiniMax quota-aware adapter metrics.
 	// See RegisterMinimaxMetrics for cardinality budget (~38 series).
@@ -771,6 +775,10 @@ func (r *Registry) Handler() http.Handler {
 		r.AgentraceCostUSDTotal.write(&sb)
 		r.AgentraceBottlenecksTotal.write(&sb)
 		r.AgentraceParallelismRatio.write(&sb)
+		r.AgentraceStoryWallSeconds.write(&sb)
+		r.AgentraceStoryActiveSeconds.write(&sb)
+		r.AgentraceStoryBlockedSeconds.write(&sb)
+		r.AgentraceStoryOutcomesTotal.write(&sb)
 		r.MinimaxRequestsTotal.write(&sb)
 		r.MinimaxRequestDuration.write(&sb)
 		r.MinimaxActiveKey.write(&sb)

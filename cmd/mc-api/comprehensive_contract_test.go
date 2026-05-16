@@ -13,10 +13,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	"github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
+	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 	"github.com/nfsarch33/agentic-ecommerce/internal/webhook/outbound"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -65,6 +68,7 @@ func TestOpenAPIOperationsHaveComprehensiveContractCoverage(t *testing.T) {
 		"listAgents":                       true,
 		"listComplianceRules":              true,
 		"listCustomComplianceRules":        true,
+		"listMarketplaceDLQ":               true,
 		"listProducts":                     true,
 		"listRecentEvents":                 true,
 		"listSyncConflicts":                true,
@@ -79,11 +83,14 @@ func TestOpenAPIOperationsHaveComprehensiveContractCoverage(t *testing.T) {
 		"receiveWooCommerceProductWebhook": true,
 		"refreshAccessToken":               true,
 		"resolveSyncConflict":              true,
+		"replayMarketplaceDLQ":             true,
 		"runAgent":                         true,
 		"searchRAGEvidence":                true,
 		"signalProductPublishReview":       true,
 		"sourceMedia":                      true,
 		"startContentGenerationWorkflow":   true,
+		"startMarketplaceReplayWorkflow":   true,
+		"startMarketplaceSyncWorkflow":     true,
 		"startMediaProcessingWorkflow":     true,
 		"startProductPublishWorkflow":      true,
 		"startSourcingWorkflow":            true,
@@ -225,8 +232,12 @@ func TestRepresentativeGoldenJSONResponseShapes(t *testing.T) {
 		{name: "rag_search", method: http.MethodGet, path: "/api/v1/rag/search?q=five%20resistance%20levels&top_k=1", statusCode: http.StatusOK, specPath: "/api/v1/rag/search", specStatus: "200", golden: "rag_search.golden.json"},
 		{name: "content_generate", method: http.MethodPost, path: "/api/v1/content/generate", body: `{"product_id":"` + product.ID().String() + `","max_words":80}`, statusCode: http.StatusOK, specPath: "/api/v1/content/generate", specStatus: "200", golden: "content_generate.golden.json"},
 		{name: "workflow_start", method: http.MethodPost, path: "/api/v1/workflows/product-publish", body: `{"product_id":"` + product.ID().String() + `","requested_by":"operator@example.com"}`, statusCode: http.StatusAccepted, specPath: "/api/v1/workflows/product-publish", specStatus: "202", golden: "workflow_start.golden.json"},
+		{name: "workflow_marketplace_sync_start", method: http.MethodPost, path: "/api/v1/workflows/marketplace-sync", body: `{"event":{"tenant_id":"tenant-contract","provider":"shopify","entity_type":"product","entity_id":"sku-contract","external_id":"gid://shopify/Product/1","operation":"upsert","version":"v1","payload":{"title":"Resistance Band Set","description":"Five resistance levels","price":49.95,"stock":12}}}`, statusCode: http.StatusAccepted, specPath: "/api/v1/workflows/marketplace-sync", specStatus: "202", golden: "workflow_marketplace_sync_start.golden.json"},
+		{name: "workflow_marketplace_replay_start", method: http.MethodPost, path: "/api/v1/workflows/marketplace-replay", body: `{"record":{"id":"dlq-contract-1","attempts":3,"reason":"transient timeout","event":{"tenant_id":"tenant-contract","provider":"shopify","entity_type":"product","entity_id":"sku-contract","external_id":"gid://shopify/Product/1","operation":"upsert","version":"v1","payload":{"title":"Resistance Band Set","description":"Five resistance levels","price":49.95,"stock":12}}}}`, statusCode: http.StatusAccepted, specPath: "/api/v1/workflows/marketplace-replay", specStatus: "202", golden: "workflow_marketplace_replay_start.golden.json"},
 		{name: "workflow_status", method: http.MethodGet, path: "/api/v1/workflows/wf-contract", statusCode: http.StatusOK, specPath: "/api/v1/workflows/{id}", specStatus: "200", golden: "workflow_status.golden.json"},
 		{name: "workflow_signal", method: http.MethodPost, path: "/api/v1/workflows/wf-contract/signals/review", body: `{"approved":true,"reviewer":"lead@example.com"}`, statusCode: http.StatusAccepted, specPath: "/api/v1/workflows/{id}/signals/review", specStatus: "202", golden: "workflow_signal.golden.json"},
+		{name: "sync_dlq_list", method: http.MethodGet, path: "/api/v1/sync/dlq", statusCode: http.StatusOK, specPath: "/api/v1/sync/dlq", specStatus: "200", golden: "sync_dlq_list.golden.json"},
+		{name: "sync_dlq_replay", method: http.MethodPost, path: "/api/v1/sync/dlq/dlq-contract-1/replay", statusCode: http.StatusAccepted, specPath: "/api/v1/sync/dlq/{id}/replay", specStatus: "202", golden: "sync_dlq_replay.golden.json"},
 		{name: "webhook_registration", method: http.MethodPost, path: "/api/v1/webhooks", body: `{"url":"https://hooks.example.test/product","event_types":["product.created"],"secret":"super-secret-webhook-key","secret_ref":"local:test"}`, statusCode: http.StatusCreated, specPath: "/api/v1/webhooks", specStatus: "201", golden: "webhook_registration.golden.json"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -308,6 +319,44 @@ func seedContractDependencies(t *testing.T, srv *server, productID string) {
 			Body:       ioNopCloserString(mediaOnePixelPNGString()),
 		}, nil
 	})})
+	srv.syncEngine = enginesync.NewEngine(enginesync.Config{
+		ProductRepository: srv.repo,
+		WooCommerce:       &syncFakeWooCommerce{products: []woocommerce.Product{}},
+		DefaultCurrency:   "AUD",
+	})
+	dlq := marketplacesync.NewInMemoryDLQ()
+	router, err := marketplacesync.NewRouter(marketplacesync.RouterConfig{
+		Connectors:  map[string]marketplacesync.Connector{},
+		Ledger:      marketplacesync.NewInMemoryLedger(),
+		DLQ:         dlq,
+		MaxAttempts: 3,
+	})
+	if err != nil {
+		t.Fatalf("marketplace sync router: %v", err)
+	}
+	if err := dlq.Enqueue(context.Background(), marketplacesync.DLQRecord{
+		ID:       "dlq-contract-1",
+		Attempts: 3,
+		Reason:   "transient timeout",
+		Event: marketplacesync.ProductEvent{
+			TenantID:   "tenant-contract",
+			Provider:   "shopify",
+			EntityType: marketplacesync.EntityProduct,
+			EntityID:   "sku-contract",
+			ExternalID: "gid://shopify/Product/1",
+			Operation:  marketplacesync.OperationUpsert,
+			Version:    "v1",
+			Payload: map[string]any{
+				"title":       "Resistance Band Set",
+				"description": "Five resistance levels",
+				"price":       49.95,
+				"stock":       12,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("seed marketplace dlq: %v", err)
+	}
+	srv.marketplaceSync = router
 	srv.workflowClient = &fakeTemporalWorkflowClient{
 		run: fakeWorkflowRun{id: "product-publish-" + productID, runID: "run-contract"},
 		describe: &workflowservicepb.DescribeWorkflowExecutionResponse{

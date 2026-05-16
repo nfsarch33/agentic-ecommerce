@@ -41,8 +41,9 @@ var (
 // into the supplied lifecycle.Manager. Mirrors the mc-api pattern.
 func startWorkerObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary string) *metrics.Registry {
 	rt := runtimeobs.New(logger, binary, runtimeobs.Config{
-		EvomapPath: runtimeobs.DefaultEvomapPath(os.Getenv),
-		Rotate:     true,
+		EvomapPath:         runtimeobs.DefaultEvomapPath(os.Getenv),
+		Rotate:             true,
+		AgentraceJSONLPath: runtimeobs.DefaultAgentraceJSONLPath(os.Getenv),
 	})
 	reg := rt.Registry()
 	sampler := memwatch.NewSampler(logger, memwatch.Config{

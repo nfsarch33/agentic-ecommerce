@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -104,5 +105,48 @@ func TestRuntimeObservabilityNilAndPrometheusOnly(t *testing.T) {
 	}
 	if err := rt.Close(context.Background()); err != nil {
 		t.Fatalf("prometheus-only Close: %v", err)
+	}
+}
+
+func TestRuntimeObservability_EmitsAgentraceStoryMetricsFromJSONL(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	evomapPath := filepath.Join(dir, "evomap.ndjson")
+	agentracePath := filepath.Join(dir, "agentrace.jsonl")
+	raw := `{"type":"UserPromptSubmit","timestamp":1000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","payload":{"sprint_id":"v5009r","story_id":"v5009r-2","repo":"agentic-ecommerce","branch":"feat/v5009r-agentrace-story-metrics","remote_target":"wsl1-travel"}}
+{"type":"PreToolUse","timestamp":2000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","tool_call_id":"tc-1","tool_name":"Shell"}
+{"type":"PostToolUse","timestamp":5000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","tool_call_id":"tc-1","tool_name":"Shell"}
+{"type":"Stop","timestamp":10000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","payload":{"sprint_id":"v5009r","story_id":"v5009r-2","repo":"agentic-ecommerce","branch":"feat/v5009r-agentrace-story-metrics","remote_target":"wsl1-travel","blocked_reason":"ssh_timeout"}}`
+	if err := os.WriteFile(agentracePath, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := New(slog.Default(), "mc-api", Config{
+		EvomapPath:         evomapPath,
+		AgentraceJSONLPath: agentracePath,
+	})
+	rt.Emit(context.Background(), memwatch.Sample{
+		Binary:         "mc-api",
+		RecordedAt:     time.Date(2026, 5, 17, 6, 0, 0, 0, time.UTC),
+		HeapInUseBytes: 42,
+		GoroutineCount: 7,
+	})
+
+	rec := httptest.NewRecorder()
+	rt.Registry().Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
+	body := rec.Body.String()
+	for _, want := range []string{
+		"ec_agentrace_story_wall_seconds",
+		"ec_agentrace_story_active_seconds",
+		"ec_agentrace_story_blocked_seconds",
+		"ec_agentrace_story_outcomes_total",
+		`story_id="v5009r-2"`,
+		`remote_target="wsl1-travel"`,
+		`outcome="blocked"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("metrics body missing %q:\n%s", want, body)
+		}
 	}
 }

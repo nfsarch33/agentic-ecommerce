@@ -17,6 +17,8 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
+	"github.com/nfsarch33/agentic-ecommerce/internal/security"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 )
 
@@ -52,6 +54,41 @@ func TestSyncStatusEndpointReportsConflictCounts(t *testing.T) {
 	}
 	if got.PendingConflicts != 0 {
 		t.Fatalf("pending conflicts = %d, want 0", got.PendingConflicts)
+	}
+}
+
+func TestSyncStatusEndpointIncludesMarketplaceFields(t *testing.T) {
+	t.Parallel()
+
+	srv, _, _ := testSyncServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/status", nil)
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got, ok := payload["dlq_depth"].(float64); !ok || got != 0 {
+		t.Fatalf("dlq_depth = %#v, want 0", payload["dlq_depth"])
+	}
+	replay, ok := payload["marketplace_replay"].(map[string]any)
+	if !ok {
+		t.Fatalf("marketplace_replay = %#v, want object", payload["marketplace_replay"])
+	}
+	if replay["state"] != "idle" {
+		t.Fatalf("replay state = %#v, want idle", replay["state"])
+	}
+	reconciliation, ok := payload["marketplace_reconciliation"].(map[string]any)
+	if !ok {
+		t.Fatalf("marketplace_reconciliation = %#v, want object", payload["marketplace_reconciliation"])
+	}
+	if reconciliation["mismatch_count"] != float64(0) {
+		t.Fatalf("mismatch_count = %#v, want 0", reconciliation["mismatch_count"])
 	}
 }
 
@@ -109,6 +146,107 @@ func TestConflictEndpointsListAndResolveManualReview(t *testing.T) {
 	}
 }
 
+func TestSyncDLQEndpointListsMarketplaceRecords(t *testing.T) {
+	t.Parallel()
+
+	srv, _, _ := testSyncServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/dlq", nil)
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got, ok := payload["records"].([]any); !ok || len(got) != 0 {
+		t.Fatalf("records = %#v, want empty array", payload["records"])
+	}
+	if got, ok := payload["total"].(float64); !ok || got != 0 {
+		t.Fatalf("total = %#v, want 0", payload["total"])
+	}
+}
+
+func TestReplayMarketplaceDLQReturnsNotFoundForUnknownRecord(t *testing.T) {
+	t.Parallel()
+
+	srv, _, _ := testSyncServer(t)
+	srv.workflowClient = &fakeTemporalWorkflowClient{}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sync/dlq/missing/replay", nil)
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestReplayMarketplaceDLQRequiresOperatorRole(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := testServerWithCfg(t, workflowAuthServerConfig())
+	srv.configureSecurity()
+	srv.syncEngine = enginesync.NewEngine(enginesync.Config{
+		ProductRepository: inmemory.NewProductRepository(),
+		WooCommerce:       &syncFakeWooCommerce{},
+		DefaultCurrency:   "AUD",
+	})
+	dlq := marketplacesync.NewInMemoryDLQ()
+	if err := dlq.Enqueue(context.Background(), marketplacesync.DLQRecord{
+		ID:       "dlq-operator-1",
+		Attempts: 3,
+		Reason:   "transient timeout",
+		Event: marketplacesync.ProductEvent{
+			TenantID:   "tenant-a",
+			Provider:   "shopify",
+			EntityType: marketplacesync.EntityProduct,
+			EntityID:   "sku-operator",
+			Operation:  marketplacesync.OperationUpsert,
+			Version:    "v1",
+		},
+	}); err != nil {
+		t.Fatalf("seed dlq: %v", err)
+	}
+	router, err := marketplacesync.NewRouter(marketplacesync.RouterConfig{
+		Connectors:  map[string]marketplacesync.Connector{},
+		Ledger:      marketplacesync.NewInMemoryLedger(),
+		DLQ:         dlq,
+		MaxAttempts: 3,
+	})
+	if err != nil {
+		t.Fatalf("NewRouter: %v", err)
+	}
+	srv.marketplaceSync = router
+	srv.workflowClient = &fakeTemporalWorkflowClient{run: fakeWorkflowRun{id: "marketplace-replay-dlq-operator-1", runID: "run-marketplace-replay"}}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sync/dlq/dlq-operator-1/replay", nil)
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401; body=%s", rec.Code, rec.Body.String())
+	}
+
+	viewerReq := httptest.NewRequest(http.MethodPost, "/api/v1/sync/dlq/dlq-operator-1/replay", nil)
+	viewerReq.Header.Set("Authorization", "Bearer "+mintTestAccessToken(t, srv, "viewer@example.com", security.RoleViewer))
+	viewerRec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(viewerRec, viewerReq)
+	if viewerRec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body=%s", viewerRec.Code, viewerRec.Body.String())
+	}
+
+	operatorReq := httptest.NewRequest(http.MethodPost, "/api/v1/sync/dlq/dlq-operator-1/replay", nil)
+	operatorReq.Header.Set("Authorization", "Bearer "+mintTestAccessToken(t, srv, "operator@example.com", security.RoleOperator))
+	operatorRec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(operatorRec, operatorReq)
+	if operatorRec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", operatorRec.Code, operatorRec.Body.String())
+	}
+}
+
 func TestWooCommerceProductWebhookEndpointVerifiesHMAC(t *testing.T) {
 	t.Parallel()
 
@@ -159,6 +297,16 @@ func TestPublishProductEndpointRejectsInvalidID(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestSyncAuditActionClassifiesMarketplaceReplay(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sync/dlq/dlq-123/replay", nil)
+	got := syncAuditAction(req)
+	if got.Action != "sync.marketplace_dlq_replay" || got.Resource != "dlq/dlq-123/replay" || !got.Mutates {
+		t.Fatalf("sync audit = %+v", got)
 	}
 }
 

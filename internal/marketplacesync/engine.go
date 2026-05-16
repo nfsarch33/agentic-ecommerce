@@ -58,6 +58,7 @@ type SyncResult struct {
 }
 
 type DLQRecord struct {
+	ID       string
 	Event    ProductEvent
 	Attempts int
 	Reason   string
