@@ -137,6 +137,53 @@ func TestAgentraceAdapter_JSONLFallback(t *testing.T) {
 	}
 }
 
+func TestAgentraceAdapter_JSONLFallback_DerivesStoryMetricsFromRawEvents(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	jsonlPath := filepath.Join(dir, "events.jsonl")
+	raw := `{"type":"UserPromptSubmit","timestamp":1000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","payload":{"sprint_id":"v5009r","story_id":"v5009r-2","repo":"agentic-ecommerce","branch":"feat/v5009r-agentrace-story-metrics","remote_target":"node-a-travel"}}
+{"type":"PreToolUse","timestamp":2000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","tool_call_id":"tc-1","tool_name":"Shell"}
+{"type":"PostToolUse","timestamp":5000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","tool_call_id":"tc-1","tool_name":"Shell"}
+{"type":"Stop","timestamp":10000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","payload":{"sprint_id":"v5009r","story_id":"v5009r-2","repo":"agentic-ecommerce","branch":"feat/v5009r-agentrace-story-metrics","remote_target":"node-a-travel","blocked_reason":"ssh_timeout"}}`
+	if err := os.WriteFile(jsonlPath, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	doer := &mockHTTPDoer{err: fmt.Errorf("connection refused")}
+	adapter := NewAgentraceAdapter(AgentraceAdapterConfig{
+		HTTPClient: doer,
+		JSONLPath:  jsonlPath,
+		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	kpis := adapter.Read(context.Background())
+
+	if !kpis.Available {
+		t.Fatal("expected Available=true from JSONL fallback")
+	}
+	if len(kpis.Stories) != 1 {
+		t.Fatalf("expected 1 story KPI, got %d", len(kpis.Stories))
+	}
+	story := kpis.Stories[0]
+	if story.SessionID != "agentic-ecommerce__v5009r-2" {
+		t.Fatalf("SessionID = %q, want agentic-ecommerce__v5009r-2", story.SessionID)
+	}
+	if story.WallSeconds != 9 {
+		t.Fatalf("WallSeconds = %v, want 9", story.WallSeconds)
+	}
+	if story.ActiveSeconds != 3 {
+		t.Fatalf("ActiveSeconds = %v, want 3", story.ActiveSeconds)
+	}
+	if story.BlockedSeconds != 6 {
+		t.Fatalf("BlockedSeconds = %v, want 6", story.BlockedSeconds)
+	}
+	if story.Outcome != "blocked" {
+		t.Fatalf("Outcome = %q, want blocked", story.Outcome)
+	}
+	if story.RemoteTarget != "node-a-travel" {
+		t.Fatalf("RemoteTarget = %q, want node-a-travel", story.RemoteTarget)
+	}
+}
+
 func TestAgentraceAdapter_FieldMappingCorrectness(t *testing.T) {
 	t.Parallel()
 	t0 := time.Date(2026, 5, 10, 10, 0, 0, 0, time.UTC)

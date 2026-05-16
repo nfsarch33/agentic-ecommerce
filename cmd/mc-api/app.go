@@ -135,8 +135,9 @@ func runServerWithLifecycle(ctx context.Context, mgr *lifecycle.Manager, logger 
 // the same scrape surface.
 func startObservability(mgr *lifecycle.Manager, logger *slog.Logger, binary string) (*metrics.Registry, *hooks.Hooks) {
 	rt := runtimeobs.New(logger, binary, runtimeobs.Config{
-		EvomapPath: runtimeobs.DefaultEvomapPath(os.Getenv),
-		Rotate:     true,
+		EvomapPath:         runtimeobs.DefaultEvomapPath(os.Getenv),
+		Rotate:             true,
+		AgentraceJSONLPath: runtimeobs.DefaultAgentraceJSONLPath(os.Getenv),
 	})
 	reg := rt.Registry()
 	sampler := memwatch.NewSampler(logger, memwatch.Config{

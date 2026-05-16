@@ -220,6 +220,26 @@ func TestSyncHandlersMatchOpenAPIContract(t *testing.T) {
 		assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/sync/status", http.MethodGet, "200"), payload)
 	})
 
+	t.Run("dlq", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/dlq", nil)
+		rec := httptest.NewRecorder()
+		srv.mux().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+		var payload map[string]any
+		decodeJSONPayload(t, rec.Body.Bytes(), &payload)
+		schema := responseSchema(t, spec, "/api/v1/sync/dlq", http.MethodGet, "200")
+		assertSchemaRequiredFields(t, spec, schema, payload)
+		records, ok := payload["records"].([]any)
+		if !ok {
+			t.Fatalf("records = %#v, want array", payload["records"])
+		}
+		if len(records) != 0 {
+			t.Fatalf("records = %#v, want empty array", records)
+		}
+	})
+
 	t.Run("conflicts", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/conflicts", nil)
 		rec := httptest.NewRecorder()

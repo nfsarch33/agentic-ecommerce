@@ -3,6 +3,8 @@ package metrics
 import (
 	"strings"
 	"testing"
+
+	"github.com/nfsarch33/agentic-ecommerce/internal/evomap"
 )
 
 func TestAgentraceMetrics_Registered(t *testing.T) {
@@ -75,5 +77,66 @@ func TestAgentraceMetrics_ZeroWhenUnavailable(t *testing.T) {
 
 	if output != "" {
 		t.Errorf("expected empty output when no observations, got:\n%s", output)
+	}
+}
+
+func TestApplyAgentraceKPIs_ExportsStoryMetrics(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry("test")
+
+	ApplyAgentraceKPIs(r, evomap.AgentraceKPIs{
+		Available:          true,
+		SessionDurationSec: 300,
+		ToolCallCount:      2,
+		CostUSD:            0.42,
+		BottleneckCount:    1,
+		ParallelismRatio:   0.75,
+		ToolUsage: map[string]int{
+			"Shell": 2,
+		},
+		ToolErrors: map[string]int{
+			"Shell": 1,
+		},
+		Stories: []evomap.AgentraceStoryKPI{
+			{
+				SessionID:      "agentic-ecommerce__v5009r-2",
+				SprintID:       "v5009r",
+				StoryID:        "v5009r-2",
+				Repo:           "agentic-ecommerce",
+				Branch:         "feat/v5009r-agentrace-story-metrics",
+				RemoteTarget:   "node-a-travel",
+				WallSeconds:    300,
+				ActiveSeconds:  120,
+				BlockedSeconds: 180,
+				Outcome:        "blocked",
+			},
+		},
+	})
+
+	var sb strings.Builder
+	r.AgentraceSessionDuration.write(&sb)
+	r.AgentraceToolCallsTotal.write(&sb)
+	r.AgentraceCostUSDTotal.write(&sb)
+	r.AgentraceBottlenecksTotal.write(&sb)
+	r.AgentraceParallelismRatio.write(&sb)
+	r.AgentraceStoryWallSeconds.write(&sb)
+	r.AgentraceStoryActiveSeconds.write(&sb)
+	r.AgentraceStoryBlockedSeconds.write(&sb)
+	r.AgentraceStoryOutcomesTotal.write(&sb)
+	output := sb.String()
+
+	checks := []string{
+		"ec_agentrace_story_wall_seconds",
+		"ec_agentrace_story_active_seconds",
+		"ec_agentrace_story_blocked_seconds",
+		"ec_agentrace_story_outcomes_total",
+		"story_id=\"v5009r-2\"",
+		"remote_target=\"node-a-travel\"",
+		"outcome=\"blocked\"",
+	}
+	for _, check := range checks {
+		if !strings.Contains(output, check) {
+			t.Fatalf("expected %q in metrics output:\n%s", check, output)
+		}
 	}
 }

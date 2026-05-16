@@ -6,6 +6,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,8 +19,9 @@ const defaultEvomapPath = "tests/metrics/evomap.ndjson"
 
 // Config controls optional EvoMap persistence.
 type Config struct {
-	EvomapPath string
-	Rotate     bool
+	EvomapPath         string
+	Rotate             bool
+	AgentraceJSONLPath string
 }
 
 // DefaultEvomapPath resolves the shared runtime NDJSON path.
@@ -35,6 +37,23 @@ func DefaultEvomapPath(getenv func(string) string) string {
 	return defaultEvomapPath
 }
 
+// DefaultAgentraceJSONLPath resolves the default Agentrace events.jsonl path.
+func DefaultAgentraceJSONLPath(getenv func(string) string) string {
+	if getenv != nil {
+		if path := getenv("ECOMMERCE_AGENTRACE_JSONL"); path != "" {
+			return path
+		}
+	}
+	if runningUnderGoTest() {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".agentrace", "events.jsonl")
+}
+
 func runningUnderGoTest() bool {
 	return len(os.Args) > 0 && strings.HasSuffix(os.Args[0], ".test")
 }
@@ -42,9 +61,10 @@ func runningUnderGoTest() bool {
 // RuntimeObservability owns the per-binary metrics registry and optional
 // EvoMap sink.
 type RuntimeObservability struct {
-	logger *slog.Logger
-	reg    *metrics.Registry
-	sink   *evomap.Sink
+	logger    *slog.Logger
+	reg       *metrics.Registry
+	sink      *evomap.Sink
+	agentrace *evomap.AgentraceAdapter
 }
 
 // New creates a runtime observability fanout. EvoMap sink failures degrade
@@ -60,6 +80,13 @@ func New(logger *slog.Logger, binary string, cfg Config) *RuntimeObservability {
 	rt := &RuntimeObservability{
 		logger: logger,
 		reg:    metrics.NewRegistry(binary),
+	}
+	if cfg.AgentraceJSONLPath != "" {
+		rt.agentrace = evomap.NewAgentraceAdapter(evomap.AgentraceAdapterConfig{
+			JSONLPath:   cfg.AgentraceJSONLPath,
+			PreferJSONL: true,
+			Logger:      logger,
+		})
 	}
 	path := cfg.EvomapPath
 	if path == "" {
@@ -94,6 +121,11 @@ func (rt *RuntimeObservability) Emit(ctx context.Context, s memwatch.Sample) {
 	}
 	rt.reg.GoroutineCount.Set(float64(s.GoroutineCount), metrics.Labels{})
 	rt.reg.HeapBytes.Set(float64(s.HeapInUseBytes), metrics.Labels{})
+	var aKPIs evomap.AgentraceKPIs
+	if rt.agentrace != nil {
+		aKPIs = rt.agentrace.Read(ctx)
+		metrics.ApplyAgentraceKPIs(rt.reg, aKPIs)
+	}
 	if rt.sink == nil {
 		return
 	}
@@ -102,9 +134,15 @@ func (rt *RuntimeObservability) Emit(ctx context.Context, s memwatch.Sample) {
 		EventAt:    s.RecordedAt,
 		Binary:     s.Binary,
 		KPIs: evomap.KPIs{
-			GoroutineCount: s.GoroutineCount,
-			GCPauseP99Us:   float64(s.GCPauseLastNs) / float64(time.Microsecond),
-			HeapInUseBytes: s.HeapInUseBytes,
+			GoroutineCount:              s.GoroutineCount,
+			GCPauseP99Us:                float64(s.GCPauseLastNs) / float64(time.Microsecond),
+			HeapInUseBytes:              s.HeapInUseBytes,
+			AgentraceAvailable:          aKPIs.Available,
+			AgentraceSessionDurationSec: aKPIs.SessionDurationSec,
+			AgentraceToolCallCount:      aKPIs.ToolCallCount,
+			AgentraceCostUSD:            aKPIs.CostUSD,
+			AgentraceBottleneckCount:    aKPIs.BottleneckCount,
+			AgentraceParallelismRatio:   aKPIs.ParallelismRatio,
 		},
 	}
 	if err := rt.sink.Write(ctx, cap); err != nil {

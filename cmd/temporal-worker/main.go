@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/shopify"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/shopee"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/minimax"
@@ -20,6 +22,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
+	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
@@ -125,8 +128,9 @@ func mainImpl(ctx context.Context, stdout io.Writer, getenv func(string) string,
 	// w.Run returns.
 	mgr := lifecycle.New(logger, 30*time.Second)
 	rt := runtimeobs.New(logger, "temporal-worker", runtimeobs.Config{
-		EvomapPath: runtimeobs.DefaultEvomapPath(os.Getenv),
-		Rotate:     true,
+		EvomapPath:         runtimeobs.DefaultEvomapPath(os.Getenv),
+		Rotate:             true,
+		AgentraceJSONLPath: runtimeobs.DefaultAgentraceJSONLPath(os.Getenv),
 	})
 	reg := rt.Registry()
 	sampler := memwatch.NewSampler(logger, memwatch.Config{
@@ -182,7 +186,7 @@ func buildWorkerDeps(ctx context.Context, logger *slog.Logger, scheduleCfg agent
 	mediaActivities := newMediaProcessingActivitiesFromEnv(logger, repo)
 	sourcingActivities := ecworkflow.NewSourcingActivities(ecworkflow.SourcingActivityDeps{})
 	onboardingActivities := newTenantOnboardingActivitiesFromEnv()
-	marketplaceActivities := ecworkflow.NewMarketplaceSyncActivities(ecworkflow.MarketplaceSyncActivityDeps{})
+	marketplaceActivities := newMarketplaceSyncActivitiesFromEnv(logger)
 	imageEditActivities := ecworkflow.NewImageEditApprovalActivities(ecworkflow.ImageEditApprovalActivityDeps{})
 	gmvRefreshActivities := newGMVDailyRefreshActivitiesFromEnv(ctx, logger)
 
@@ -371,6 +375,91 @@ type syncPublisher struct {
 	}
 }
 
+func newMarketplaceSyncActivitiesFromEnv(logger *slog.Logger) *ecworkflow.MarketplaceSyncActivities {
+	router, err := newMarketplaceSyncRouterFromEnv(logger)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("temporal_worker.marketplace_sync_router", "error", err)
+		}
+		return ecworkflow.NewMarketplaceSyncActivities(ecworkflow.MarketplaceSyncActivityDeps{})
+	}
+	return ecworkflow.NewMarketplaceSyncActivities(ecworkflow.MarketplaceSyncActivityDeps{Executor: router})
+}
+
+func newMarketplaceSyncRouterFromEnv(logger *slog.Logger) (*marketplacesync.Router, error) {
+	connectors := map[string]marketplacesync.Connector{}
+	if connector, err := newShopifyMarketplaceConnectorFromEnv(); err != nil {
+		if logger != nil {
+			logger.Warn("temporal_worker.marketplace_sync_shopify", "error", err)
+		}
+	} else if connector != nil {
+		connectors["shopify"] = connector
+	}
+	if connector, err := newShopeeMarketplaceConnectorFromEnv(); err != nil {
+		if logger != nil {
+			logger.Warn("temporal_worker.marketplace_sync_shopee", "error", err)
+		}
+	} else if connector != nil {
+		connectors["shopee"] = connector
+	}
+	return marketplacesync.NewRouter(marketplacesync.RouterConfig{
+		Connectors:  connectors,
+		Ledger:      marketplacesync.NewInMemoryLedger(),
+		DLQ:         marketplacesync.NewInMemoryDLQ(),
+		MaxAttempts: parseEnvPositiveInt("ECOMMERCE_MARKETPLACE_SYNC_MAX_ATTEMPTS", 3),
+	})
+}
+
+func newShopifyMarketplaceConnectorFromEnv() (marketplacesync.Connector, error) {
+	baseURL := firstNonEmpty(
+		getenv("ECOMMERCE_MARKETPLACE_SHOPIFY_BASE_URL", ""),
+		getenv("ECOMMERCE_SHOPIFY_BASE_URL", ""),
+	)
+	accessToken := firstNonEmpty(
+		getenv("ECOMMERCE_MARKETPLACE_SHOPIFY_ACCESS_TOKEN", ""),
+		getenv("ECOMMERCE_SHOPIFY_ACCESS_TOKEN", ""),
+	)
+	if baseURL == "" || accessToken == "" {
+		return nil, nil
+	}
+	return shopify.NewClient(shopify.Config{
+		BaseURL:           baseURL,
+		StoreName:         getenv("ECOMMERCE_MARKETPLACE_SHOPIFY_STORE_NAME", ""),
+		AccessToken:       accessToken,
+		APIVersion:        getenv("ECOMMERCE_MARKETPLACE_SHOPIFY_API_VERSION", ""),
+		CustomIDNamespace: getenv("ECOMMERCE_MARKETPLACE_SHOPIFY_CUSTOM_ID_NAMESPACE", ""),
+		CustomIDKey:       getenv("ECOMMERCE_MARKETPLACE_SHOPIFY_CUSTOM_ID_KEY", ""),
+	}, &http.Client{Timeout: 15 * time.Second})
+}
+
+func newShopeeMarketplaceConnectorFromEnv() (marketplacesync.Connector, error) {
+	baseURL := firstNonEmpty(
+		getenv("ECOMMERCE_MARKETPLACE_SHOPEE_BASE_URL", ""),
+		getenv("ECOMMERCE_SHOPEE_BASE_URL", ""),
+	)
+	partnerID := parseInt64Env("ECOMMERCE_MARKETPLACE_SHOPEE_PARTNER_ID")
+	partnerKey := firstNonEmpty(
+		getenv("ECOMMERCE_MARKETPLACE_SHOPEE_PARTNER_KEY", ""),
+		getenv("ECOMMERCE_SHOPEE_PARTNER_KEY", ""),
+	)
+	accessToken := firstNonEmpty(
+		getenv("ECOMMERCE_MARKETPLACE_SHOPEE_ACCESS_TOKEN", ""),
+		getenv("ECOMMERCE_SHOPEE_ACCESS_TOKEN", ""),
+	)
+	shopID := parseInt64Env("ECOMMERCE_MARKETPLACE_SHOPEE_SHOP_ID")
+	if baseURL == "" || partnerID == 0 || partnerKey == "" || accessToken == "" || shopID == 0 {
+		return nil, nil
+	}
+	return shopee.NewClient(shopee.Config{
+		BaseURL:          baseURL,
+		PartnerID:        partnerID,
+		PartnerKey:       partnerKey,
+		AccessToken:      accessToken,
+		ShopID:           shopID,
+		AllowLiveBaseURL: parseBoolEnv("ECOMMERCE_MARKETPLACE_SHOPEE_ALLOW_LIVE", false),
+	}, &http.Client{Timeout: 15 * time.Second})
+}
+
 func (p syncPublisher) PublishToWooCommerce(ctx context.Context, productID string) error {
 	id, err := uuid.Parse(productID)
 	if err != nil {
@@ -490,6 +579,22 @@ func parseEnvPositiveInt(key string, fallback int) int {
 func parseEnvDuration(key string, fallback time.Duration) time.Duration {
 	value, err := time.ParseDuration(strings.TrimSpace(os.Getenv(key)))
 	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+func parseInt64Env(key string) int64 {
+	value, err := strconv.ParseInt(strings.TrimSpace(os.Getenv(key)), 10, 64)
+	if err != nil || value <= 0 {
+		return 0
+	}
+	return value
+}
+
+func parseBoolEnv(key string, fallback bool) bool {
+	value, err := parseBool(os.Getenv(key), fallback)
+	if err != nil {
 		return fallback
 	}
 	return value

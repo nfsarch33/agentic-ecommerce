@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/nfsarch33/agentic-ecommerce/internal/security"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 )
 
@@ -152,6 +153,90 @@ func TestStartSourcingWorkflowStartsTemporalExecution(t *testing.T) {
 	}
 }
 
+func TestStartMarketplaceSyncWorkflowStartsTemporalExecution(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := testServerWithCfg(t, workflowAuthServerConfig())
+	srv.configureSecurity()
+	fake := &fakeTemporalWorkflowClient{run: fakeWorkflowRun{id: "marketplace-sync-shopify-sku-123", runID: "run-marketplace-sync-123"}}
+	srv.workflowClient = fake
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/marketplace-sync", bytes.NewBufferString(`{
+		"event":{
+			"tenant_id":"tenant-a",
+			"provider":"shopify",
+			"entity_type":"product",
+			"entity_id":"sku-123",
+			"external_id":"gid://shopify/Product/1",
+			"operation":"upsert",
+			"version":"v1",
+			"payload":{"title":"Resistance Band Set","description":"Five resistance levels","price":49.95,"stock":12}
+		}
+	}`))
+	req.Header.Set("Authorization", "Bearer "+mintTestAccessToken(t, srv, "operator@example.com", security.RoleOperator))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.startedOptions.TaskQueue != ecworkflow.TaskQueue {
+		t.Fatalf("task queue = %q, want %q", fake.startedOptions.TaskQueue, ecworkflow.TaskQueue)
+	}
+	input, ok := fake.startedArgs[0].(ecworkflow.MarketplaceSyncInput)
+	if !ok {
+		t.Fatalf("workflow arg = %#v, want MarketplaceSyncInput", fake.startedArgs)
+	}
+	if input.Event.Provider != "shopify" || input.Event.EntityID != "sku-123" || input.Event.Version != "v1" {
+		t.Fatalf("input = %+v", input)
+	}
+}
+
+func TestStartMarketplaceReplayWorkflowStartsTemporalExecution(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := testServerWithCfg(t, workflowAuthServerConfig())
+	srv.configureSecurity()
+	fake := &fakeTemporalWorkflowClient{run: fakeWorkflowRun{id: "marketplace-replay-dlq-123", runID: "run-marketplace-replay-123"}}
+	srv.workflowClient = fake
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/marketplace-replay", bytes.NewBufferString(`{
+		"record":{
+			"id":"dlq-123",
+			"attempts":3,
+			"reason":"transient timeout",
+			"event":{
+				"tenant_id":"tenant-a",
+				"provider":"shopify",
+				"entity_type":"product",
+				"entity_id":"sku-123",
+				"external_id":"gid://shopify/Product/1",
+				"operation":"upsert",
+				"version":"v1",
+				"payload":{"title":"Resistance Band Set","description":"Five resistance levels","price":49.95,"stock":12}
+			}
+		}
+	}`))
+	req.Header.Set("Authorization", "Bearer "+mintTestAccessToken(t, srv, "operator@example.com", security.RoleOperator))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", rec.Code, rec.Body.String())
+	}
+	input, ok := fake.startedArgs[0].(ecworkflow.MarketplaceReplayInput)
+	if !ok {
+		t.Fatalf("workflow arg = %#v, want MarketplaceReplayInput", fake.startedArgs)
+	}
+	if input.Record.ID != "dlq-123" || input.Record.Event.Provider != "shopify" {
+		t.Fatalf("input = %+v", input)
+	}
+}
+
 func TestStartProductPublishWorkflowRequiresConfiguredTemporalClient(t *testing.T) {
 	t.Parallel()
 
@@ -164,6 +249,32 @@ func TestStartProductPublishWorkflowRequiresConfiguredTemporalClient(t *testing.
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestMarketplaceWorkflowRoutesRequireOperatorRole(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := testServerWithCfg(t, workflowAuthServerConfig())
+	srv.configureSecurity()
+	srv.workflowClient = &fakeTemporalWorkflowClient{run: fakeWorkflowRun{id: "marketplace-sync", runID: "run-1"}}
+
+	body := bytes.NewBufferString(`{"event":{"tenant_id":"tenant-a","provider":"shopify","entity_type":"product","entity_id":"sku-123","operation":"upsert","version":"v1"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/marketplace-sync", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401; body=%s", rec.Code, rec.Body.String())
+	}
+
+	viewerReq := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/marketplace-sync", bytes.NewBufferString(`{"event":{"tenant_id":"tenant-a","provider":"shopify","entity_type":"product","entity_id":"sku-123","operation":"upsert","version":"v1"}}`))
+	viewerReq.Header.Set("Content-Type", "application/json")
+	viewerReq.Header.Set("Authorization", "Bearer "+mintTestAccessToken(t, srv, "viewer@example.com", security.RoleViewer))
+	viewerRec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(viewerRec, viewerReq)
+	if viewerRec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body=%s", viewerRec.Code, viewerRec.Body.String())
 	}
 }
 
@@ -426,9 +537,27 @@ func TestWorkflowAuditActionClassifiesMutations(t *testing.T) {
 	if got := workflowAuditAction(signal); got.Action != "workflow.product_publish.review_signal" || got.Resource != "wf-123" || !got.Mutates {
 		t.Fatalf("signal audit = %+v", got)
 	}
+	marketplaceStart := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/marketplace-sync", nil)
+	if got := workflowAuditAction(marketplaceStart); got.Action != "workflow.marketplace_sync.start" || got.Resource != "marketplace-sync" || !got.Mutates {
+		t.Fatalf("marketplace start audit = %+v", got)
+	}
+	marketplaceReplay := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/marketplace-replay", nil)
+	if got := workflowAuditAction(marketplaceReplay); got.Action != "workflow.marketplace_replay.start" || got.Resource != "marketplace-replay" || !got.Mutates {
+		t.Fatalf("marketplace replay audit = %+v", got)
+	}
 	read := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/wf-123", nil)
 	if got := workflowAuditAction(read); got.Action != "" || got.Mutates {
 		t.Fatalf("read audit = %+v, want empty", got)
+	}
+}
+
+func workflowAuthServerConfig() serverConfig {
+	return serverConfig{
+		jwtSecret:    "test-secret-at-least-32-bytes-long",
+		jwtIssuer:    "agentic-ecommerce",
+		jwtAudience:  "mc-api",
+		jwtAccessTTL: 15 * time.Minute,
+		refreshTTL:   24 * time.Hour,
 	}
 }
 

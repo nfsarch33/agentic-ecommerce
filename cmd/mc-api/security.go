@@ -274,6 +274,13 @@ func syncRole(r *http.Request) security.Role {
 	return security.RoleOperator
 }
 
+func workflowRole(r *http.Request) security.Role {
+	if r.Method == http.MethodGet {
+		return security.RoleViewer
+	}
+	return security.RoleOperator
+}
+
 func agentsRole(r *http.Request) security.Role {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/agents"), "/")
 	if strings.HasSuffix(path, "/run") && r.Method == http.MethodPost {
@@ -353,6 +360,8 @@ func cartAuditAction(r *http.Request) auditAction {
 func syncAuditAction(r *http.Request) auditAction {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/sync"), "/")
 	switch {
+	case strings.HasPrefix(path, "dlq/") && strings.HasSuffix(path, "/replay") && r.Method == http.MethodPost:
+		return auditAction{Action: "sync.marketplace_dlq_replay", Resource: path, Mutates: true}
 	case strings.HasPrefix(path, "conflicts/") && strings.HasSuffix(path, "/resolve") && r.Method == http.MethodPost:
 		return auditAction{Action: "sync.conflict_resolve", Resource: path, Mutates: true}
 	case strings.HasPrefix(path, "products/") && strings.HasSuffix(path, "/publish") && r.Method == http.MethodPost:
@@ -375,6 +384,10 @@ func workflowAuditAction(r *http.Request) auditAction {
 	switch {
 	case path == "product-publish" && r.Method == http.MethodPost:
 		return auditAction{Action: "workflow.product_publish.start", Resource: "product-publish", Mutates: true}
+	case path == "marketplace-sync" && r.Method == http.MethodPost:
+		return auditAction{Action: "workflow.marketplace_sync.start", Resource: "marketplace-sync", Mutates: true}
+	case path == "marketplace-replay" && r.Method == http.MethodPost:
+		return auditAction{Action: "workflow.marketplace_replay.start", Resource: "marketplace-replay", Mutates: true}
 	case path == "media-processing" && r.Method == http.MethodPost:
 		return auditAction{Action: "workflow.media_processing.start", Resource: "media-processing", Mutates: true}
 	case path == "sourcing" && r.Method == http.MethodPost:

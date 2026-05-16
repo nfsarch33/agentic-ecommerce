@@ -3,6 +3,8 @@ package marketplacesync
 import (
 	"context"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 type InMemoryLedger struct {
@@ -38,6 +40,9 @@ func NewInMemoryDLQ() *InMemoryDLQ { return &InMemoryDLQ{} }
 func (q *InMemoryDLQ) Enqueue(_ context.Context, record DLQRecord) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if record.ID == "" {
+		record.ID = uuid.NewString()
+	}
 	q.records = append(q.records, record)
 	return nil
 }
@@ -48,4 +53,21 @@ func (q *InMemoryDLQ) Records() []DLQRecord {
 	out := make([]DLQRecord, len(q.records))
 	copy(out, q.records)
 	return out
+}
+
+func (q *InMemoryDLQ) Record(id string) (DLQRecord, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for _, record := range q.records {
+		if record.ID == id {
+			return record, true
+		}
+	}
+	return DLQRecord{}, false
+}
+
+func (q *InMemoryDLQ) Depth() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.records)
 }
