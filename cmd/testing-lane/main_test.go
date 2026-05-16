@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	osexec "os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -63,8 +64,18 @@ func TestRunBackendIntegrationRunsExpectedCommands(t *testing.T) {
 	assertCalls(t, runner.calls, want)
 }
 
-func TestRunFrontendPlaywrightStableUsesFrontendRepo(t *testing.T) {
-	t.Parallel()
+func TestRunFrontendPlaywrightStableUsesBunWhenAvailable(t *testing.T) {
+	stubPackageRunnerDiscovery(
+		t,
+		func(name string) (string, error) {
+			if name == "bun" {
+				return "/custom/bin/bun", nil
+			}
+			return "", osexec.ErrNotFound
+		},
+		func() (string, error) { return "/home/tester", nil },
+		func(string) ([]string, error) { return nil, nil },
+	)
 	runner := &fakeRunner{}
 	var stdout, stderr bytes.Buffer
 	err := run(
@@ -83,9 +94,84 @@ func TestRunFrontendPlaywrightStableUsesFrontendRepo(t *testing.T) {
 		t.Fatalf("run: %v\nstderr=%s", err, stderr.String())
 	}
 	want := []commandCall{
-		{dir: "/frontend", name: "bun", args: []string{"run", "test:e2e:stable"}},
+		{dir: "/frontend", name: "/custom/bin/bun", args: []string{"run", "test:e2e:stable"}},
 	}
 	assertCalls(t, runner.calls, want)
+}
+
+func TestRunFrontendPlaywrightStableFallsBackToNVMNode(t *testing.T) {
+	stubPackageRunnerDiscovery(
+		t,
+		func(string) (string, error) { return "", osexec.ErrNotFound },
+		func() (string, error) { return "/home/tester", nil },
+		func(pattern string) ([]string, error) {
+			if pattern != "/home/tester/.nvm/versions/node/*/bin/node" {
+				t.Fatalf("unexpected glob pattern: %q", pattern)
+			}
+			return []string{
+				"/home/tester/.nvm/versions/node/v20.20.2/bin/node",
+				"/home/tester/.nvm/versions/node/v22.21.1/bin/node",
+			}, nil
+		},
+	)
+	runner := &fakeRunner{}
+	var stdout, stderr bytes.Buffer
+	err := run(
+		[]string{"--lane=frontend-playwright-stable", "--repo-root=/repo", "--frontend-repo=/frontend"},
+		&stdout,
+		&stderr,
+		func(string) string { return "" },
+		runner,
+		nil,
+		func(context.Context, string, commandRunner, ioWriterPair) (cleanupSummary, error) {
+			t.Fatal("cleanup should not run")
+			return cleanupSummary{}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("run: %v\nstderr=%s", err, stderr.String())
+	}
+	want := []commandCall{
+		{
+			dir:  "/frontend",
+			name: "/home/tester/.nvm/versions/node/v22.21.1/bin/node",
+			args: []string{
+				"/home/tester/.nvm/versions/node/v22.21.1/lib/node_modules/npm/bin/npm-cli.js",
+				"run",
+				"test:e2e:stable",
+			},
+		},
+	}
+	assertCalls(t, runner.calls, want)
+}
+
+func TestRunFrontendPlaywrightStableErrorsWhenNoRunnerIsAvailable(t *testing.T) {
+	stubPackageRunnerDiscovery(
+		t,
+		func(string) (string, error) { return "", osexec.ErrNotFound },
+		func() (string, error) { return "/home/tester", nil },
+		func(string) ([]string, error) { return nil, nil },
+	)
+	runner := &fakeRunner{}
+	var stdout, stderr bytes.Buffer
+	err := run(
+		[]string{"--lane=frontend-playwright-stable", "--repo-root=/repo", "--frontend-repo=/frontend"},
+		&stdout,
+		&stderr,
+		func(string) string { return "" },
+		runner,
+		nil,
+		func(context.Context, string, commandRunner, ioWriterPair) (cleanupSummary, error) {
+			t.Fatal("cleanup should not run")
+			return cleanupSummary{}, nil
+		},
+	)
+	if err == nil {
+		t.Fatal("expected missing runner error")
+	}
+	if !strings.Contains(err.Error(), "resolve frontend package runner") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestRunFrontendUIAutoCompareRunsConfigAndCompare(t *testing.T) {
@@ -323,4 +409,19 @@ func TestParseArgsTimeoutAndDefaults(t *testing.T) {
 	if cfg.StagingBaseURL != "https://example.com" {
 		t.Fatalf("stagingBaseURL = %q", cfg.StagingBaseURL)
 	}
+}
+
+func stubPackageRunnerDiscovery(t *testing.T, stubLookPath func(string) (string, error), stubUserHomeDir func() (string, error), stubGlob func(string) ([]string, error)) {
+	t.Helper()
+	oldLookPath := lookPath
+	oldUserHomeDir := userHomeDir
+	oldGlobPaths := globPaths
+	lookPath = stubLookPath
+	userHomeDir = stubUserHomeDir
+	globPaths = stubGlob
+	t.Cleanup(func() {
+		lookPath = oldLookPath
+		userHomeDir = oldUserHomeDir
+		globPaths = oldGlobPaths
+	})
 }
