@@ -12,5 +12,10 @@ import (
 // which uses internal/workerpool (no raw goroutines) but spawns a
 // drain goroutine that must exit on every code path.
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	goleak.VerifyTestMain(m,
+		// Testcontainers leaves the Ryuk reaper connection goroutine alive briefly
+		// after container cleanup on Docker Desktop. Keep goleak enabled for the
+		// package, but ignore this known external test harness goroutine.
+		goleak.IgnoreTopFunction("github.com/testcontainers/testcontainers-go.(*Reaper).connect.func1"),
+	)
 }
