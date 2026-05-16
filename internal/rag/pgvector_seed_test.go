@@ -163,8 +163,8 @@ func TestPGVectorStoreSeededFixtureUpsertsAndSearches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	if len(results) == 0 || results[0].ChunkID != "chunk-resistance" {
-		t.Fatalf("top result = %+v, want chunk-resistance first", results)
+	if len(results) == 0 || results[0].DocumentID != "doc-resistance" {
+		t.Fatalf("top result = %+v, want doc-resistance first", results)
 	}
 
 	// Verify tenant isolation: searching as tenant-b returns no chunks.
