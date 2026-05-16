@@ -16,7 +16,6 @@ package rag_test
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -107,8 +106,19 @@ func TestPGVectorStoreSeededFixtureUpsertsAndSearches(t *testing.T) {
 	pool := startContainerPool(t)
 	ctx := context.Background()
 
-	store := rag.NewPGVectorStore(pool, 4)
+	store := rag.NewPGVectorStore(pool, rag.DefaultEmbeddingDimensions)
+	embedder := rag.NewHashEmbedder(rag.DefaultEmbeddingDimensions)
 	now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+	chunkTexts := []string{
+		"Resistance bands ship as a set of five colour-coded levels",
+		"High-density TPE yoga mat available in two thickness profiles",
+		"Resistance bands colour-coded levels",
+		"Resistance bands bundle for progressive strength training",
+	}
+	embeddings, err := embedder.Embed(ctx, chunkTexts)
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
 
 	chunks := []rag.EmbeddedChunk{
 		{
@@ -123,7 +133,7 @@ func TestPGVectorStoreSeededFixtureUpsertsAndSearches(t *testing.T) {
 				Metadata:   map[string]string{"sku": "RB"},
 				CreatedAt:  now,
 			},
-			Embedding: []float64{1, 0, 0, 0},
+			Embedding: embeddings[0],
 		},
 		{
 			Chunk: rag.Chunk{
@@ -137,7 +147,7 @@ func TestPGVectorStoreSeededFixtureUpsertsAndSearches(t *testing.T) {
 				Metadata:   map[string]string{"sku": "YM"},
 				CreatedAt:  now,
 			},
-			Embedding: []float64{0, 1, 0, 0},
+			Embedding: embeddings[1],
 		},
 	}
 
@@ -147,20 +157,20 @@ func TestPGVectorStoreSeededFixtureUpsertsAndSearches(t *testing.T) {
 
 	results, err := store.Search(ctx, rag.SearchQuery{
 		TenantID:  "tenant-a",
-		Embedding: []float64{0.95, 0.05, 0, 0},
+		Embedding: embeddings[2],
 		TopK:      2,
 	})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	if len(results) == 0 || results[0].ChunkID != "chunk-resistance" {
-		t.Fatalf("top result = %+v, want chunk-resistance first", results)
+	if len(results) == 0 || results[0].DocumentID != "doc-resistance" {
+		t.Fatalf("top result = %+v, want doc-resistance first", results)
 	}
 
 	// Verify tenant isolation: searching as tenant-b returns no chunks.
 	emptyResults, err := store.Search(ctx, rag.SearchQuery{
 		TenantID:  "tenant-b",
-		Embedding: []float64{0.95, 0.05, 0, 0},
+		Embedding: embeddings[2],
 		TopK:      5,
 	})
 	if err != nil {
@@ -172,7 +182,7 @@ func TestPGVectorStoreSeededFixtureUpsertsAndSearches(t *testing.T) {
 
 	// Asserts the unique constraint on (tenant_id, source_uri) by re-upserting with a
 	// new embedding and ensuring the chunk count stays stable.
-	chunks[0].Embedding = []float64{0.5, 0.5, 0, 0}
+	chunks[0].Embedding = embeddings[3]
 	if err := store.UpsertChunks(ctx, chunks); err != nil {
 		t.Fatalf("re-UpsertChunks: %v", err)
 	}
@@ -183,5 +193,4 @@ func TestPGVectorStoreSeededFixtureUpsertsAndSearches(t *testing.T) {
 	if count != 2 {
 		t.Fatalf("chunk count after re-upsert = %d, want 2 (UPSERT, not duplicated)", count)
 	}
-	_ = fmt.Sprintf // keep fmt import if test grows
 }
