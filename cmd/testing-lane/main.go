@@ -11,8 +11,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+)
+
+var (
+	lookPath    = exec.LookPath
+	userHomeDir = os.UserHomeDir
+	globPaths   = filepath.Glob
 )
 
 type config struct {
@@ -102,9 +109,13 @@ func run(args []string, stdout io.Writer, stderr io.Writer, getenv func(string) 
 			},
 		)
 	case "frontend-playwright-stable":
+		command, err := resolveFrontendPlaywrightCommand(cfg.FrontendRepoPath)
+		if err != nil {
+			return err
+		}
 		return runCommands(ctx, runner, cfg.RepoRoot,
 			[]commandSpec{
-				{Dir: cfg.FrontendRepoPath, Name: "bun", Args: []string{"run", "test:e2e:stable"}},
+				command,
 			},
 		)
 	case "frontend-uiauto-compare":
@@ -141,6 +152,86 @@ type commandSpec struct {
 	Dir  string
 	Name string
 	Args []string
+}
+
+func resolveFrontendPlaywrightCommand(frontendRepoPath string) (commandSpec, error) {
+	bunPath, bunErr := resolveBunExecutable()
+	if bunErr == nil {
+		return commandSpec{Dir: frontendRepoPath, Name: bunPath, Args: []string{"run", "test:e2e:stable"}}, nil
+	}
+
+	npmPath, npmErr := resolveNPMExecutable()
+	if npmErr == nil {
+		return commandSpec{Dir: frontendRepoPath, Name: npmPath, Args: []string{"run", "test:e2e:stable"}}, nil
+	}
+
+	nodePath, npmCLIPath, nvmErr := resolveNVMNodeAndNPMCLI()
+	if nvmErr == nil {
+		return commandSpec{
+			Dir:  frontendRepoPath,
+			Name: nodePath,
+			Args: []string{npmCLIPath, "run", "test:e2e:stable"},
+		}, nil
+	}
+
+	return commandSpec{}, fmt.Errorf(
+		"resolve frontend package runner: bun unavailable (%v); npm unavailable (%v); nvm fallback unavailable (%v)",
+		bunErr,
+		npmErr,
+		nvmErr,
+	)
+}
+
+func resolveBunExecutable() (string, error) {
+	if bunPath, err := lookPath("bun"); err == nil {
+		return bunPath, nil
+	}
+
+	home, err := userHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir for bun: %w", err)
+	}
+
+	bunPath := filepath.Join(home, ".bun", "bin", "bun")
+	if _, err := os.Stat(bunPath); err == nil {
+		return bunPath, nil
+	}
+
+	return "", fmt.Errorf("bun not found in PATH or %s", bunPath)
+}
+
+func resolveNPMExecutable() (string, error) {
+	if _, err := lookPath("node"); err != nil {
+		return "", fmt.Errorf("node not found on PATH: %w", err)
+	}
+
+	npmPath, err := lookPath("npm")
+	if err != nil {
+		return "", fmt.Errorf("npm not found on PATH: %w", err)
+	}
+
+	return npmPath, nil
+}
+
+func resolveNVMNodeAndNPMCLI() (string, string, error) {
+	home, err := userHomeDir()
+	if err != nil {
+		return "", "", fmt.Errorf("resolve home dir for nvm: %w", err)
+	}
+
+	pattern := filepath.Join(home, ".nvm", "versions", "node", "*", "bin", "node")
+	candidates, err := globPaths(pattern)
+	if err != nil {
+		return "", "", fmt.Errorf("glob %s: %w", pattern, err)
+	}
+	if len(candidates) == 0 {
+		return "", "", fmt.Errorf("no nvm node binaries found under %s", filepath.Join(home, ".nvm", "versions", "node"))
+	}
+
+	sort.Strings(candidates)
+	nodePath := candidates[len(candidates)-1]
+	npmCLIPath := filepath.Clean(filepath.Join(filepath.Dir(nodePath), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"))
+	return nodePath, npmCLIPath, nil
 }
 
 func runCommands(ctx context.Context, runner commandRunner, repoRoot string, commands []commandSpec) error {
