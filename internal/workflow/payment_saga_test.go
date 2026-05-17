@@ -146,6 +146,30 @@ func TestPaymentSaga_PersistentFailure(t *testing.T) {
 	assert.Contains(t, wfErr.Error(), "retry exhausted")
 }
 
+func TestPaymentSaga_PersistentFailureMarksOrderFailed(t *testing.T) {
+	t.Parallel()
+	env := newPaymentEnv(t)
+	input := basePaymentInput()
+	input.MaxRetries = 2
+
+	env.OnActivity(SelectPaymentProviderActivity, mock.Anything, mock.Anything).
+		Return(ProviderSelection{Provider: "stripe"}, nil)
+	env.OnActivity(ChargePaymentActivity, mock.Anything, mock.Anything).
+		Return(ChargeResult{}, port.ErrPaymentDeclined)
+	env.OnActivity(UpdateOrderStatusActivity, mock.Anything, mock.MatchedBy(func(update orderStatusUpdate) bool {
+		return update.Input.OrderID == input.OrderID && update.Status == "failed"
+	})).Return(nil).Once()
+	env.OnActivity(NotifyPaymentOperatorActivity, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(PublishPaymentEventActivity, mock.Anything, mock.MatchedBy(func(args paymentPublishArgs) bool {
+		return args.State == "failed"
+	})).Return(nil)
+
+	env.ExecuteWorkflow(PaymentSagaWorkflow, input)
+	require.True(t, env.IsWorkflowCompleted())
+	require.Error(t, env.GetWorkflowError())
+	env.AssertExpectations(t)
+}
+
 func TestPaymentSaga_RefundOnReturns(t *testing.T) {
 	t.Parallel()
 	deps := PaymentSagaActivityDeps{

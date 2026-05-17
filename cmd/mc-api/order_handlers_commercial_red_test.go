@@ -97,3 +97,26 @@ func TestCreateOrderRejectsUnsupportedDeliveryOption(t *testing.T) {
 		t.Fatalf("unsupported delivery option status = %d, want 422; body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestCreateOrderRejectsIdempotencyReplayPayloadMismatch(t *testing.T) {
+	t.Parallel()
+	srv, _ := testServer(t)
+
+	first := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(validCommercialOrderRequest))
+	first.Header.Set("Content-Type", "application/json")
+	firstRec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(firstRec, first)
+	if firstRec.Code != http.StatusCreated {
+		t.Fatalf("first create status = %d, want 201; body=%s", firstRec.Code, firstRec.Body.String())
+	}
+
+	mismatch := strings.Replace(validCommercialOrderRequest, "\"delivery_option\":\"standard\"", "\"delivery_option\":\"express\"", 1)
+	second := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(mismatch))
+	second.Header.Set("Content-Type", "application/json")
+	secondRec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(secondRec, second)
+
+	if secondRec.Code != http.StatusConflict {
+		t.Fatalf("payload mismatch replay status = %d, want 409; body=%s", secondRec.Code, secondRec.Body.String())
+	}
+}
