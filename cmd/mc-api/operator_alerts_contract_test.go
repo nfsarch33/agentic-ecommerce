@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
@@ -29,6 +30,15 @@ func assertOperatorAlertRouteMounted(t *testing.T, method, path string) {
 	t.Helper()
 
 	srv := newOperatorAlertsContractServer(t)
+	if strings.Contains(path, "/resolve") {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/operator/alerts/alert-1/acknowledge?tenant_id=load-test-tenant", nil)
+		req.Header.Set("X-Tenant-Id", "load-test-tenant")
+		rec := httptest.NewRecorder()
+		srv.mux().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("failed to prepare acknowledged alert for resolve route: status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	}
 
 	req := httptest.NewRequest(method, path, nil)
 	req.Header.Set("X-Tenant-Id", "load-test-tenant")

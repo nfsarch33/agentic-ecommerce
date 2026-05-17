@@ -212,6 +212,9 @@ func (s *server) applyProductPublishSnapshot(ctx context.Context, detail *workfl
 	detail.CompletedAt = firstNonEmpty(snapshot.CompletedAt, detail.CompletedAt)
 	detail.Activities = mapLifecycleStages(snapshot.Activities)
 	detail.Review = workflowReview(snapshot.Review)
+	if detail.Review == nil && snapshot.Status == ecworkflow.ProductPublishStatusRejected {
+		detail.Review = &workflowReviewResponse{Approved: false}
+	}
 
 	for _, stage := range snapshot.Activities {
 		if stage.Error != "" {
