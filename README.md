@@ -148,6 +148,10 @@ ec-cli plugin validate --path ./my-plugin  # validate a marketplace plugin
 - Backend OpenAPI contract: `api/openapi.yaml`
 - API capability guide: `docs/api-reference.md`
 - Temporal workflow specs: `docs/temporal-workflow-specs.md`
+- Workflow lifecycle operator contract: `GET /api/v1/workflows`,
+  `GET /api/v1/workflows/{id}`, and
+  `POST /api/v1/workflows/{id}/signals/review` return authoritative workflow
+  summaries/details so admin clients do not synthesize timeline state.
 - Webhook contracts: `docs/webhook-contracts.md`
 - Cloud deployment guide: `docs/cloud-deploy.md`
 - Demo walkthrough: `docs/demo/v500-demo-script.md`

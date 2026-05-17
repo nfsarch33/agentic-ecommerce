@@ -13,9 +13,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
+	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
@@ -24,6 +26,8 @@ import (
 type temporalWorkflowClient interface {
 	ExecuteWorkflow(context.Context, client.StartWorkflowOptions, any, ...any) (workflowRun, error)
 	DescribeWorkflowExecution(context.Context, string, string) (*workflowservicepb.DescribeWorkflowExecutionResponse, error)
+	ListWorkflow(context.Context, *workflowservicepb.ListWorkflowExecutionsRequest) (*workflowservicepb.ListWorkflowExecutionsResponse, error)
+	QueryWorkflow(context.Context, string, string, string, ...interface{}) (converter.EncodedValue, error)
 	SignalWorkflow(context.Context, string, string, string, any) error
 }
 
@@ -130,30 +134,40 @@ func (a temporalClientAdapter) ExecuteWorkflow(ctx context.Context, options clie
 	return a.Client.ExecuteWorkflow(ctx, options, workflow, args...)
 }
 
+var workflowStartHandlers = map[string]func(*server, http.ResponseWriter, *http.Request){
+	"product-publish":    (*server).startProductPublishWorkflow,
+	"content-generation": (*server).startContentGenerationWorkflow,
+	"media-processing":   (*server).startMediaProcessingWorkflow,
+	"sourcing":           (*server).startSourcingWorkflow,
+	"marketplace-sync":   (*server).startMarketplaceSyncWorkflow,
+	"marketplace-replay": (*server).startMarketplaceReplayWorkflow,
+}
+
 func (s *server) workflowsHandler(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/workflows")
 	path = strings.Trim(path, "/")
 
-	switch {
-	case path == "product-publish" && r.Method == http.MethodPost:
-		s.startProductPublishWorkflow(w, r)
-	case path == "content-generation" && r.Method == http.MethodPost:
-		s.startContentGenerationWorkflow(w, r)
-	case path == "media-processing" && r.Method == http.MethodPost:
-		s.startMediaProcessingWorkflow(w, r)
-	case path == "sourcing" && r.Method == http.MethodPost:
-		s.startSourcingWorkflow(w, r)
-	case path == "marketplace-sync" && r.Method == http.MethodPost:
-		s.startMarketplaceSyncWorkflow(w, r)
-	case path == "marketplace-replay" && r.Method == http.MethodPost:
-		s.startMarketplaceReplayWorkflow(w, r)
-	case strings.HasSuffix(path, "/signals/review") && r.Method == http.MethodPost:
-		s.signalProductPublishReview(w, r, path)
-	case path != "" && r.Method == http.MethodGet:
+	if r.Method == http.MethodGet {
+		if path == "" {
+			s.listWorkflows(w, r)
+			return
+		}
 		s.getWorkflowStatus(w, r, path)
-	default:
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+		return
 	}
+
+	if r.Method == http.MethodPost {
+		if strings.HasSuffix(path, "/signals/review") {
+			s.signalProductPublishReview(w, r, path)
+			return
+		}
+		if handler, ok := workflowStartHandlers[path]; ok {
+			handler(s, w, r)
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 }
 
 func (s *server) startSourcingWorkflow(w http.ResponseWriter, r *http.Request) {
@@ -263,32 +277,12 @@ func (s *server) startContentGenerationWorkflow(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
 		return
 	}
-	productID, err := uuid.Parse(req.ProductID)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_product_id"})
-		return
-	}
-	product, err := s.repo.GetByID(r.Context(), productID)
-	if err != nil {
-		if isNotFound(err) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
-			return
-		}
-		s.log.Error("get product for content workflow", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+	product, productID, ok := s.loadProductForWorkflow(w, r, req.ProductID, "get product for content workflow")
+	if !ok {
 		return
 	}
 	productInfo := toContentProductInfo(product)
-	agentReq := contentagent.GenerateRequest{
-		Product:  productInfo,
-		Style:    normalizeContentStyle(req.Style),
-		Language: req.Language,
-		MaxWords: req.MaxWords,
-		Keywords: req.Keywords,
-	}
-	if agentReq.MaxWords == 0 {
-		agentReq.MaxWords = 120
-	}
+	agentReq := toContentGenerationRequest(productInfo, req)
 	workflowID := fmt.Sprintf("content-generation-%s-%s", productID.String(), uuid.NewString())
 	run, err := s.workflowClient.ExecuteWorkflow(
 		r.Context(),
@@ -401,21 +395,10 @@ func (s *server) startProductPublishWorkflow(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
 		return
 	}
-	productID, err := uuid.Parse(req.ProductID)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_product_id"})
+	_, productID, ok := s.loadProductForWorkflow(w, r, req.ProductID, "get product for workflow")
+	if !ok {
 		return
 	}
-	if _, err := s.repo.GetByID(r.Context(), productID); err != nil {
-		if isNotFound(err) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
-			return
-		}
-		s.log.Error("get product for workflow", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
-		return
-	}
-
 	workflowID := fmt.Sprintf("product-publish-%s-%s", productID.String(), uuid.NewString())
 	run, err := s.workflowClient.ExecuteWorkflow(
 		r.Context(),
@@ -436,84 +419,21 @@ func (s *server) startProductPublishWorkflow(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-func (s *server) getWorkflowStatus(w http.ResponseWriter, r *http.Request, workflowID string) {
-	if s.workflowClient == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporal_not_configured"})
-		return
-	}
-	resp, err := s.workflowClient.DescribeWorkflowExecution(r.Context(), workflowID, "")
-	if err != nil {
-		s.log.Error("describe workflow", "workflow_id", workflowID, "error", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "workflow_describe_failed"})
-		return
-	}
-	info := resp.GetWorkflowExecutionInfo()
-	if info == nil || info.GetExecution() == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
-		return
-	}
-	var startTime *time.Time
-	if ts := info.GetStartTime(); ts != nil {
-		t := ts.AsTime()
-		startTime = &t
-	}
-	var closeTime *time.Time
-	if ts := info.GetCloseTime(); ts != nil {
-		t := ts.AsTime()
-		closeTime = &t
-	}
-	writeJSON(w, http.StatusOK, workflowStatusResponse{
-		WorkflowID: info.GetExecution().GetWorkflowId(),
-		RunID:      info.GetExecution().GetRunId(),
-		Status:     workflowStatus(info.GetStatus()),
-		StartTime:  startTime,
-		CloseTime:  closeTime,
-	})
-}
-
-func (s *server) signalProductPublishReview(w http.ResponseWriter, r *http.Request, path string) {
-	if s.workflowClient == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporal_not_configured"})
-		return
-	}
-	workflowID := strings.TrimSuffix(path, "/signals/review")
-	workflowID = strings.Trim(workflowID, "/")
-	if workflowID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_workflow_id"})
-		return
-	}
-	var signal ecworkflow.ReviewSignal
-	if err := json.NewDecoder(r.Body).Decode(&signal); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
-		return
-	}
-	if err := s.workflowClient.SignalWorkflow(r.Context(), workflowID, "", ecworkflow.ProductPublishReviewSignal, signal); err != nil {
-		s.log.Error("signal workflow review", "workflow_id", workflowID, "error", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "workflow_signal_failed"})
-		return
-	}
-	writeJSON(w, http.StatusAccepted, map[string]string{"status": "signaled"})
+var workflowStatuses = map[enumspb.WorkflowExecutionStatus]string{
+	enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:          "running",
+	enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:        "completed",
+	enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:           "failed",
+	enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED:         "canceled",
+	enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:       "terminated",
+	enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW: "continued_as_new",
+	enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:        "timed_out",
 }
 
 func workflowStatus(status enumspb.WorkflowExecutionStatus) string {
-	switch status {
-	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
-		return "running"
-	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
-		return "completed"
-	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:
-		return "failed"
-	case enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED:
-		return "canceled"
-	case enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:
-		return "terminated"
-	case enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
-		return "continued_as_new"
-	case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
-		return "timed_out"
-	default:
-		return "unspecified"
+	if normalized, ok := workflowStatuses[status]; ok {
+		return normalized
 	}
+	return "unspecified"
 }
 
 func (p marketplaceSyncEventPayload) toProductEvent() (marketplacesync.ProductEvent, string) {
@@ -527,22 +447,10 @@ func (p marketplaceSyncEventPayload) toProductEvent() (marketplacesync.ProductEv
 		Version:    strings.TrimSpace(p.Version),
 		Payload:    p.Payload,
 	}
-	switch {
-	case event.TenantID == "":
-		return marketplacesync.ProductEvent{}, "tenant_id_required"
-	case event.Provider == "":
-		return marketplacesync.ProductEvent{}, "provider_required"
-	case event.EntityType == "":
-		return marketplacesync.ProductEvent{}, "entity_type_required"
-	case event.EntityID == "":
-		return marketplacesync.ProductEvent{}, "entity_id_required"
-	case event.Operation == "":
-		return marketplacesync.ProductEvent{}, "operation_required"
-	case event.Version == "":
-		return marketplacesync.ProductEvent{}, "version_required"
-	default:
-		return event, ""
+	if errCode := validateMarketplaceEvent(event); errCode != "" {
+		return marketplacesync.ProductEvent{}, errCode
 	}
+	return event, ""
 }
 
 func (p marketplaceDLQRecordPayload) toDLQRecord() (marketplacesync.DLQRecord, string) {
@@ -582,4 +490,57 @@ func marketplaceDLQRecordFromDomain(record marketplacesync.DLQRecord) marketplac
 		Attempts: record.Attempts,
 		Reason:   record.Reason,
 	}
+}
+
+func (s *server) loadProductForWorkflow(w http.ResponseWriter, r *http.Request, rawProductID, logMessage string) (catalog.Product, uuid.UUID, bool) {
+	productID, err := uuid.Parse(rawProductID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_product_id"})
+		return catalog.Product{}, uuid.Nil, false
+	}
+	product, err := s.repo.GetByID(r.Context(), productID)
+	if err != nil {
+		if isNotFound(err) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+			return catalog.Product{}, uuid.Nil, false
+		}
+		s.log.Error(logMessage, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+		return catalog.Product{}, uuid.Nil, false
+	}
+	return product, productID, true
+}
+
+func toContentGenerationRequest(product contentagent.ProductInfo, req startContentGenerationWorkflowRequest) contentagent.GenerateRequest {
+	generateRequest := contentagent.GenerateRequest{
+		Product:  product,
+		Style:    normalizeContentStyle(req.Style),
+		Language: req.Language,
+		MaxWords: req.MaxWords,
+		Keywords: req.Keywords,
+	}
+	if generateRequest.MaxWords == 0 {
+		generateRequest.MaxWords = 120
+	}
+	return generateRequest
+}
+
+func validateMarketplaceEvent(event marketplacesync.ProductEvent) string {
+	checks := []struct {
+		valid bool
+		code  string
+	}{
+		{valid: event.TenantID != "", code: "tenant_id_required"},
+		{valid: event.Provider != "", code: "provider_required"},
+		{valid: event.EntityType != "", code: "entity_type_required"},
+		{valid: event.EntityID != "", code: "entity_id_required"},
+		{valid: event.Operation != "", code: "operation_required"},
+		{valid: event.Version != "", code: "version_required"},
+	}
+	for _, check := range checks {
+		if !check.valid {
+			return check.code
+		}
+	}
+	return ""
 }

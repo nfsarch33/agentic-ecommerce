@@ -2656,9 +2656,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/workflows:
+    get:
+      summary: List Temporal workflows with lifecycle visibility
+      operationId: listWorkflows
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [queued, running, waiting_review, completed, failed, canceled, terminated, continued_as_new, timed_out, unspecified]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: Workflow lifecycle summaries for operator and UI surfaces.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowListResponse'
+        '503':
+          description: Temporal client is not configured for the API process.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Temporal visibility request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/workflows/{id}:
     get:
-      summary: Get Temporal workflow status
+      summary: Get Temporal workflow lifecycle detail
       operationId: getWorkflowStatus
       security:
         - bearerAuth: []
@@ -2671,11 +2709,11 @@ paths:
             minLength: 1
       responses:
         '200':
-          description: Temporal workflow execution status.
+          description: Temporal workflow execution detail.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkflowStatusResponse'
+                $ref: '#/components/schemas/WorkflowDetailResponse'
         '404':
           description: Workflow execution was not found in Temporal visibility.
           content:
@@ -2715,11 +2753,11 @@ paths:
               $ref: '#/components/schemas/ProductPublishReviewSignal'
       responses:
         '202':
-          description: Review signal accepted by Temporal.
+          description: Review signal accepted by Temporal with the latest observed workflow snapshot.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StatusResponse'
+                $ref: '#/components/schemas/WorkflowSignalResponse'
         '400':
           description: Invalid JSON body or workflow ID.
           content:
@@ -5510,6 +5548,109 @@ components:
       properties:
         record:
           $ref: '#/components/schemas/MarketplaceDLQRecord'
+    WorkflowSummaryResponse:
+      type: object
+      required: [id, type, status, started_at, updated_at]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, waiting_review, completed, failed, canceled, terminated, continued_as_new, timed_out, unspecified]
+        product_id:
+          type: string
+        product_title:
+          type: string
+        current_activity:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        error:
+          type: string
+    WorkflowActivityResponse:
+      type: object
+      required: [id, name, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, waiting_review, completed, failed, skipped]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        message:
+          type: string
+        attempt:
+          type: integer
+          minimum: 1
+        error:
+          type: string
+    WorkflowListResponse:
+      type: object
+      required: [workflows]
+      properties:
+        workflows:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowSummaryResponse'
+    WorkflowDetailResponse:
+      type: object
+      required: [id, type, status, started_at, updated_at, activities]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, waiting_review, completed, failed, canceled, terminated, continued_as_new, timed_out, unspecified]
+        product_id:
+          type: string
+        product_title:
+          type: string
+        current_activity:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        error:
+          type: string
+        run_id:
+          type: string
+        activities:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowActivityResponse'
+    WorkflowSignalResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [signaled]
+        workflow:
+          $ref: '#/components/schemas/WorkflowDetailResponse'
     WorkflowStatusResponse:
       type: object
       required: [workflow_id, status]

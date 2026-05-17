@@ -642,6 +642,7 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/workflows/sourcing", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/marketplace-sync", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/marketplace-replay", workflowsAPI)
+	mux.HandleFunc("/api/v1/workflows", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/", workflowsAPI)
 	ragAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.ragHandler)))
 	mux.HandleFunc("/api/v1/rag/documents", ragAPI)
