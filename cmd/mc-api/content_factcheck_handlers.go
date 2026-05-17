@@ -46,6 +46,8 @@ func (s *server) generateContentWithFactCheck(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "content_fact_check_not_configured"})
 		return
 	}
+	r, cancel := s.withDependencyDeadline(r)
+	defer cancel()
 	var req generateFactCheckedContentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
@@ -56,7 +58,7 @@ func (s *server) generateContentWithFactCheck(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_product_id"})
 		return
 	}
-	product, err := s.repo.GetByID(r.Context(), productID)
+	product, err := s.productForRequest(r, productID.String())
 	if err != nil {
 		if isNotFound(err) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
@@ -79,12 +81,25 @@ func (s *server) generateContentWithFactCheck(w http.ResponseWriter, r *http.Req
 	result, err := s.contentAgent.Generate(r.Context(), agentReq)
 	if err != nil {
 		s.log.Error("generate fact checked content", "product_id", productID.String(), "error", err)
+		if isDependencyTimeout(err) {
+			writeDependencyTimeout(w)
+			return
+		}
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "content_generation_failed"})
 		return
 	}
-	factCheck, err := s.factChecker.Check(r.Context(), result.GeneratedContent)
+	factChecker, err := s.factCheckerForRequest(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
+		return
+	}
+	factCheck, err := factChecker.Check(r.Context(), result.GeneratedContent)
 	if err != nil {
 		s.log.Error("fact check generated content", "product_id", productID.String(), "error", err)
+		if isDependencyTimeout(err) {
+			writeDependencyTimeout(w)
+			return
+		}
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "fact_check_failed"})
 		return
 	}
@@ -137,4 +152,18 @@ func (s *server) loadFactCheckResult(id string) (contentagent.FactCheckResult, b
 	defer s.factChecksMu.RUnlock()
 	result, ok := s.factChecks[id]
 	return result, ok
+}
+
+func (s *server) factCheckerForRequest(r *http.Request) (*contentagent.FactChecker, error) {
+	tenantID, scoped, err := s.tenantIDForScopedRequest(r)
+	if err != nil {
+		return nil, err
+	}
+	if !scoped || s.rag == nil {
+		return s.factChecker, nil
+	}
+	return contentagent.NewFactChecker(tenantScopedEvidenceSearcher{
+		service:  s.rag,
+		tenantID: string(tenantID),
+	}, contentagent.FactCheckOptions{}), nil
 }

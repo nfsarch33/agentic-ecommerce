@@ -134,6 +134,7 @@ type serverConfig struct {
 	rateLimitRefill   time.Duration
 	readinessTimeout  time.Duration
 	redisTimeout      time.Duration
+	dependencyTimeout time.Duration
 	shutdownTimeout   time.Duration
 	otelEnabled       bool
 }
@@ -352,6 +353,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	webhookSecret := getenv("ECOMMERCE_WC_WEBHOOK_SECRET", "")
 	readinessTimeout := parseDurationEnv("ECOMMERCE_READINESS_TIMEOUT", 2*time.Second)
 	redisTimeout := parseDurationEnv("ECOMMERCE_REDIS_TIMEOUT", 500*time.Millisecond)
+	dependencyTimeout := parseDurationEnv("ECOMMERCE_DEPENDENCY_TIMEOUT", 5*time.Second)
 	shutdownTimeout := parseDurationEnv("ECOMMERCE_SHUTDOWN_TIMEOUT", 10*time.Second)
 	jwtSecret, jwtIssuer, jwtAudience, jwtAccessTTL, refreshTTL, adminUsername, adminPassword, adminRole, rateLimitCapacity, rateLimitRefill := securityConfigFromEnv()
 	readinessChecks, cleanup := newReadinessChecksFromEnv(readinessTimeout)
@@ -459,6 +461,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 			rateLimitRefill:   rateLimitRefill,
 			readinessTimeout:  readinessTimeout,
 			redisTimeout:      redisTimeout,
+			dependencyTimeout: dependencyTimeout,
 			shutdownTimeout:   shutdownTimeout,
 			otelEnabled:       otelEnabled,
 		},

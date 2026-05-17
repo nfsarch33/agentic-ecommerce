@@ -408,6 +408,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: Content generation exceeded the bounded dependency timeout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/products/{id}/ai-suggestions:
     get:
       summary: Get AI content suggestions for a product
@@ -453,6 +459,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: Content generation exceeded the bounded dependency timeout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/rag/documents:
     post:
       summary: Ingest a RAG source document
@@ -487,6 +499,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
           description: RAG service is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: Document ingest exceeded the bounded dependency timeout.
           content:
             application/json:
               schema:
@@ -526,6 +544,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
           description: RAG service is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: RAG search exceeded the bounded dependency timeout.
           content:
             application/json:
               schema:
@@ -570,6 +594,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
           description: Content generator or fact checker is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: Content generation or fact-checking exceeded the bounded dependency timeout.
           content:
             application/json:
               schema:
