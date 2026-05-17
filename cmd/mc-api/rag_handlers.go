@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -34,6 +35,8 @@ func (s *server) ingestRAGDocument(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "rag_not_configured"})
 		return
 	}
+	r, cancel := s.withDependencyDeadline(r)
+	defer cancel()
 	var doc rag.Document
 	if err := json.NewDecoder(r.Body).Decode(&doc); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
@@ -47,6 +50,10 @@ func (s *server) ingestRAGDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := s.rag.Ingest(r.Context(), doc)
 	if err != nil {
+		if isDependencyTimeout(err) {
+			writeDependencyTimeout(w)
+			return
+		}
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
@@ -58,6 +65,8 @@ func (s *server) searchRAGEvidence(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "rag_not_configured"})
 		return
 	}
+	r, cancel := s.withDependencyDeadline(r)
+	defer cancel()
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	if query == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing_query"})
@@ -77,8 +86,21 @@ func (s *server) searchRAGEvidence(w http.ResponseWriter, r *http.Request) {
 	results, err := s.rag.Search(r.Context(), search)
 	if err != nil {
 		s.log.Error("rag search", "error", err)
+		if isDependencyTimeout(err) {
+			writeDependencyTimeout(w)
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "rag_search_failed"})
 		return
 	}
 	writeJSON(w, http.StatusOK, ragSearchResponse{Query: query, Results: results})
+}
+
+type tenantScopedEvidenceSearcher struct {
+	service  *rag.Service
+	tenantID string
+}
+
+func (s tenantScopedEvidenceSearcher) SearchText(ctx context.Context, query string, topK int) ([]rag.SearchResult, error) {
+	return s.service.Search(ctx, rag.SearchQuery{TenantID: s.tenantID, Text: query, TopK: topK})
 }

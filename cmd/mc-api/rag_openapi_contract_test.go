@@ -17,9 +17,9 @@ func TestRAGAndFactCheckOpenAPIContracts(t *testing.T) {
 	spec := loadOpenAPISpec(t)
 	paths := specMap(t, spec, "paths")
 
-	assertOperation(t, paths, "/api/v1/rag/documents", "post", "ingestRAGDocument", []string{"201", "400", "422", "503"})
-	assertOperation(t, paths, "/api/v1/rag/search", "get", "searchRAGEvidence", []string{"200", "400", "503"})
-	assertOperation(t, paths, "/api/v1/content/generate", "post", "generateFactCheckedContent", []string{"200", "400", "404", "502", "503"})
+	assertOperation(t, paths, "/api/v1/rag/documents", "post", "ingestRAGDocument", []string{"201", "400", "422", "503", "504"})
+	assertOperation(t, paths, "/api/v1/rag/search", "get", "searchRAGEvidence", []string{"200", "400", "503", "504"})
+	assertOperation(t, paths, "/api/v1/content/generate", "post", "generateFactCheckedContent", []string{"200", "400", "404", "502", "503", "504"})
 	assertOperation(t, paths, "/api/v1/content/fact-checks/{id}", "get", "getFactCheckResult", []string{"200", "404"})
 
 	schemas := specMap(t, specMap(t, spec, "components"), "schemas")

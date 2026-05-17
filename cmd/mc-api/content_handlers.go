@@ -54,12 +54,14 @@ func (s *server) runContentAgent(w http.ResponseWriter, r *http.Request, idPart 
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "content_agent_not_configured"})
 		return
 	}
+	r, cancel := s.withDependencyDeadline(r)
+	defer cancel()
 	id, err := uuid.Parse(idPart)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_id"})
 		return
 	}
-	product, err := s.repo.GetByID(r.Context(), id)
+	product, err := s.productForRequest(r, id.String())
 	if err != nil {
 		if isNotFound(err) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
@@ -83,6 +85,10 @@ func (s *server) runContentAgent(w http.ResponseWriter, r *http.Request, idPart 
 	result, err := s.contentAgent.Generate(r.Context(), agentReq)
 	if err != nil {
 		s.log.Error("generate product content", "product_id", id.String(), "error", err)
+		if isDependencyTimeout(err) {
+			writeDependencyTimeout(w)
+			return
+		}
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "content_generation_failed"})
 		return
 	}
