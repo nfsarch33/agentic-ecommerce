@@ -29,7 +29,7 @@ Protected routes use short-lived HMAC-signed JWT bearer tokens with `admin`, `op
 | Tenant settings | `/api/v1/tenant/settings` | Branding, WooCommerce credential references, AI preferences, and compliance overrides. |
 | Agent automation | `/api/v1/agents/*`, `/api/v1/agent-schedules/*` | Sourcing, pricing, and compliance run contracts plus schedule controls. |
 | Webhooks | `/api/v1/webhooks`, `/api/v1/webhooks/{id}`, `/api/v1/webhooks/{id}/test`, inbound WooCommerce webhook routes | Outbound registrations are tenant scoped and HMAC signed. See `docs/webhook-contracts.md`. |
-| Temporal workflows | `/api/v1/workflows`, `/api/v1/workflows/product-publish`, `/api/v1/workflows/content-generation`, `/api/v1/workflows/media-processing`, `/api/v1/workflows/sourcing`, `/api/v1/workflows/{id}`, `/api/v1/workflows/{id}/signals/review` | Durable workflow starts, authoritative lifecycle list/detail reads, and human-review signal contracts. Review signal responses may include the refreshed workflow snapshot. See `docs/temporal-workflow-specs.md`. |
+| Temporal workflows | `/api/v1/workflows`, `/api/v1/workflows/product-publish`, `/api/v1/workflows/content-generation`, `/api/v1/workflows/media-processing`, `/api/v1/workflows/sourcing`, `/api/v1/workflows/{id}`, `/api/v1/workflows/{id}/signals/review` | Durable workflow starts, authoritative lifecycle list/detail reads, and human-review signal contracts. Workflow detail now carries product-publish review evidence (`approved`, `reviewer`, `note`) and review signal responses may include the refreshed workflow snapshot. See `docs/temporal-workflow-specs.md`. |
 
 ## Tenant-Aware Contract
 

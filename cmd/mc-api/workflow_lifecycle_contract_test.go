@@ -159,6 +159,130 @@ func TestGetWorkflowStatusReturnsAuthoritativeLifecycleDetail(t *testing.T) {
 	}
 }
 
+func TestGetWorkflowStatusReturnsFailedLifecycleWhenPublishStageHasError(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 5, 17, 11, 30, 0, 0, time.UTC)
+	updated := time.Date(2026, 5, 17, 11, 37, 0, 0, time.UTC)
+	srv, _ := testServer(t)
+	srv.workflowClient = &workflowLifecycleClientStub{
+		describe: &workflowservicepb.DescribeWorkflowExecutionResponse{
+			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+				Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-500", RunId: "run-500"},
+				Type:      &commonpb.WorkflowType{Name: "ProductPublishWorkflow"},
+				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+				StartTime: timestamppb.New(start),
+			},
+		},
+		queryByWorkflowID: map[string]converter.EncodedValue{
+			"wf-500": fakeEncodedValue{value: map[string]any{
+				"product_id":       "product-500",
+				"status":           ecworkflow.ProductPublishStatusPublishing,
+				"current_activity": "Publish to WooCommerce",
+				"updated_at":       updated.Format(time.RFC3339),
+				"activities": []map[string]any{
+					{
+						"id":           "publish",
+						"name":         "Publish to WooCommerce",
+						"status":       "failed",
+						"started_at":   start.Add(5 * time.Minute).Format(time.RFC3339),
+						"completed_at": updated.Format(time.RFC3339),
+						"message":      "Publish to WooCommerce failed",
+						"attempt":      3,
+						"error":        "woocommerce publish unavailable",
+					},
+				},
+			}},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/wf-500", nil)
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+
+	var got map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got["status"] != "failed" {
+		t.Fatalf("detail status = %#v, want failed", got["status"])
+	}
+	if got["error"] != "woocommerce publish unavailable" {
+		t.Fatalf("detail error = %#v, want woocommerce publish unavailable", got["error"])
+	}
+}
+
+func TestGetWorkflowStatusIncludesReviewEvidenceFromLifecycleSnapshot(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 5, 17, 12, 30, 0, 0, time.UTC)
+	updated := time.Date(2026, 5, 17, 12, 33, 0, 0, time.UTC)
+	srv, _ := testServer(t)
+	srv.workflowClient = &workflowLifecycleClientStub{
+		describe: &workflowservicepb.DescribeWorkflowExecutionResponse{
+			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+				Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-900", RunId: "run-900"},
+				Type:      &commonpb.WorkflowType{Name: "ProductPublishWorkflow"},
+				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				StartTime: timestamppb.New(start),
+			},
+		},
+		queryByWorkflowID: map[string]converter.EncodedValue{
+			"wf-900": fakeEncodedValue{value: map[string]any{
+				"product_id":       "product-900",
+				"status":           ecworkflow.ProductPublishStatusRejected,
+				"current_activity": "Human review",
+				"updated_at":       updated.Format(time.RFC3339),
+				"review": map[string]any{
+					"approved": false,
+					"reviewer": "lead@example.com",
+					"note":     "copy needs work",
+				},
+				"activities": []map[string]any{
+					{
+						"id":           "human_review",
+						"name":         "Human review",
+						"status":       "completed",
+						"started_at":   start.Add(2 * time.Minute).Format(time.RFC3339),
+						"completed_at": updated.Format(time.RFC3339),
+						"message":      "Human review rejected publish",
+						"attempt":      1,
+					},
+				},
+			}},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/wf-900", nil)
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+
+	var got map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	review, ok := got["review"].(map[string]any)
+	if !ok {
+		t.Fatalf("review = %#v, want review evidence object", got["review"])
+	}
+	if review["reviewer"] != "lead@example.com" {
+		t.Fatalf("review reviewer = %#v, want lead@example.com", review["reviewer"])
+	}
+	if review["note"] != "copy needs work" {
+		t.Fatalf("review note = %#v, want copy needs work", review["note"])
+	}
+}
+
 func TestSignalWorkflowReviewReturnsObservedWorkflowSnapshot(t *testing.T) {
 	t.Parallel()
 

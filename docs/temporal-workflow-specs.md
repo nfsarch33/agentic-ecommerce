@@ -33,20 +33,26 @@ All workflow start routes require bearer JWT authentication. Request bodies incl
 - `GET /api/v1/workflows` returns authoritative workflow summaries with
   workflow ID, workflow type, product context, current activity, lifecycle
   status, and started/updated/completed timestamps for `/admin/workflows`.
-- `GET /api/v1/workflows/{id}` returns status, workflow type, run metadata, activity timeline, and error details when available.
+- `GET /api/v1/workflows/{id}` returns status, workflow type, run metadata,
+  activity timeline, error details when available, and product-publish review
+  evidence (`approved`, `reviewer`, `note`) when the workflow query state has
+  already recorded a review decision.
 - `POST /api/v1/workflows/{id}/signals/review` sends the human-review decision
   for `ProductPublishWorkflow` and should return `202 Accepted`. When the
   backend can read the latest query state, the response also includes the
   refreshed workflow snapshot so the operator UI can replace local state
   instead of fabricating a timeline update.
+- Product publish review signals are deliberately two-state: `approve` and
+  `reject`. There is no separate `request_changes` transport verb until the
+  backend owns a distinct workflow meaning for it.
 - Pair 6 image edit approval uses `image-edit-approval` for signal-based review
   and `image-edit-approval-update` for update-based review.
 - Pair 6 query handlers are `marketplace-sync-status` and
   `image-edit-approval-status`.
 - Product publish lifecycle is normalized at the HTTP layer to
   `running -> waiting_review -> completed|failed`. Review rejection,
-  compliance failure, and media failure are exposed as `failed`; successful
-  publish is exposed as `completed`.
+  compliance failure, media failure, and exhausted publish retries are exposed
+  as `failed`; successful publish is exposed as `completed`.
 - Frontend workflow timelines should poll the status endpoint until a terminal
   state is reached and render backend activity rows directly rather than
   synthesizing local activities.
