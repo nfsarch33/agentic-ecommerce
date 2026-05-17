@@ -64,8 +64,8 @@ func TestV900ReleaseMetadataPinsExactPromotionInputs(t *testing.T) {
 	t.Parallel()
 
 	assertFileContainsAll(t, "../../docs/operations/v9-release-final.md",
-		"**Head**: 17eab44dfdfc807e34fbf4ee05b6bd9f2322e41c",
-		"Frontend SHA: `7682367be3b5af728649a9730a625aa54c46d87b`",
+		"**Head**: 9715a7e8ea94544bbf8dccb344b1aa44b75aa682",
+		"Frontend SHA: `53a4598415f488756950b040ae7ad2b022c6790c`",
 		"OpenAPI contract path: `api/openapi.yaml`",
 		"Current blockers:",
 	)
@@ -86,6 +86,19 @@ func TestV900VersionPolicySurfacesAlignWithV9Freeze(t *testing.T) {
 	assertFileNotContainsAll(t, "../../docs/api-versioning.md",
 		"stable as of v2.9.0",
 		"host **v3.x**",
+	)
+}
+
+func TestV900ReleaseMetadataTracksMergedPromotionInputs(t *testing.T) {
+	t.Parallel()
+
+	assertFileContainsAll(t, "../../docs/operations/v9-release-final.md",
+		"**Head**: 9715a7e8ea94544bbf8dccb344b1aa44b75aa682",
+		"Frontend SHA: `53a4598415f488756950b040ae7ad2b022c6790c`",
+	)
+	assertFileNotContainsAll(t, "../../docs/operations/v9-release-final.md",
+		"17eab44dfdfc807e34fbf4ee05b6bd9f2322e41c",
+		"7682367be3b5af728649a9730a625aa54c46d87b",
 	)
 }
 
