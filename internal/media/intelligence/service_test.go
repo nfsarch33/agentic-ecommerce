@@ -250,6 +250,64 @@ func TestServiceSourceIsIdempotentAndSeedsPendingLifecycleState(t *testing.T) {
 	assertIdempotentSourceReplay(t, first, second, startedAt)
 }
 
+func TestServiceSourceReplayDoesNotLeakRejectedLifecycleAcrossProducts(t *testing.T) {
+	t.Parallel()
+
+	firstSeenAt := time.Date(2026, 5, 17, 18, 10, 0, 0, time.FixedZone("AEST", 10*60*60))
+	reviewedAt := firstSeenAt.Add(2 * time.Minute)
+	retriedAt := reviewedAt.Add(3 * time.Minute)
+	timestamps := []time.Time{firstSeenAt, reviewedAt, retriedAt}
+	service := NewService(ServiceConfig{
+		HTTPClient: fixedImageClient(t),
+		Now: func() time.Time {
+			next := timestamps[0]
+			timestamps = timestamps[1:]
+			return next
+		},
+	})
+
+	first, err := service.Source(context.Background(), SourceRequest{
+		URL:       "https://supplier.example/images/lamp.png",
+		ProductID: "product-123",
+		AltText:   "Matte black desk lamp on white background",
+	})
+	if err != nil {
+		t.Fatalf("first Source: %v", err)
+	}
+	rejected, err := service.Reject(context.Background(), first.ID, ReviewRequest{
+		Reviewer: "qa@example.com",
+		Note:     "supplier thumbnail is not publishable",
+	})
+	if err != nil {
+		t.Fatalf("Reject: %v", err)
+	}
+
+	retried, err := service.Source(context.Background(), SourceRequest{
+		URL:       "https://supplier.example/images/lamp.png",
+		ProductID: "product-999",
+		AltText:   "Matte black desk lamp on white background",
+	})
+	if err != nil {
+		t.Fatalf("retry Source: %v", err)
+	}
+
+	if retried.ID == rejected.ID {
+		t.Fatalf("retry id = %q, want fresh asset distinct from rejected %q", retried.ID, rejected.ID)
+	}
+	if retried.ProductID != "product-999" {
+		t.Fatalf("retry product_id = %q, want product-999", retried.ProductID)
+	}
+	if retried.ReviewState != MediaReviewStatePending {
+		t.Fatalf("retry review_state = %q, want pending", retried.ReviewState)
+	}
+	if retried.Reviewer != "" || retried.ReviewNote != "" {
+		t.Fatalf("retry audit = reviewer=%q note=%q, want fresh pending state", retried.Reviewer, retried.ReviewNote)
+	}
+	if !retried.CreatedAt.Equal(retriedAt) {
+		t.Fatalf("retry created_at = %s, want %s", retried.CreatedAt, retriedAt)
+	}
+}
+
 func TestServiceProcessRejectsAssetsThatHaveNotBeenApproved(t *testing.T) {
 	t.Parallel()
 
@@ -265,6 +323,61 @@ func TestServiceProcessRejectsAssetsThatHaveNotBeenApproved(t *testing.T) {
 
 	if _, err := service.Process(context.Background(), ProcessRequest{MediaID: source.ID}); err == nil {
 		t.Fatal("Process err = nil, want lifecycle rejection for unapproved asset")
+	}
+}
+
+func TestServiceProcessKeepsSourceLifecyclePendingWhenCreatingDerivative(t *testing.T) {
+	t.Parallel()
+
+	sourcedAt := time.Date(2026, 5, 17, 18, 20, 0, 0, time.FixedZone("AEST", 10*60*60))
+	approvedAt := sourcedAt.Add(2 * time.Minute)
+	processedAt := approvedAt.Add(5 * time.Minute)
+	timestamps := []time.Time{sourcedAt, approvedAt, processedAt}
+	service := NewService(ServiceConfig{
+		HTTPClient: fixedImageClient(t),
+		Now: func() time.Time {
+			next := timestamps[0]
+			timestamps = timestamps[1:]
+			return next
+		},
+	})
+
+	source, err := service.Source(context.Background(), SourceRequest{
+		URL:       "https://supplier.example/images/lamp.png",
+		ProductID: "product-123",
+		AltText:   "Matte black desk lamp on white background",
+	})
+	if err != nil {
+		t.Fatalf("Source: %v", err)
+	}
+	approved, err := service.Approve(context.Background(), source.ID, ReviewRequest{
+		Reviewer: "operator@example.com",
+		Note:     "ready for deterministic processing",
+	})
+	if err != nil {
+		t.Fatalf("Approve: %v", err)
+	}
+
+	processed, err := service.Process(context.Background(), ProcessRequest{
+		MediaID: source.ID,
+		Format:  "image/webp",
+	})
+	if err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	sourceAfter, ok := service.Get(source.ID)
+	if !ok {
+		t.Fatalf("Get source after process: ok=%v", ok)
+	}
+
+	if processed.ID == source.ID {
+		t.Fatalf("processed id = %q, want derivative distinct from source", processed.ID)
+	}
+	if sourceAfter.ProcessState != MediaProcessStatePending {
+		t.Fatalf("source process_state = %q, want pending", sourceAfter.ProcessState)
+	}
+	if !sourceAfter.UpdatedAt.Equal(approved.UpdatedAt) {
+		t.Fatalf("source updated_at = %s, want approval timestamp %s", sourceAfter.UpdatedAt, approved.UpdatedAt)
 	}
 }
 

@@ -30,7 +30,9 @@ var mediaRoutes = []mediaRoute{
 	{match: matchMediaExact("process", http.MethodPost), handle: func(s *server, w http.ResponseWriter, r *http.Request, _ string) { s.processMedia(w, r) }},
 	{match: matchMediaSuffix("/approve", http.MethodPost), handle: func(s *server, w http.ResponseWriter, r *http.Request, mediaID string) { s.approveMedia(w, r, mediaID) }},
 	{match: matchMediaSuffix("/reject", http.MethodPost), handle: func(s *server, w http.ResponseWriter, r *http.Request, mediaID string) { s.rejectMedia(w, r, mediaID) }},
-	{match: matchMediaSuffix("/validate", http.MethodPost), handle: func(s *server, w http.ResponseWriter, r *http.Request, mediaID string) { s.validateMedia(w, r, mediaID) }},
+	{match: matchMediaSuffix("/validate", http.MethodPost), handle: func(s *server, w http.ResponseWriter, r *http.Request, mediaID string) {
+		s.validateMedia(w, r, mediaID)
+	}},
 	{match: matchMediaGet(), handle: func(s *server, w http.ResponseWriter, r *http.Request, mediaID string) { s.getMedia(w, r, mediaID) }},
 }
 
@@ -181,12 +183,21 @@ func (s *server) validateMedia(w http.ResponseWriter, r *http.Request, mediaID s
 	writeJSON(w, http.StatusOK, qa)
 }
 
-func (s *server) getMedia(w http.ResponseWriter, _ *http.Request, mediaID string) {
+func (s *server) getMedia(w http.ResponseWriter, r *http.Request, mediaID string) {
 	if s.mediaService == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "media_service_not_configured"})
 		return
 	}
-	asset, ok := s.mediaService.Get(strings.Trim(mediaID, "/"))
+	assetID := strings.Trim(mediaID, "/")
+	if assetID == "" {
+		assets := s.mediaService.List(intelligence.ListFilter{
+			ProductID: r.URL.Query().Get("product_id"),
+			Status:    r.URL.Query().Get("status"),
+		})
+		writeJSON(w, http.StatusOK, map[string]any{"assets": assets})
+		return
+	}
+	asset, ok := s.mediaService.Get(assetID)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 		return
@@ -224,7 +235,7 @@ func matchMediaSuffix(suffix, method string) func(string, string) (string, bool)
 
 func matchMediaGet() func(string, string) (string, bool) {
 	return func(path, method string) (string, bool) {
-		if path == "" || method != http.MethodGet {
+		if method != http.MethodGet {
 			return "", false
 		}
 		return path, true
