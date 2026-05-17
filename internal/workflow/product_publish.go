@@ -33,6 +33,7 @@ const (
 	ProductPublishStatusAwaitingReview   = "awaiting_review"
 	ProductPublishStatusRejected         = "rejected"
 	ProductPublishStatusPublishing       = "publishing"
+	ProductPublishStatusFailed           = "failed"
 	ProductPublishStatusPublished        = "published"
 
 	workflowActivityStatusPending       = "pending"
@@ -271,7 +272,9 @@ func runReviewGate(ctx temporalworkflow.Context, input ProductPublishInput, stat
 func runPublish(ctx temporalworkflow.Context, input ProductPublishInput, activityInput ProductPublishActivityInput, state *ProductPublishResult) error {
 	state.Status = ProductPublishStatusPublishing
 	if err := temporalworkflow.ExecuteActivity(ctx, PublishToWooCommerceActivity, activityInput).Get(ctx, &state.Publish); err != nil {
+		state.Status = ProductPublishStatusFailed
 		state.failActivity("publish", temporalworkflow.Now(ctx), "Publish to WooCommerce failed", err)
+		state.CompletedAt = workflowTimestamp(temporalworkflow.Now(ctx))
 		return err
 	}
 	state.Published = state.Publish.Published

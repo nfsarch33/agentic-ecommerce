@@ -48,8 +48,15 @@ type workflowActivityResponse struct {
 	Error       string `json:"error,omitempty"`
 }
 
+type workflowReviewResponse struct {
+	Approved bool   `json:"approved"`
+	Reviewer string `json:"reviewer,omitempty"`
+	Note     string `json:"note,omitempty"`
+}
+
 type workflowDetailResponse struct {
 	workflowSummaryResponse
+	Review     *workflowReviewResponse    `json:"review,omitempty"`
 	RunID      string                     `json:"run_id,omitempty"`
 	Activities []workflowActivityResponse `json:"activities"`
 }
@@ -204,12 +211,16 @@ func (s *server) applyProductPublishSnapshot(ctx context.Context, detail *workfl
 	detail.UpdatedAt = firstNonEmpty(snapshot.UpdatedAt, detail.UpdatedAt, detail.StartedAt)
 	detail.CompletedAt = firstNonEmpty(snapshot.CompletedAt, detail.CompletedAt)
 	detail.Activities = mapLifecycleStages(snapshot.Activities)
+	detail.Review = workflowReview(snapshot.Review)
 
 	for _, stage := range snapshot.Activities {
 		if stage.Error != "" {
 			detail.Error = stage.Error
 			break
 		}
+	}
+	if _, failed := failedLifecycleError(detail.Activities); failed {
+		detail.Status = "failed"
 	}
 }
 
@@ -293,7 +304,7 @@ func productPublishHTTPStatus(status string, fallback enumspb.WorkflowExecutionS
 		return "waiting_review"
 	case ecworkflow.ProductPublishStatusPublished:
 		return "completed"
-	case ecworkflow.ProductPublishStatusComplianceFailed, ecworkflow.ProductPublishStatusMediaFailed, ecworkflow.ProductPublishStatusRejected:
+	case ecworkflow.ProductPublishStatusComplianceFailed, ecworkflow.ProductPublishStatusMediaFailed, ecworkflow.ProductPublishStatusRejected, ecworkflow.ProductPublishStatusFailed:
 		return "failed"
 	case ecworkflow.ProductPublishStatusPublishing, ecworkflow.ProductPublishStatusDraft:
 		return "running"
@@ -364,4 +375,27 @@ func memoString(memo *commonpb.Memo, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(value)
+}
+
+func workflowReview(review ecworkflow.ReviewSignal) *workflowReviewResponse {
+	reviewer := strings.TrimSpace(review.Reviewer)
+	note := strings.TrimSpace(review.Note)
+	if !review.Approved && reviewer == "" && note == "" {
+		return nil
+	}
+	return &workflowReviewResponse{
+		Approved: review.Approved,
+		Reviewer: reviewer,
+		Note:     note,
+	}
+}
+
+func failedLifecycleError(activities []workflowActivityResponse) (string, bool) {
+	for _, activity := range activities {
+		if activity.Status != "failed" {
+			continue
+		}
+		return firstNonEmpty(activity.Error, activity.Message), true
+	}
+	return "", false
 }
