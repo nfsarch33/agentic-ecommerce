@@ -68,6 +68,7 @@ func TestOpenAPIOperationsHaveComprehensiveContractCoverage(t *testing.T) {
 		"listAgents":                       true,
 		"listComplianceRules":              true,
 		"listCustomComplianceRules":        true,
+		"listMedia":                        true,
 		"listMarketplaceDLQ":               true,
 		"listProducts":                     true,
 		"listRecentEvents":                 true,
