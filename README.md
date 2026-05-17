@@ -151,7 +151,10 @@ ec-cli plugin validate --path ./my-plugin  # validate a marketplace plugin
 - Workflow lifecycle operator contract: `GET /api/v1/workflows`,
   `GET /api/v1/workflows/{id}`, and
   `POST /api/v1/workflows/{id}/signals/review` return authoritative workflow
-  summaries/details so admin clients do not synthesize timeline state.
+  summaries/details so admin clients do not synthesize timeline state. Product
+  publish detail payloads now carry review evidence (`approved`, `reviewer`,
+  `note`) and review signals remain the explicit two-state `approve` / `reject`
+  contract.
 - Webhook contracts: `docs/webhook-contracts.md`
 - Cloud deployment guide: `docs/cloud-deploy.md`
 - Demo walkthrough: `docs/demo/v500-demo-script.md`

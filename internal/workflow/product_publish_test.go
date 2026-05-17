@@ -400,6 +400,28 @@ func TestProductPublishWorkflowReplaysSmokeFailureHistory(t *testing.T) {
 	}
 }
 
+func TestProductPublishWorkflowReplaysApprovedHistory(t *testing.T) {
+	t.Parallel()
+
+	replayer := worker.NewWorkflowReplayer()
+	replayer.RegisterWorkflow(ProductPublishWorkflow)
+
+	if err := replayer.ReplayWorkflowHistoryFromJSONFile(nil, "testdata/product_publish_approved_history.json"); err != nil {
+		t.Fatalf("replay approved workflow history: %v", err)
+	}
+}
+
+func TestProductPublishWorkflowReplaysRejectedHistory(t *testing.T) {
+	t.Parallel()
+
+	replayer := worker.NewWorkflowReplayer()
+	replayer.RegisterWorkflow(ProductPublishWorkflow)
+
+	if err := replayer.ReplayWorkflowHistoryFromJSONFile(nil, "testdata/product_publish_rejected_history.json"); err != nil {
+		t.Fatalf("replay rejected workflow history: %v", err)
+	}
+}
+
 func TestProductPublishActivitiesUseBackendEngines(t *testing.T) {
 	t.Parallel()
 

@@ -5636,6 +5636,8 @@ components:
           format: date-time
         error:
           type: string
+        review:
+          $ref: '#/components/schemas/ProductPublishReviewSignal'
         run_id:
           type: string
         activities:
