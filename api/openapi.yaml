@@ -891,6 +891,7 @@ paths:
         - name: tenant_id
           in: query
           required: true
+          description: Tenant ID fallback when the JWT-derived X-Tenant-Id header is absent.
           schema:
             type: string
             minLength: 1
@@ -937,6 +938,7 @@ paths:
         - name: tenant_id
           in: query
           required: true
+          description: Tenant ID fallback when the JWT-derived X-Tenant-Id header is absent.
           schema:
             type: string
             minLength: 1
@@ -988,6 +990,7 @@ paths:
         - name: tenant_id
           in: query
           required: true
+          description: Tenant ID fallback when the JWT-derived X-Tenant-Id header is absent.
           schema:
             type: string
             minLength: 1
