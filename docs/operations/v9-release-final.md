@@ -1,10 +1,12 @@
 # EC v9.0.0 Release Final Evidence
 
-**Date**: 2026-05-16  
-**Release**: `agentic-ecommerce` v9.0.0  
-**Base**: v8.0.0 release tag  
-**Head**: pending final v9 release merge commit  
-**Status**: RC metadata landed; semver tag still blocked
+**Date**: 2026-05-16
+**Release**: `agentic-ecommerce` v9.0.0
+**Base**: v8.0.0 release tag
+**Head**: 17eab44dfdfc807e34fbf4ee05b6bd9f2322e41c
+Frontend SHA: `7682367be3b5af728649a9730a625aa54c46d87b`
+OpenAPI contract path: `api/openapi.yaml`
+**Status**: pre-release freeze captured; semver tag still blocked
 
 ## Scope
 
@@ -18,7 +20,7 @@ v9.0.0 establishes the backend platform baseline for the post-v8 program:
   blocking release lane in the current EC programme.
 - Current fleet truth is release-relevant: `wsl1-travel`, `win1-travel`, and
   `wsl2-travel` are green from the controller; `wsl2`, `win2`, and
-  `win2-travel` still time out and therefore keep the stack in RC state.
+  `win2-travel` still time out and therefore keep the semver tag uncut.
 - Cloud-native deployment material under `deploy/terraform`, `deploy/helm`, and
   `deploy/otel` remains reference-only for `v9.0.0`; it is maintained but no
   longer blocks the semver tag.
@@ -37,12 +39,21 @@ v9.0.0 establishes the backend platform baseline for the post-v8 program:
 - Latest controller-side canaries: `wsl1-travel` PASS, `win1-travel` PASS,
   `wsl2-travel` PASS, `wsl2` FAIL (timeout), `win2` FAIL (timeout),
   `win2-travel` FAIL (timeout).
-- `v9.0.0` remains RC-only until `primary-testing` closes its lane-level
-  runtime gaps and the blocking release lanes pass on the primary pool.
+- The semver tag `v9.0.0` remains uncut until `primary-testing` closes its
+  lane-level runtime gaps and the blocking release lanes pass on the primary
+  pool.
 - `secondary-testing` remains non-blocking carry-forward work until the EC
   programme explicitly re-promotes it.
 - External-provider live execution remains operator-gated even after the
   self-hosted release gates are green.
+
+Current blockers:
+
+- `wsl2`, `win2`, and `win2-travel` still time out from the controller.
+- Blocking `primary-testing` release lanes have not yet all been re-run on the
+  frozen backend/frontend SHAs above.
+- Stack-level publication remains blocked on the frontend stable Playwright and
+  UIAuto evidence captured on `primary-testing`.
 
 ## Release Gates
 

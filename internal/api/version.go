@@ -1,11 +1,11 @@
-// Package api implements the v2.9.0 API version negotiation surface.
+// Package api implements the v9.0.0 API version negotiation surface.
 // It provides middleware and helpers that route incoming requests to
 // the appropriate version handler and signal version semantics back
 // to the client via response headers.
 //
-// Two versions ship in v2.9.0:
+// Two versions ship in the v9.0.0 release baseline:
 //
-//	v1: stable through host v3.x. No breaking changes; new fields
+//	v1: stable through host v9.x. No breaking changes; new fields
 //	    only. The canonical spec lives at api/openapi.yaml.
 //
 //	v2: preview. Subject to change without notice while clients
