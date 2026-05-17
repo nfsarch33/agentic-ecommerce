@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agentic Ecommerce Mission Control API (v2 preview)
-  version: 2.9.0-preview
+  version: 9.0.0-preview
   description: |
     Preview surface for the next-generation Agentic Ecommerce HTTP
     API. Endpoints under /api/v2/ are subject to change without
@@ -12,7 +12,7 @@ info:
     docs/api-versioning.md. The canonical stable surface lives in
     api/openapi.yaml.
   x-api-version-policy: |
-    v1 endpoints (api/openapi.yaml) are stable through host v3.x.
+    v1 endpoints (api/openapi.yaml) are stable through host v9.x.
     v2 preview endpoints (this file) are subject to change without
     notice. See docs/api-versioning.md for negotiation, headers,
     and deprecation timeline.

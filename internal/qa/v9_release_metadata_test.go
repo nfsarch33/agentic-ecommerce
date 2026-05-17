@@ -39,6 +39,56 @@ func TestV900ReleaseMetadataAligned(t *testing.T) {
 	)
 }
 
+func TestV900ReleaseMetadataUsesSemverOnlyGateLanguage(t *testing.T) {
+	t.Parallel()
+
+	releaseFacingFiles := []string{
+		"../../README.md",
+		"../../docs/release-checklist.md",
+		"../../docs/operations/v9-release-final.md",
+		"../../docs/adr/adr-036-v9-release-decisions.md",
+	}
+
+	for _, path := range releaseFacingFiles {
+		assertFileNotContainsAll(t, path,
+			"RC-only",
+			"Release candidate note",
+			"semver tags still stop at `v8.0.0`",
+			"Active v8.x CI",
+			"v9.0.0-rc",
+		)
+	}
+}
+
+func TestV900ReleaseMetadataPinsExactPromotionInputs(t *testing.T) {
+	t.Parallel()
+
+	assertFileContainsAll(t, "../../docs/operations/v9-release-final.md",
+		"**Head**: 17eab44dfdfc807e34fbf4ee05b6bd9f2322e41c",
+		"Frontend SHA: `7682367be3b5af728649a9730a625aa54c46d87b`",
+		"OpenAPI contract path: `api/openapi.yaml`",
+		"Current blockers:",
+	)
+	assertFileNotContains(t, "../../docs/operations/v9-release-final.md", "pending final v9 release merge commit")
+}
+
+func TestV900VersionPolicySurfacesAlignWithV9Freeze(t *testing.T) {
+	t.Parallel()
+
+	assertFileNotContainsAll(t, "../../internal/api/version.go",
+		"v2.9.0",
+		"stable through host v3.x",
+	)
+	assertFileNotContainsAll(t, "../../api/openapi-v2-preview.yaml",
+		"version: 2.9.0-preview",
+		"stable through host v3.x",
+	)
+	assertFileNotContainsAll(t, "../../docs/api-versioning.md",
+		"stable as of v2.9.0",
+		"host **v3.x**",
+	)
+}
+
 func assertFileContains(t *testing.T, path, want string) {
 	t.Helper()
 	raw, err := os.ReadFile(path)
