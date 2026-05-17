@@ -36,6 +36,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/digital"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	digitaldomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/digital"
+	orderdomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/order"
 	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
 	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
 	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
@@ -193,6 +194,8 @@ type server struct {
 	readiness             []readinessProbe
 	cleanup               []func()
 	log                   *slog.Logger
+	orderCreateReplayMu   sync.Mutex
+	orderCreateReplay     map[string]orderdomain.Order
 }
 
 type contentGenerator interface {
@@ -506,6 +509,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		readiness:             readinessChecks,
 		cleanup:               cleanup,
 		log:                   logger,
+		orderCreateReplay:     map[string]orderdomain.Order{},
 	}
 	srv.configureSecurity()
 	return srv

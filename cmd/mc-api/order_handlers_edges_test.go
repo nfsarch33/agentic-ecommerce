@@ -15,6 +15,7 @@ func TestCreateOrderAppliesShippingAmountToTotals(t *testing.T) {
 
 	body := `{
 		"customer_email":"shopper@example.com",
+		"delivery_option":"standard",
 		"items":[{"product_id":"c1000000-0000-0000-0000-000000000001","sku":"BAND-001","title":"Resistance Band","quantity":2,"unit_price":{"amount":2495,"currency":"AUD"}}],
 		"shipping_address":{"name":"Jane Shopper","line1":"1 Market Street","city":"Sydney","region":"NSW","postal_code":"2000","country":"AU"},
 		"shipping":{"amount":500,"currency":"AUD"}
@@ -48,7 +49,7 @@ func TestOrderHandlersRejectMalformedRequests(t *testing.T) {
 		want   int
 	}{
 		{name: "create invalid json", method: http.MethodPost, path: "/api/v1/orders", body: "{bad", want: http.StatusBadRequest},
-		{name: "create invalid item id", method: http.MethodPost, path: "/api/v1/orders", body: `{"customer_email":"shopper@example.com","items":[{"product_id":"bad","sku":"BAND-001","title":"Resistance Band","quantity":1,"unit_price":{"amount":2495,"currency":"AUD"}}],"shipping_address":{"name":"Jane Shopper","line1":"1 Market Street","city":"Sydney","postal_code":"2000","country":"AU"}}`, want: http.StatusUnprocessableEntity},
+		{name: "create invalid item id", method: http.MethodPost, path: "/api/v1/orders", body: `{"customer_email":"shopper@example.com","delivery_option":"standard","items":[{"product_id":"bad","sku":"BAND-001","title":"Resistance Band","quantity":1,"unit_price":{"amount":2495,"currency":"AUD"}}],"shipping_address":{"name":"Jane Shopper","line1":"1 Market Street","city":"Sydney","postal_code":"2000","country":"AU"}}`, want: http.StatusUnprocessableEntity},
 		{name: "get invalid id", method: http.MethodGet, path: "/api/v1/orders/not-a-uuid", want: http.StatusBadRequest},
 		{name: "get missing order", method: http.MethodGet, path: "/api/v1/orders/00000000-0000-0000-0000-000000000000", want: http.StatusNotFound},
 		{name: "patch invalid json", method: http.MethodPatch, path: "/api/v1/orders/00000000-0000-0000-0000-000000000000/status", body: "{bad", want: http.StatusBadRequest},

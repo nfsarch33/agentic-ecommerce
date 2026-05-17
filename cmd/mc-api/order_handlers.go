@@ -40,6 +40,8 @@ type orderItemPayload struct {
 
 type createOrderRequest struct {
 	CustomerEmail   string                 `json:"customer_email"`
+	IdempotencyKey  string                 `json:"idempotency_key,omitempty"`
+	DeliveryOption  string                 `json:"delivery_option"`
 	Items           []orderItemPayload     `json:"items"`
 	ShippingAddress shippingAddressPayload `json:"shipping_address"`
 	Shipping        moneyResponse          `json:"shipping,omitempty"`
@@ -71,6 +73,25 @@ type cartResponse struct {
 	UpdatedAt time.Time          `json:"updated_at"`
 }
 
+const (
+	deliveryOptionStandard = "standard"
+	deliveryOptionExpress  = "express"
+)
+
+var errOrderTenantRequired = errors.New("tenant_required")
+
+type createOrderValidationError struct {
+	cause error
+}
+
+func (e *createOrderValidationError) Error() string {
+	return e.cause.Error()
+}
+
+func (e *createOrderValidationError) Unwrap() error {
+	return e.cause
+}
+
 func (s *server) ordersHandler(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/orders"), "/")
 
@@ -89,47 +110,71 @@ func (s *server) ordersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) createOrder(w http.ResponseWriter, r *http.Request) {
-	var req createOrderRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	req, err := decodeCreateOrderRequest(r)
+	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
 		return
 	}
 
+	order, err := s.createPersistedOrder(r, req)
+	var validationErr *createOrderValidationError
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusCreated, toOrderResponse(order))
+	case errors.Is(err, errOrderTenantRequired):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": errOrderTenantRequired.Error()})
+	case errors.As(err, &validationErr):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+	default:
+		s.log.Error("create order", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+	}
+}
+
+func decodeCreateOrderRequest(r *http.Request) (createOrderRequest, error) {
+	var req createOrderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return createOrderRequest{}, err
+	}
+	return req, nil
+}
+
+func (s *server) createPersistedOrder(r *http.Request, req createOrderRequest) (orderdomain.Order, error) {
 	input, err := req.toOrderInput()
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
-		return
+		return orderdomain.Order{}, &createOrderValidationError{cause: err}
 	}
+	if order, ok := s.lookupOrderCreateReplay(s.orderCreateReplayKey(r, req.IdempotencyKey)); ok {
+		return order, nil
+	}
+	return s.createAndStoreOrder(r, req.IdempotencyKey, input)
+}
+
+func (s *server) createAndStoreOrder(r *http.Request, idempotencyKey string, input orderdomain.OrderInput) (orderdomain.Order, error) {
 	order, err := orderdomain.NewOrder(input)
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
-		return
+		return orderdomain.Order{}, &createOrderValidationError{cause: err}
 	}
-	var createErr error
-	createScoped := false
+	if err := s.persistOrderForRequest(r, order); err != nil {
+		return orderdomain.Order{}, err
+	}
+	s.storeOrderCreateReplay(s.orderCreateReplayKey(r, idempotencyKey), order)
+	return order, nil
+}
+
+func (s *server) persistOrderForRequest(r *http.Request, order orderdomain.Order) error {
 	if tenantRepo, ok := s.orderRepo.(interface {
 		CreateWithTenant(ctx context.Context, order orderdomain.Order, tenantID string) error
 	}); ok {
-		tenantID, scoped, tenantErr := s.tenantIDForScopedRequest(r)
-		if tenantErr != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_required"})
-			return
+		tenantID, scoped, err := s.tenantIDForScopedRequest(r)
+		if err != nil {
+			return errOrderTenantRequired
 		}
 		if scoped {
-			createErr = tenantRepo.CreateWithTenant(r.Context(), order, string(tenantID))
-			createScoped = true
+			return tenantRepo.CreateWithTenant(r.Context(), order, string(tenantID))
 		}
 	}
-	if !createScoped {
-		createErr = s.orderRepo.Create(r.Context(), order)
-	}
-	if createErr != nil {
-		s.log.Error("create order", "error", createErr)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, toOrderResponse(order))
+	return s.orderRepo.Create(r.Context(), order)
 }
 
 func (s *server) getOrder(w http.ResponseWriter, r *http.Request, idStr string) {
@@ -268,6 +313,9 @@ func (s *server) putCart(w http.ResponseWriter, r *http.Request, sessionID strin
 }
 
 func (req createOrderRequest) toOrderInput() (orderdomain.OrderInput, error) {
+	if _, err := normaliseDeliveryOption(req.DeliveryOption); err != nil {
+		return orderdomain.OrderInput{}, err
+	}
 	items, err := requestItemsToOrderInputs(req.Items)
 	if err != nil {
 		return orderdomain.OrderInput{}, err
@@ -293,6 +341,53 @@ func (req createOrderRequest) toOrderInput() (orderdomain.OrderInput, error) {
 		},
 		Shipping: shipping,
 	}, nil
+}
+
+func normaliseDeliveryOption(value string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case deliveryOptionStandard:
+		return deliveryOptionStandard, nil
+	case deliveryOptionExpress:
+		return deliveryOptionExpress, nil
+	default:
+		return "", errors.New("invalid delivery option")
+	}
+}
+
+func (s *server) orderCreateReplayKey(r *http.Request, idempotencyKey string) string {
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey == "" {
+		return ""
+	}
+	if tenantID, scoped, err := s.tenantIDForScopedRequest(r); err == nil && scoped {
+		return string(tenantID) + ":" + idempotencyKey
+	}
+	return "public:" + idempotencyKey
+}
+
+func (s *server) lookupOrderCreateReplay(key string) (orderdomain.Order, bool) {
+	if s == nil || key == "" {
+		return orderdomain.Order{}, false
+	}
+	s.orderCreateReplayMu.Lock()
+	defer s.orderCreateReplayMu.Unlock()
+	if s.orderCreateReplay == nil {
+		return orderdomain.Order{}, false
+	}
+	order, ok := s.orderCreateReplay[key]
+	return order, ok
+}
+
+func (s *server) storeOrderCreateReplay(key string, order orderdomain.Order) {
+	if s == nil || key == "" {
+		return
+	}
+	s.orderCreateReplayMu.Lock()
+	defer s.orderCreateReplayMu.Unlock()
+	if s.orderCreateReplay == nil {
+		s.orderCreateReplay = map[string]orderdomain.Order{}
+	}
+	s.orderCreateReplay[key] = order
 }
 
 func requestItemsToOrderInputs(items []orderItemPayload) ([]orderdomain.OrderItemInput, error) {
