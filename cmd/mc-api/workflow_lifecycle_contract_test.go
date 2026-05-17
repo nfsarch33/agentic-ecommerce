@@ -283,6 +283,67 @@ func TestGetWorkflowStatusIncludesReviewEvidenceFromLifecycleSnapshot(t *testing
 	}
 }
 
+func TestGetWorkflowStatusRetainsRejectedReviewWithoutReviewerMetadata(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 5, 17, 12, 35, 0, 0, time.UTC)
+	updated := time.Date(2026, 5, 17, 12, 37, 0, 0, time.UTC)
+	srv, _ := testServer(t)
+	srv.workflowClient = &workflowLifecycleClientStub{
+		describe: &workflowservicepb.DescribeWorkflowExecutionResponse{
+			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+				Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-901", RunId: "run-901"},
+				Type:      &commonpb.WorkflowType{Name: "ProductPublishWorkflow"},
+				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				StartTime: timestamppb.New(start),
+			},
+		},
+		queryByWorkflowID: map[string]converter.EncodedValue{
+			"wf-901": fakeEncodedValue{value: map[string]any{
+				"product_id":       "product-901",
+				"status":           ecworkflow.ProductPublishStatusRejected,
+				"current_activity": "Human review",
+				"updated_at":       updated.Format(time.RFC3339),
+				"review": map[string]any{
+					"approved": false,
+				},
+				"activities": []map[string]any{
+					{
+						"id":           "human_review",
+						"name":         "Human review",
+						"status":       "completed",
+						"started_at":   start.Add(1 * time.Minute).Format(time.RFC3339),
+						"completed_at": updated.Format(time.RFC3339),
+						"message":      "Human review rejected publish",
+						"attempt":      1,
+					},
+				},
+			}},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/wf-901", nil)
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+
+	var got map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	review, ok := got["review"].(map[string]any)
+	if !ok {
+		t.Fatalf("review = %#v, want rejected review evidence object", got["review"])
+	}
+	if approved, ok := review["approved"].(bool); !ok || approved {
+		t.Fatalf("review approved = %#v, want false", review["approved"])
+	}
+}
+
 func TestSignalWorkflowReviewReturnsObservedWorkflowSnapshot(t *testing.T) {
 	t.Parallel()
 

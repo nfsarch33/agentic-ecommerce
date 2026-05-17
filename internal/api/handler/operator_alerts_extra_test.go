@@ -68,6 +68,25 @@ func TestOperatorAlerts_AcknowledgeAlreadyResolvedReturnsConflict(t *testing.T) 
 	}
 }
 
+func TestOperatorAlerts_AcknowledgeAlreadyAcknowledgedReturnsConflict(t *testing.T) {
+	t.Parallel()
+	h, repo, _, _ := newOperatorAlertHarness(t)
+	must(t, repo.Insert(context.Background(), OperatorAlert{
+		TenantID:       "tenant-1",
+		AlertID:        "a1",
+		AlertType:      AlertTypePriceChange,
+		Status:         AlertStatusAcknowledged,
+		CreatedAt:      time.Now().UTC(),
+		AcknowledgedAt: time.Now().UTC(),
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/operator/alerts/a1/acknowledge?tenant_id=tenant-1", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for repeated acknowledge, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestOperatorAlerts_ResolveMissingActionParam(t *testing.T) {
 	t.Parallel()
 	h, repo, _, _ := newOperatorAlertHarness(t)
@@ -83,6 +102,24 @@ func TestOperatorAlerts_ResolveMissingActionParam(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for missing action, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOperatorAlerts_ResolvePendingReturnsConflictUntilAcknowledged(t *testing.T) {
+	t.Parallel()
+	h, repo, _, _ := newOperatorAlertHarness(t)
+	must(t, repo.Insert(context.Background(), OperatorAlert{
+		TenantID:  "tenant-1",
+		AlertID:   "a1",
+		AlertType: AlertTypePriceChange,
+		Status:    AlertStatusPending,
+		CreatedAt: time.Now().UTC(),
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/operator/alerts/a1/resolve?tenant_id=tenant-1&action=approve", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for resolve-before-acknowledge, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
