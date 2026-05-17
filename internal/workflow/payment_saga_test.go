@@ -74,7 +74,7 @@ func TestPaymentSaga_HappyPathStripe(t *testing.T) {
 	assert.Equal(t, "pi_123", result.PaymentID)
 }
 
-func TestPaymentSaga_HappyPathAlipay(t *testing.T) {
+func TestPaymentSaga_PendingChargeDoesNotMarkOrderCompleted(t *testing.T) {
 	t.Parallel()
 	env := newPaymentEnv(t)
 	input := basePaymentInput()
@@ -93,7 +93,7 @@ func TestPaymentSaga_HappyPathAlipay(t *testing.T) {
 
 	var result PaymentSagaResult
 	require.NoError(t, env.GetWorkflowResult(&result))
-	assert.Equal(t, "completed", result.Status)
+	assert.Equal(t, "pending", result.Status)
 	assert.Equal(t, "alipay", result.Provider)
 }
 
