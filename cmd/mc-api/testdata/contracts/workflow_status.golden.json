@@ -1,6 +1,44 @@
 {
+  "activities": [
+    {
+      "attempt": 1,
+      "completed_at": "2026-05-07T00:00:00Z",
+      "id": "check_compliance",
+      "message": "Compliance check passed",
+      "name": "Check compliance",
+      "started_at": "2026-05-07T00:00:00Z",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "completed_at": "2026-05-07T00:00:00Z",
+      "id": "validate_media",
+      "message": "Media validation passed",
+      "name": "Validate media",
+      "started_at": "2026-05-07T00:00:00Z",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "id": "human_review",
+      "message": "Awaiting human review",
+      "name": "Human review",
+      "started_at": "2026-05-07T00:00:00Z",
+      "status": "waiting_review"
+    },
+    {
+      "id": "publish",
+      "message": "Pending",
+      "name": "Publish to WooCommerce",
+      "status": "pending"
+    }
+  ],
+  "current_activity": "Awaiting human review",
+  "id": "wf-contract",
+  "product_id": "00000000-0000-0000-0000-000000000000",
   "run_id": "run-contract",
-  "start_time": "2026-05-07T00:00:00Z",
-  "status": "running",
-  "workflow_id": "wf-contract"
+  "started_at": "2026-05-07T00:00:00Z",
+  "status": "waiting_review",
+  "type": "product_publish",
+  "updated_at": "2026-05-07T00:00:00Z"
 }

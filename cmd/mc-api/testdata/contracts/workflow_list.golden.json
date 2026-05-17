@@ -1,0 +1,13 @@
+{
+  "workflows": [
+    {
+      "current_activity": "Awaiting human review",
+      "id": "wf-contract",
+      "product_id": "00000000-0000-0000-0000-000000000000",
+      "started_at": "2026-05-07T00:00:00Z",
+      "status": "waiting_review",
+      "type": "product_publish",
+      "updated_at": "2026-05-07T00:00:00Z"
+    }
+  ]
+}

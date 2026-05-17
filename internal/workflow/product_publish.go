@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,6 +34,13 @@ const (
 	ProductPublishStatusRejected         = "rejected"
 	ProductPublishStatusPublishing       = "publishing"
 	ProductPublishStatusPublished        = "published"
+
+	workflowActivityStatusPending       = "pending"
+	workflowActivityStatusRunning       = "running"
+	workflowActivityStatusWaitingReview = "waiting_review"
+	workflowActivityStatusCompleted     = "completed"
+	workflowActivityStatusFailed        = "failed"
+	workflowActivityStatusSkipped       = "skipped"
 )
 
 type ProductPublishInput struct {
@@ -45,13 +53,29 @@ type ProductPublishActivityInput struct {
 }
 
 type ProductPublishResult struct {
-	ProductID  string                `json:"product_id"`
-	Status     string                `json:"status"`
-	Published  bool                  `json:"published"`
-	Compliance ComplianceResult      `json:"compliance"`
-	Media      MediaValidationResult `json:"media"`
-	Review     ReviewSignal          `json:"review"`
-	Publish    PublishResult         `json:"publish"`
+	ProductID       string                         `json:"product_id"`
+	Status          string                         `json:"status"`
+	Published       bool                           `json:"published"`
+	Compliance      ComplianceResult               `json:"compliance"`
+	Media           MediaValidationResult          `json:"media"`
+	Review          ReviewSignal                   `json:"review"`
+	Publish         PublishResult                  `json:"publish"`
+	CurrentActivity string                         `json:"current_activity,omitempty"`
+	StartedAt       string                         `json:"started_at,omitempty"`
+	UpdatedAt       string                         `json:"updated_at,omitempty"`
+	CompletedAt     string                         `json:"completed_at,omitempty"`
+	Activities      []ProductPublishLifecycleStage `json:"activities,omitempty"`
+}
+
+type ProductPublishLifecycleStage struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	StartedAt   string `json:"started_at,omitempty"`
+	CompletedAt string `json:"completed_at,omitempty"`
+	Message     string `json:"message,omitempty"`
+	Attempt     int    `json:"attempt,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 type ComplianceResult struct {
@@ -134,7 +158,7 @@ func ProductPublishWorkflow(ctx temporalworkflow.Context, input ProductPublishIn
 	}
 	ctx = temporalworkflow.WithActivityOptions(ctx, activityOptions)
 
-	state := ProductPublishResult{ProductID: input.ProductID, Status: ProductPublishStatusDraft}
+	state := newProductPublishState(input, temporalworkflow.Now(ctx))
 	if err := temporalworkflow.SetQueryHandler(ctx, ProductPublishStatusQuery, func() (ProductPublishResult, error) {
 		return state, nil
 	}); err != nil {
@@ -145,42 +169,81 @@ func ProductPublishWorkflow(ctx temporalworkflow.Context, input ProductPublishIn
 	if err := record(ctx, input, "product_publish.started", ProductPublishStatusDraft, "product publish workflow started", ""); err != nil {
 		return state, err
 	}
-	if shouldContinue, err := runComplianceGate(ctx, input, activityInput, &state); err != nil || !shouldContinue {
-		return state, err
-	}
-	if shouldContinue, err := runMediaGate(ctx, input, activityInput, &state); err != nil || !shouldContinue {
-		return state, err
-	}
-	if approved, err := runReviewGate(ctx, input, &state); err != nil || !approved {
-		return state, err
-	}
-	if err := runPublish(ctx, input, activityInput, &state); err != nil {
+	if err := runProductPublishLifecycle(ctx, input, activityInput, &state); err != nil {
 		return state, err
 	}
 	return state, nil
 }
 
+func runProductPublishLifecycle(ctx temporalworkflow.Context, input ProductPublishInput, activityInput ProductPublishActivityInput, state *ProductPublishResult) error {
+	ok, err := runInitialProductPublishStages(ctx, input, activityInput, state)
+	if err != nil || !ok {
+		return err
+	}
+	return runReviewedProductPublishStages(ctx, input, activityInput, state)
+}
+
+func runInitialProductPublishStages(ctx temporalworkflow.Context, input ProductPublishInput, activityInput ProductPublishActivityInput, state *ProductPublishResult) (bool, error) {
+	for _, gate := range []func(temporalworkflow.Context, ProductPublishInput, ProductPublishActivityInput, *ProductPublishResult) (bool, error){
+		runComplianceGate,
+		runMediaGate,
+	} {
+		shouldContinue, err := gate(ctx, input, activityInput, state)
+		if err != nil || !shouldContinue {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func runReviewedProductPublishStages(ctx temporalworkflow.Context, input ProductPublishInput, activityInput ProductPublishActivityInput, state *ProductPublishResult) error {
+	approved, err := runReviewGate(ctx, input, state)
+	if err != nil || !approved {
+		return err
+	}
+	if err := runPublish(ctx, input, activityInput, state); err != nil {
+		return err
+	}
+	return nil
+}
+
 func runComplianceGate(ctx temporalworkflow.Context, input ProductPublishInput, activityInput ProductPublishActivityInput, state *ProductPublishResult) (bool, error) {
 	if err := temporalworkflow.ExecuteActivity(ctx, CheckComplianceActivity, activityInput).Get(ctx, &state.Compliance); err != nil {
 		state.Status = ProductPublishStatusComplianceFailed
+		state.failActivity("check_compliance", temporalworkflow.Now(ctx), "Compliance check failed", err)
+		state.skipActivities(temporalworkflow.Now(ctx), "validate_media", "human_review", "publish")
+		state.CompletedAt = workflowTimestamp(temporalworkflow.Now(ctx))
 		return false, err
 	}
 	if state.Compliance.Pass {
+		state.completeActivity("check_compliance", temporalworkflow.Now(ctx), "Compliance check passed")
+		state.startActivity("validate_media", temporalworkflow.Now(ctx), "Validating media")
 		return true, record(ctx, input, "product_publish.compliance_passed", state.Status, "compliance check passed", "")
 	}
 	state.Status = ProductPublishStatusComplianceFailed
+	state.failActivity("check_compliance", temporalworkflow.Now(ctx), "Compliance check failed", errors.New(strings.Join(state.Compliance.Reasons, "; ")))
+	state.skipActivities(temporalworkflow.Now(ctx), "validate_media", "human_review", "publish")
+	state.CompletedAt = workflowTimestamp(temporalworkflow.Now(ctx))
 	return false, record(ctx, input, "product_publish.compliance_failed", state.Status, "compliance check failed", "")
 }
 
 func runMediaGate(ctx temporalworkflow.Context, input ProductPublishInput, activityInput ProductPublishActivityInput, state *ProductPublishResult) (bool, error) {
 	if err := temporalworkflow.ExecuteActivity(ctx, ValidateMediaActivity, activityInput).Get(ctx, &state.Media); err != nil {
 		state.Status = ProductPublishStatusMediaFailed
+		state.failActivity("validate_media", temporalworkflow.Now(ctx), "Media validation failed", err)
+		state.skipActivities(temporalworkflow.Now(ctx), "human_review", "publish")
+		state.CompletedAt = workflowTimestamp(temporalworkflow.Now(ctx))
 		return false, err
 	}
 	if state.Media.Pass {
+		state.completeActivity("validate_media", temporalworkflow.Now(ctx), "Media validation passed")
+		state.waitForReview(temporalworkflow.Now(ctx), "Awaiting human review")
 		return true, record(ctx, input, "product_publish.media_validated", state.Status, "media validation passed", "")
 	}
 	state.Status = ProductPublishStatusMediaFailed
+	state.failActivity("validate_media", temporalworkflow.Now(ctx), "Media validation failed", errors.New(strings.Join(state.Media.Reasons, "; ")))
+	state.skipActivities(temporalworkflow.Now(ctx), "human_review", "publish")
+	state.CompletedAt = workflowTimestamp(temporalworkflow.Now(ctx))
 	return false, record(ctx, input, "product_publish.media_failed", state.Status, "media validation failed", "")
 }
 
@@ -188,23 +251,33 @@ func runReviewGate(ctx temporalworkflow.Context, input ProductPublishInput, stat
 	state.Status = ProductPublishStatusAwaitingReview
 	review, err := receiveReviewSignal(ctx)
 	if err != nil {
+		state.failActivity("human_review", temporalworkflow.Now(ctx), "Human review did not complete", err)
+		state.skipActivities(temporalworkflow.Now(ctx), "publish")
 		return false, err
 	}
 	state.Review = review
 	if review.Approved {
+		state.completeActivity("human_review", temporalworkflow.Now(ctx), "Human review approved publish")
+		state.startActivity("publish", temporalworkflow.Now(ctx), "Publish to WooCommerce")
 		return true, record(ctx, input, "product_publish.review_approved", state.Status, "human review approved publish", review.Reviewer)
 	}
 	state.Status = ProductPublishStatusRejected
+	state.completeActivity("human_review", temporalworkflow.Now(ctx), "Human review rejected publish")
+	state.skipActivities(temporalworkflow.Now(ctx), "publish")
+	state.CompletedAt = workflowTimestamp(temporalworkflow.Now(ctx))
 	return false, record(ctx, input, "product_publish.review_rejected", state.Status, "human review rejected publish", review.Reviewer)
 }
 
 func runPublish(ctx temporalworkflow.Context, input ProductPublishInput, activityInput ProductPublishActivityInput, state *ProductPublishResult) error {
 	state.Status = ProductPublishStatusPublishing
 	if err := temporalworkflow.ExecuteActivity(ctx, PublishToWooCommerceActivity, activityInput).Get(ctx, &state.Publish); err != nil {
+		state.failActivity("publish", temporalworkflow.Now(ctx), "Publish to WooCommerce failed", err)
 		return err
 	}
 	state.Published = state.Publish.Published
 	state.Status = ProductPublishStatusPublished
+	state.completeActivity("publish", temporalworkflow.Now(ctx), "Published to WooCommerce")
+	state.CompletedAt = workflowTimestamp(temporalworkflow.Now(ctx))
 	return record(ctx, input, "product_publish.published", state.Status, "product published to WooCommerce", state.Review.Reviewer)
 }
 
@@ -316,6 +389,139 @@ func record(ctx temporalworkflow.Context, input ProductPublishInput, eventType, 
 		OccurredAt:  temporalworkflow.Now(ctx),
 	}
 	return temporalworkflow.ExecuteActivity(ctx, RecordWorkflowEventActivity, event).Get(ctx, nil)
+}
+
+func newProductPublishState(input ProductPublishInput, now time.Time) ProductPublishResult {
+	timestamp := workflowTimestamp(now)
+	return ProductPublishResult{
+		ProductID:       input.ProductID,
+		Status:          ProductPublishStatusDraft,
+		CurrentActivity: "Check compliance",
+		StartedAt:       timestamp,
+		UpdatedAt:       timestamp,
+		Activities: []ProductPublishLifecycleStage{
+			{
+				ID:        "check_compliance",
+				Name:      "Check compliance",
+				Status:    workflowActivityStatusRunning,
+				StartedAt: timestamp,
+				Message:   "Running compliance check",
+				Attempt:   1,
+			},
+			{
+				ID:     "validate_media",
+				Name:   "Validate media",
+				Status: workflowActivityStatusPending,
+			},
+			{
+				ID:     "human_review",
+				Name:   "Human review",
+				Status: workflowActivityStatusPending,
+			},
+			{
+				ID:     "publish",
+				Name:   "Publish to WooCommerce",
+				Status: workflowActivityStatusPending,
+			},
+		},
+	}
+}
+
+func workflowTimestamp(now time.Time) string {
+	return now.UTC().Format(time.RFC3339)
+}
+
+func (r *ProductPublishResult) startActivity(activityID string, now time.Time, message string) {
+	stage := r.stage(activityID)
+	if stage == nil {
+		return
+	}
+	stage.Status = workflowActivityStatusRunning
+	if stage.StartedAt == "" {
+		stage.StartedAt = workflowTimestamp(now)
+	}
+	stage.Message = message
+	stage.Attempt++
+	if stage.Attempt == 0 {
+		stage.Attempt = 1
+	}
+	r.CurrentActivity = stage.Name
+	r.UpdatedAt = workflowTimestamp(now)
+}
+
+func (r *ProductPublishResult) waitForReview(now time.Time, message string) {
+	stage := r.stage("human_review")
+	if stage == nil {
+		return
+	}
+	r.Status = ProductPublishStatusAwaitingReview
+	stage.Status = workflowActivityStatusWaitingReview
+	if stage.StartedAt == "" {
+		stage.StartedAt = workflowTimestamp(now)
+	}
+	stage.Message = message
+	stage.Attempt = 1
+	r.CurrentActivity = message
+	r.UpdatedAt = workflowTimestamp(now)
+}
+
+func (r *ProductPublishResult) completeActivity(activityID string, now time.Time, message string) {
+	stage := r.stage(activityID)
+	if stage == nil {
+		return
+	}
+	stage.Status = workflowActivityStatusCompleted
+	if stage.StartedAt == "" {
+		stage.StartedAt = workflowTimestamp(now)
+	}
+	stage.CompletedAt = workflowTimestamp(now)
+	stage.Message = message
+	if stage.Attempt == 0 {
+		stage.Attempt = 1
+	}
+	r.UpdatedAt = workflowTimestamp(now)
+}
+
+func (r *ProductPublishResult) failActivity(activityID string, now time.Time, message string, err error) {
+	stage := r.stage(activityID)
+	if stage == nil {
+		return
+	}
+	stage.Status = workflowActivityStatusFailed
+	if stage.StartedAt == "" {
+		stage.StartedAt = workflowTimestamp(now)
+	}
+	stage.CompletedAt = workflowTimestamp(now)
+	stage.Message = message
+	if err != nil {
+		stage.Error = err.Error()
+	}
+	if stage.Attempt == 0 {
+		stage.Attempt = 1
+	}
+	r.CurrentActivity = stage.Name
+	r.UpdatedAt = workflowTimestamp(now)
+}
+
+func (r *ProductPublishResult) skipActivities(now time.Time, activityIDs ...string) {
+	for _, activityID := range activityIDs {
+		stage := r.stage(activityID)
+		if stage == nil || stage.Status != workflowActivityStatusPending {
+			continue
+		}
+		stage.Status = workflowActivityStatusSkipped
+		stage.Message = "Skipped"
+	}
+	r.UpdatedAt = workflowTimestamp(now)
+}
+
+func (r *ProductPublishResult) stage(activityID string) *ProductPublishLifecycleStage {
+	for i := range r.Activities {
+		if r.Activities[i].ID == activityID {
+			return &r.Activities[i]
+		}
+	}
+	return nil
 }
 
 func parseProductID(productID string) (uuid.UUID, error) {

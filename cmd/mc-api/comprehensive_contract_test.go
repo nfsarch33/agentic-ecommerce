@@ -21,10 +21,12 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 	"github.com/nfsarch33/agentic-ecommerce/internal/webhook/outbound"
+	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/converter"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -61,6 +63,7 @@ func TestOpenAPIOperationsHaveComprehensiveContractCoverage(t *testing.T) {
 		"getReadyz":                        true,
 		"getSyncStatus":                    true,
 		"getTenantSettings":                true,
+		"listWorkflows":                    true,
 		"getWorkflowStatus":                true,
 		"ingestRAGDocument":                true,
 		"listAgentHistory":                 true,
@@ -238,6 +241,7 @@ func TestRepresentativeGoldenJSONResponseShapes(t *testing.T) {
 		{name: "rag_search", method: http.MethodGet, path: "/api/v1/rag/search?q=five%20resistance%20levels&top_k=1", statusCode: http.StatusOK, specPath: "/api/v1/rag/search", specStatus: "200", golden: "rag_search.golden.json"},
 		{name: "content_generate", method: http.MethodPost, path: "/api/v1/content/generate", body: `{"product_id":"` + product.ID().String() + `","max_words":80}`, statusCode: http.StatusOK, specPath: "/api/v1/content/generate", specStatus: "200", golden: "content_generate.golden.json"},
 		{name: "workflow_start", method: http.MethodPost, path: "/api/v1/workflows/product-publish", body: `{"product_id":"` + product.ID().String() + `","requested_by":"operator@example.com"}`, statusCode: http.StatusAccepted, specPath: "/api/v1/workflows/product-publish", specStatus: "202", golden: "workflow_start.golden.json"},
+		{name: "workflow_list", method: http.MethodGet, path: "/api/v1/workflows", statusCode: http.StatusOK, specPath: "/api/v1/workflows", specStatus: "200", golden: "workflow_list.golden.json"},
 		{name: "workflow_marketplace_sync_start", method: http.MethodPost, path: "/api/v1/workflows/marketplace-sync", body: `{"event":{"tenant_id":"tenant-contract","provider":"shopify","entity_type":"product","entity_id":"sku-contract","external_id":"gid://shopify/Product/1","operation":"upsert","version":"v1","payload":{"title":"Resistance Band Set","description":"Five resistance levels","price":49.95,"stock":12}}}`, statusCode: http.StatusAccepted, specPath: "/api/v1/workflows/marketplace-sync", specStatus: "202", golden: "workflow_marketplace_sync_start.golden.json"},
 		{name: "workflow_marketplace_replay_start", method: http.MethodPost, path: "/api/v1/workflows/marketplace-replay", body: `{"record":{"id":"dlq-contract-1","attempts":3,"reason":"transient timeout","event":{"tenant_id":"tenant-contract","provider":"shopify","entity_type":"product","entity_id":"sku-contract","external_id":"gid://shopify/Product/1","operation":"upsert","version":"v1","payload":{"title":"Resistance Band Set","description":"Five resistance levels","price":49.95,"stock":12}}}}`, statusCode: http.StatusAccepted, specPath: "/api/v1/workflows/marketplace-replay", specStatus: "202", golden: "workflow_marketplace_replay_start.golden.json"},
 		{name: "workflow_status", method: http.MethodGet, path: "/api/v1/workflows/wf-contract", statusCode: http.StatusOK, specPath: "/api/v1/workflows/{id}", specStatus: "200", golden: "workflow_status.golden.json"},
@@ -365,12 +369,66 @@ func seedContractDependencies(t *testing.T, srv *server, productID string) {
 	srv.marketplaceSync = router
 	srv.workflowClient = &fakeTemporalWorkflowClient{
 		run: fakeWorkflowRun{id: "product-publish-" + productID, runID: "run-contract"},
+		list: &workflowservicepb.ListWorkflowExecutionsResponse{
+			Executions: []*workflowpb.WorkflowExecutionInfo{
+				{
+					Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-contract", RunId: "run-contract"},
+					Type:      &commonpb.WorkflowType{Name: "ProductPublishWorkflow"},
+					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					StartTime: timestamppb.New(time.Date(2026, 5, 7, 12, 30, 0, 0, time.UTC)),
+				},
+			},
+		},
 		describe: &workflowservicepb.DescribeWorkflowExecutionResponse{
 			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 				Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-contract", RunId: "run-contract"},
+				Type:      &commonpb.WorkflowType{Name: "ProductPublishWorkflow"},
 				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				StartTime: timestamppb.New(time.Date(2026, 5, 7, 12, 30, 0, 0, time.UTC)),
 			},
+		},
+		queryByWorkflowID: map[string]converter.EncodedValue{
+			"wf-contract": fakeEncodedValue{value: map[string]any{
+				"product_id":       productID,
+				"status":           ecworkflow.ProductPublishStatusAwaitingReview,
+				"current_activity": "Awaiting human review",
+				"started_at":       "2026-05-07T12:30:00Z",
+				"updated_at":       "2026-05-07T12:32:00Z",
+				"activities": []map[string]any{
+					{
+						"id":           "check_compliance",
+						"name":         "Check compliance",
+						"status":       "completed",
+						"started_at":   "2026-05-07T12:30:00Z",
+						"completed_at": "2026-05-07T12:30:30Z",
+						"message":      "Compliance check passed",
+						"attempt":      1,
+					},
+					{
+						"id":           "validate_media",
+						"name":         "Validate media",
+						"status":       "completed",
+						"started_at":   "2026-05-07T12:30:30Z",
+						"completed_at": "2026-05-07T12:31:00Z",
+						"message":      "Media validation passed",
+						"attempt":      1,
+					},
+					{
+						"id":         "human_review",
+						"name":       "Human review",
+						"status":     "waiting_review",
+						"started_at": "2026-05-07T12:31:00Z",
+						"message":    "Awaiting human review",
+						"attempt":    1,
+					},
+					{
+						"id":      "publish",
+						"name":    "Publish to WooCommerce",
+						"status":  "pending",
+						"message": "Pending",
+					},
+				},
+			}},
 		},
 	}
 }
