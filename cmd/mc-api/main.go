@@ -717,7 +717,7 @@ func (s *server) mountLoadMatrixRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("/api/v1/admin/alerts/", adminMobileAPI)
 	}
 	if s.operatorAlertsHandler != nil {
-		operatorAlertsAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.operatorAlertsHandler.ServeHTTP)))
+		operatorAlertsAPI := s.withCORS(s.withRateLimit(s.withRBAC(operatorAlertsRole, s.withAudit(operatorAlertsAuditAction, s.operatorAlertsHandler.ServeHTTP))))
 		mux.HandleFunc("/api/v1/operator/alerts", operatorAlertsAPI)
 		mux.HandleFunc("/api/v1/operator/alerts/", operatorAlertsAPI)
 	}

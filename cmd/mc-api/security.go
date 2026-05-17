@@ -281,6 +281,13 @@ func workflowRole(r *http.Request) security.Role {
 	return security.RoleOperator
 }
 
+func operatorAlertsRole(r *http.Request) security.Role {
+	if r.Method == http.MethodGet {
+		return security.RoleViewer
+	}
+	return security.RoleOperator
+}
+
 func agentsRole(r *http.Request) security.Role {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/agents"), "/")
 	if strings.HasSuffix(path, "/run") && r.Method == http.MethodPost {
@@ -394,6 +401,18 @@ func workflowAuditAction(r *http.Request) auditAction {
 		return auditAction{Action: "workflow.sourcing.start", Resource: "sourcing", Mutates: true}
 	case strings.HasSuffix(path, "/signals/review") && r.Method == http.MethodPost:
 		return auditAction{Action: "workflow.product_publish.review_signal", Resource: strings.TrimSuffix(path, "/signals/review"), Mutates: true}
+	default:
+		return auditAction{}
+	}
+}
+
+func operatorAlertsAuditAction(r *http.Request) auditAction {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/operator/alerts"), "/")
+	switch {
+	case strings.HasSuffix(path, "/acknowledge") && r.Method == http.MethodPost:
+		return auditAction{Action: "operator_alert.acknowledge", Resource: strings.TrimSuffix(path, "/acknowledge"), Mutates: true}
+	case strings.HasSuffix(path, "/resolve") && r.Method == http.MethodPost:
+		return auditAction{Action: "operator_alert.resolve", Resource: strings.TrimSuffix(path, "/resolve"), Mutates: true}
 	default:
 		return auditAction{}
 	}

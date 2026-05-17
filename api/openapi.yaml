@@ -915,6 +915,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid JWT bearer token when auth is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Authenticated caller lacks operator-alert read access.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Operator alert repository failure.
           content:
@@ -951,6 +963,18 @@ paths:
                 $ref: '#/components/schemas/OperatorAlertAcknowledgeResponse'
         '400':
           description: Missing tenant identifier or invalid alert path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid JWT bearer token when auth is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Authenticated caller lacks operator-alert mutation access.
           content:
             application/json:
               schema:
@@ -1009,6 +1033,18 @@ paths:
                 $ref: '#/components/schemas/OperatorAlertResolveResponse'
         '400':
           description: Missing tenant identifier, invalid alert path, or unsupported action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid JWT bearer token when auth is configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Authenticated caller lacks operator-alert mutation access.
           content:
             application/json:
               schema:
@@ -6568,16 +6604,19 @@ components:
           type: integer
     OperatorAlertAcknowledgeResponse:
       type: object
-      required: [tenant_id, alert_id, status]
+      required: [tenant_id, alert_id, status, acknowledged_at]
       properties:
         tenant_id: { type: string }
         alert_id: { type: string }
         status:
           type: string
           enum: [acknowledged]
+        acknowledged_at:
+          type: string
+          format: date-time
     OperatorAlertResolveResponse:
       type: object
-      required: [tenant_id, alert_id, status, action_taken]
+      required: [tenant_id, alert_id, status, action_taken, resolved_at]
       properties:
         tenant_id: { type: string }
         alert_id: { type: string }
@@ -6587,6 +6626,9 @@ components:
         action_taken:
           type: string
           enum: [approve, deny]
+        resolved_at:
+          type: string
+          format: date-time
 
     # v4.8.0 Coaching schemas.
     CoachingTipRequest:
