@@ -28,6 +28,8 @@ func TestMediaProcessingWorkflowSourcesProcessesQALinksAndStores(t *testing.T) {
 		RequestedBy: "operator@example.com",
 	}
 	source := intelligence.Asset{ID: "source-media", ProductID: input.ProductID, SourceURL: input.SourceURL}
+	approved := source
+	approved.ReviewState = intelligence.MediaReviewStateApproved
 	processed := intelligence.Asset{ID: "processed-media", ProductID: input.ProductID, SourceURL: input.SourceURL}
 	quality := intelligence.QualityReport{Pass: true, Score: 100}
 	stored := processed
@@ -35,6 +37,11 @@ func TestMediaProcessingWorkflowSourcesProcessesQALinksAndStores(t *testing.T) {
 	link := MediaProductLinkResult{Linked: true, ProductID: input.ProductID, MediaID: processed.ID}
 
 	env.OnActivity(MediaSourceActivity, mock.Anything, input).Return(source, nil).Once()
+	env.OnActivity(MediaApproveActivity, mock.Anything, MediaReviewActivityInput{
+		MediaID:  source.ID,
+		Reviewer: "operator@example.com",
+		Note:     "Approved via media processing workflow request",
+	}).Return(approved, nil).Once()
 	env.OnActivity(MediaProcessActivity, mock.Anything, MediaProcessActivityInput{MediaID: source.ID}).Return(processed, nil).Once()
 	env.OnActivity(MediaQualityActivity, mock.Anything, MediaQualityActivityInput{MediaID: processed.ID}).Return(quality, nil).Once()
 	env.OnActivity(MediaStoreActivity, mock.Anything, MediaStoreActivityInput{MediaID: processed.ID}).Return(stored, nil).Once()
@@ -69,10 +76,17 @@ func TestMediaProcessingWorkflowStopsWhenQualityFails(t *testing.T) {
 
 	input := MediaProcessingInput{ProductID: "product-123", SourceURL: "https://supplier.example/images/lamp.png"}
 	source := intelligence.Asset{ID: "source-media", ProductID: input.ProductID, SourceURL: input.SourceURL}
+	approved := source
+	approved.ReviewState = intelligence.MediaReviewStateApproved
 	processed := intelligence.Asset{ID: "processed-media", ProductID: input.ProductID, SourceURL: input.SourceURL}
 	quality := intelligence.QualityReport{Pass: false, Score: 40, Issues: []intelligence.QualityIssue{{ID: "resolution_too_small"}}}
 
 	env.OnActivity(MediaSourceActivity, mock.Anything, input).Return(source, nil).Once()
+	env.OnActivity(MediaApproveActivity, mock.Anything, MediaReviewActivityInput{
+		MediaID:  source.ID,
+		Reviewer: "media-workflow",
+		Note:     "Approved via media processing workflow request",
+	}).Return(approved, nil).Once()
 	env.OnActivity(MediaProcessActivity, mock.Anything, MediaProcessActivityInput{MediaID: source.ID}).Return(processed, nil).Once()
 	env.OnActivity(MediaQualityActivity, mock.Anything, MediaQualityActivityInput{MediaID: processed.ID}).Return(quality, nil).Once()
 
@@ -115,8 +129,16 @@ func TestMediaProcessingActivitiesUseMediaServiceAndNoopLinker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SourceMedia: %v", err)
 	}
+	approved, err := activities.ApproveMedia(context.Background(), MediaReviewActivityInput{
+		MediaID:  source.ID,
+		Reviewer: "operator@example.com",
+		Note:     "Approved via media processing workflow request",
+	})
+	if err != nil {
+		t.Fatalf("ApproveMedia: %v", err)
+	}
 	processed, err := activities.ProcessMedia(context.Background(), MediaProcessActivityInput{
-		MediaID: source.ID,
+		MediaID: approved.ID,
 		Format:  "webp",
 	})
 	if err != nil {
@@ -154,6 +176,9 @@ func TestMediaProcessingActivitiesRequireConfiguredService(t *testing.T) {
 	if _, err := activities.SourceMedia(context.Background(), MediaProcessingInput{}); err == nil {
 		t.Fatal("SourceMedia err = nil, want configured service error")
 	}
+	if _, err := activities.ApproveMedia(context.Background(), MediaReviewActivityInput{}); err == nil {
+		t.Fatal("ApproveMedia err = nil, want configured service error")
+	}
 	if _, err := activities.ProcessMedia(context.Background(), MediaProcessActivityInput{}); err == nil {
 		t.Fatal("ProcessMedia err = nil, want configured service error")
 	}
@@ -172,6 +197,9 @@ func registerMediaProcessingTestActivities(env *testsuite.TestWorkflowEnvironmen
 	env.RegisterActivityWithOptions(func(context.Context, MediaProcessingInput) (intelligence.Asset, error) {
 		return intelligence.Asset{}, nil
 	}, activity.RegisterOptions{Name: MediaSourceActivity})
+	env.RegisterActivityWithOptions(func(context.Context, MediaReviewActivityInput) (intelligence.Asset, error) {
+		return intelligence.Asset{}, nil
+	}, activity.RegisterOptions{Name: MediaApproveActivity})
 	env.RegisterActivityWithOptions(func(context.Context, MediaProcessActivityInput) (intelligence.Asset, error) {
 		return intelligence.Asset{}, nil
 	}, activity.RegisterOptions{Name: MediaProcessActivity})

@@ -24,7 +24,7 @@ Protected routes use short-lived HMAC-signed JWT bearer tokens with `admin`, `op
 | --- | --- | --- |
 | Catalog and orders | `/api/v1/products`, `/api/v1/orders`, checkout/cart routes | Storefront reads remain public; admin writes require JWT/RBAC. |
 | RAG and fact-checking | `/api/v1/rag/documents`, `/api/v1/rag/search` | Stores tenant-scoped documents/chunks in PostgreSQL + pgvector and returns evidence for content checks. |
-| Media Intelligence | `/api/v1/media/source`, `/api/v1/media/process`, `/api/v1/media/{id}`, `/api/v1/media/{id}/validate` | Deterministic source/process/QA contracts with filesystem or S3/GCS-backed storage. |
+| Media Intelligence | `/api/v1/media/source`, `/api/v1/media/process`, `/api/v1/media/{id}`, `/api/v1/media/{id}/approve`, `/api/v1/media/{id}/reject`, `/api/v1/media/{id}/validate` | Deterministic source/review/process/QA contracts with filesystem or S3/GCS-backed storage plus explicit operator review transitions. |
 | Compliance | `/api/v1/products/{id}/compliance-check`, `/api/v1/compliance/rules`, `/api/v1/compliance/custom-rules`, `/api/v1/compliance/reports/*` | Built-in and tenant custom rules, rule versioning, history, summary, and export. |
 | Tenant settings | `/api/v1/tenant/settings` | Branding, WooCommerce credential references, AI preferences, and compliance overrides. |
 | Agent automation | `/api/v1/agents/*`, `/api/v1/agent-schedules/*` | Sourcing, pricing, and compliance run contracts plus schedule controls. |
@@ -36,6 +36,22 @@ Protected routes use short-lived HMAC-signed JWT bearer tokens with `admin`, `op
 The v9.0.0 API is tenant-aware but does not provision tenants. Tenant IDs are opaque strings used to scope repository operations, tenant settings, custom compliance rules, compliance history, webhook registrations, RAG documents, and release fixtures.
 
 Tenant IDs must not be used as raw Prometheus labels. Use structured logs, SQL exports, or bounded labels such as `tenant_scope` for observability. See `docs/tenant-isolation.md`.
+
+## Media Lifecycle Contract
+
+Media assets now move through a review-bearing lifecycle instead of implicit
+best-effort processing:
+
+- `POST /api/v1/media/source` creates or reuses a media request and returns the
+  current lifecycle state.
+- `POST /api/v1/media/{id}/approve` and `POST /api/v1/media/{id}/reject` are
+  the only explicit review transitions for pending assets.
+- `POST /api/v1/media/process` only accepts assets that are already approved.
+- Media responses include status timestamps so operators and downstream UIs can
+  audit when a request last changed state.
+- Repeated source requests are idempotent for the same request payload; callers
+  should treat duplicate sourcing as "return the current asset state", not "make
+  another asset".
 
 ## Validation
 
