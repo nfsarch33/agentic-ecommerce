@@ -294,12 +294,18 @@ func (h *OperatorAlertHandler) handleAcknowledge(w http.ResponseWriter, r *http.
 		writeJSONError(w, http.StatusConflict, fmt.Errorf("%w: id=%s", ErrAlertAlreadyResolved, alertID))
 		return
 	}
-	if uerr := h.repo.UpdateStatus(r.Context(), tenantID, alertID, AlertStatusAcknowledged, "", h.now()); uerr != nil {
+	acknowledgedAt := h.now()
+	if uerr := h.repo.UpdateStatus(r.Context(), tenantID, alertID, AlertStatusAcknowledged, "", acknowledgedAt); uerr != nil {
 		writeJSONError(w, http.StatusInternalServerError, uerr)
 		return
 	}
 	h.recordAlertOutcome(tenantID, current.AlertType, AlertStatusAcknowledged)
-	writeJSON(w, http.StatusOK, map[string]any{"tenant_id": tenantID, "alert_id": alertID, "status": AlertStatusAcknowledged})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"tenant_id":       tenantID,
+		"alert_id":        alertID,
+		"status":          AlertStatusAcknowledged,
+		"acknowledged_at": acknowledgedAt.UTC().Format(time.RFC3339),
+	})
 }
 
 // handleResolve serves the POST /alerts/{id}/resolve endpoint.
@@ -328,7 +334,8 @@ func (h *OperatorAlertHandler) handleResolve(w http.ResponseWriter, r *http.Requ
 	if !current.AcknowledgedAt.IsZero() {
 		resolutionStart = current.AcknowledgedAt
 	}
-	if err := h.applyResolution(r.Context(), tenantID, current, action); err != nil {
+	resolvedAt := h.now()
+	if err := h.applyResolution(r.Context(), tenantID, current, action, resolvedAt); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -339,25 +346,26 @@ func (h *OperatorAlertHandler) handleResolve(w http.ResponseWriter, r *http.Requ
 		"alert_id":     alertID,
 		"status":       AlertStatusResolved,
 		"action_taken": action,
+		"resolved_at":  resolvedAt.UTC().Format(time.RFC3339),
 	})
 }
 
 // applyResolution is the small helper that performs the repository
 // update + event publish. Cyclomatic 3.
-func (h *OperatorAlertHandler) applyResolution(ctx context.Context, tenantID string, current OperatorAlert, action string) error {
-	if uerr := h.repo.UpdateStatus(ctx, tenantID, current.AlertID, AlertStatusResolved, action, h.now()); uerr != nil {
+func (h *OperatorAlertHandler) applyResolution(ctx context.Context, tenantID string, current OperatorAlert, action string, occurredAt time.Time) error {
+	if uerr := h.repo.UpdateStatus(ctx, tenantID, current.AlertID, AlertStatusResolved, action, occurredAt); uerr != nil {
 		return uerr
 	}
 	if h.publisher == nil {
 		return nil
 	}
-	evt, err := eventbus.NewOperatorAlertResolvedEvent("handler.operator_alerts", h.now(), eventbus.OperatorAlertResolvedPayload{
+	evt, err := eventbus.NewOperatorAlertResolvedEvent("handler.operator_alerts", occurredAt, eventbus.OperatorAlertResolvedPayload{
 		Version:    eventbus.OperatorAlertResolvedPayloadVersion,
 		TenantID:   tenantID,
 		AlertID:    current.AlertID,
 		AlertType:  string(current.AlertType),
 		Action:     action,
-		OccurredAt: h.now(),
+		OccurredAt: occurredAt,
 	})
 	if err != nil {
 		h.logger.Warn("operator_alerts.resolve_event_failed", "tenant_id", tenantID, "alert_id", current.AlertID, "error", err)

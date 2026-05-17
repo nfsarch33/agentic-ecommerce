@@ -65,9 +65,9 @@ func TestOperatorAlertsOpenAPIContracts(t *testing.T) {
 	spec := loadOpenAPISpec(t)
 	paths := specMap(t, spec, "paths")
 
-	assertOperation(t, paths, "/api/v1/operator/alerts", "get", "listOperatorAlerts", []string{"200", "400", "500"})
-	assertOperation(t, paths, "/api/v1/operator/alerts/{alert_id}/acknowledge", "post", "acknowledgeOperatorAlert", []string{"200", "400", "404", "409", "500"})
-	assertOperation(t, paths, "/api/v1/operator/alerts/{alert_id}/resolve", "post", "resolveOperatorAlert", []string{"200", "400", "404", "409", "500"})
+	assertOperation(t, paths, "/api/v1/operator/alerts", "get", "listOperatorAlerts", []string{"200", "400", "401", "403", "500"})
+	assertOperation(t, paths, "/api/v1/operator/alerts/{alert_id}/acknowledge", "post", "acknowledgeOperatorAlert", []string{"200", "400", "401", "403", "404", "409", "500"})
+	assertOperation(t, paths, "/api/v1/operator/alerts/{alert_id}/resolve", "post", "resolveOperatorAlert", []string{"200", "400", "401", "403", "404", "409", "500"})
 
 	schemas := specMap(t, specMap(t, spec, "components"), "schemas")
 	assertRequiredFields(t, schemas, "OperatorAlert", []string{
@@ -80,8 +80,8 @@ func TestOperatorAlertsOpenAPIContracts(t *testing.T) {
 		"expires_at",
 	})
 	assertRequiredFields(t, schemas, "OperatorAlertListResponse", []string{"tenant_id", "status", "alerts", "count"})
-	assertRequiredFields(t, schemas, "OperatorAlertAcknowledgeResponse", []string{"tenant_id", "alert_id", "status"})
-	assertRequiredFields(t, schemas, "OperatorAlertResolveResponse", []string{"tenant_id", "alert_id", "status", "action_taken"})
+	assertRequiredFields(t, schemas, "OperatorAlertAcknowledgeResponse", []string{"tenant_id", "alert_id", "status", "acknowledged_at"})
+	assertRequiredFields(t, schemas, "OperatorAlertResolveResponse", []string{"tenant_id", "alert_id", "status", "action_taken", "resolved_at"})
 }
 
 func TestOperatorAlertRepresentativeListContract(t *testing.T) {
