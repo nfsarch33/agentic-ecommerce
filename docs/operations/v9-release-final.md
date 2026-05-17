@@ -3,8 +3,8 @@
 **Date**: 2026-05-16
 **Release**: `agentic-ecommerce` v9.0.0
 **Base**: v8.0.0 release tag
-**Head**: 17eab44dfdfc807e34fbf4ee05b6bd9f2322e41c
-Frontend SHA: `7682367be3b5af728649a9730a625aa54c46d87b`
+**Head**: 9715a7e8ea94544bbf8dccb344b1aa44b75aa682
+Frontend SHA: `53a4598415f488756950b040ae7ad2b022c6790c`
 OpenAPI contract path: `api/openapi.yaml`
 **Status**: pre-release freeze captured; semver tag still blocked
 
