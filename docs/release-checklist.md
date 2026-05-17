@@ -10,7 +10,7 @@ which is the only blocking release lane in the active EC programme.
 - `api/openapi.yaml` has `info.version: 9.0.0`.
 - `CHANGELOG.md` includes the v9.0.0 platform-baseline entry summarising the backend release path, the primary-only self-hosted regression, and current secondary-pool blocker state.
 - `README.md` links quickstart, architecture, API docs, Temporal, n8n, media storage, cloud deployment, and security boundaries.
-- `README.md` also records that `v9.0.0` is still RC-only until `primary-testing` passes the release gate.
+- `README.md` also records that the semver tag `v9.0.0` remains uncut until `primary-testing` passes the release gate.
 - `.env.example` documents `EC_AGENT_RUNTIME_MODE=legacy`, and any use of
   `shadow` or `primary` is backed by release QA evidence before promotion.
 - `docs/api-reference.md`, `docs/temporal-workflow-specs.md`, and `docs/webhook-contracts.md` reflect the v9.0.0 API, workflow, automation surfaces, and the primary-only self-hosted release contract.

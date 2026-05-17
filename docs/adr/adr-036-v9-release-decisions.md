@@ -23,7 +23,7 @@ pool as release-blocking while cloud deployment material stays reference-only.
    remain opt-in and explicitly unstable.
 3. Treat `host-a/node-a` as the only blocking self-hosted release environment for
    backend integration, full-stack E2E, cleanup, and cross-repo
-   frontend/UIAuto evidence. `v9.0.0` stays RC-only until `primary-testing`
+   frontend/UIAuto evidence. The semver tag `v9.0.0` remains uncut until `primary-testing`
    satisfies the controller SSH, trust, cleanup, and resource-health gates.
 4. Treat cloud deployment artifacts as maintained reference material for later
    work, but not as blocking release gates for `v9.0.0`.

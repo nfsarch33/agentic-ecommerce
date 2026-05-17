@@ -1,12 +1,12 @@
 # API Versioning Policy
 
-> **Status**: stable as of v2.9.0.
+> **Status**: stable as of v9.0.0.
 
 The Agentic Ecommerce HTTP surface ships with two named versions:
 
 | Version    | Path prefix | Status   | Spec file                       | Stability                                                            |
 |------------|-------------|----------|---------------------------------|----------------------------------------------------------------------|
-| `v1`       | `/api/v1/`  | stable   | `api/openapi.yaml`              | No breaking changes through host **v3.x**. Additive only.            |
+| `v1`       | `/api/v1/`  | stable   | `api/openapi.yaml`              | No breaking changes through host **v9.x**. Additive only.            |
 | `v2`       | `/api/v2/`  | preview  | `api/openapi-v2-preview.yaml`   | Subject to change without notice. Opt-in only.                       |
 
 ## Stability guarantees
@@ -83,7 +83,7 @@ Every API response carries:
 
 The Plugin SDK at `pkg/marketplace/sdk` follows the same v1 stability
 contract. SDK consumers can rely on the exported symbols not changing
-through host v3.x. New helpers may be added; none will be removed.
+through host v9.x. New helpers may be added; none will be removed.
 
 ## Deprecation timeline
 
