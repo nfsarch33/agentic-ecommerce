@@ -14,50 +14,117 @@ import (
 type loadMatrixHandlers struct {
 	payments        http.Handler
 	adminMobile     http.Handler
+	operatorAlerts  http.Handler
 	tenantDashboard http.Handler
 	gmv             http.Handler
+}
+
+type loadMatrixHandlerBuilder struct {
+	name   string
+	build  func() (http.Handler, error)
+	assign func(*loadMatrixHandlers, http.Handler)
 }
 
 func buildLoadMatrixHandlers(logger *slog.Logger) (loadMatrixHandlers, error) {
 	now := func() time.Time { return time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC) }
 
-	payments, err := apihandler.NewPaymentsHandler(logger, apihandler.PaymentsHandlerConfig{
-		Repository: staticPaymentsRepo{now: now},
-	})
-	if err != nil {
-		return loadMatrixHandlers{}, fmt.Errorf("payments: %w", err)
+	builds := []loadMatrixHandlerBuilder{
+		{
+			name:  "payments",
+			build: func() (http.Handler, error) { return buildStaticPaymentsHandler(logger, now) },
+			assign: func(handlers *loadMatrixHandlers, handler http.Handler) {
+				handlers.payments = handler
+			},
+		},
+		{
+			name:  "admin mobile",
+			build: func() (http.Handler, error) { return buildStaticAdminMobileHandler(logger, now) },
+			assign: func(handlers *loadMatrixHandlers, handler http.Handler) {
+				handlers.adminMobile = handler
+			},
+		},
+		{
+			name:  "operator alerts",
+			build: func() (http.Handler, error) { return buildStaticOperatorAlertsHandler(logger, now) },
+			assign: func(handlers *loadMatrixHandlers, handler http.Handler) {
+				handlers.operatorAlerts = handler
+			},
+		},
+		{
+			name:  "tenant dashboard",
+			build: func() (http.Handler, error) { return buildStaticTenantDashboardHandler(logger, now) },
+			assign: func(handlers *loadMatrixHandlers, handler http.Handler) {
+				handlers.tenantDashboard = handler
+			},
+		},
+		{
+			name:  "gmv",
+			build: func() (http.Handler, error) { return buildStaticGMVHandler(logger, now) },
+			assign: func(handlers *loadMatrixHandlers, handler http.Handler) {
+				handlers.gmv = handler
+			},
+		},
 	}
 
-	admin, err := apihandler.NewAdminMobileHandler(logger, apihandler.AdminMobileHandlerConfig{
+	var handlers loadMatrixHandlers
+	for _, build := range builds {
+		handler, err := build.build()
+		if err != nil {
+			return loadMatrixHandlers{}, fmt.Errorf("%s: %w", build.name, err)
+		}
+		build.assign(&handlers, handler)
+	}
+
+	return handlers, nil
+}
+
+func buildStaticPaymentsHandler(logger *slog.Logger, now func() time.Time) (http.Handler, error) {
+	return apihandler.NewPaymentsHandler(logger, apihandler.PaymentsHandlerConfig{
+		Repository: staticPaymentsRepo{now: now},
+	})
+}
+
+func buildStaticAdminMobileHandler(logger *slog.Logger, now func() time.Time) (http.Handler, error) {
+	return apihandler.NewAdminMobileHandler(logger, apihandler.AdminMobileHandlerConfig{
 		Repository: staticAdminRepo{now: now},
 		Now:        now,
 	})
-	if err != nil {
-		return loadMatrixHandlers{}, fmt.Errorf("admin mobile: %w", err)
-	}
+}
 
-	dashboard, err := apihandler.NewTenantDashboardHandler(logger, apihandler.TenantDashboardHandlerConfig{
+func buildStaticTenantDashboardHandler(logger *slog.Logger, now func() time.Time) (http.Handler, error) {
+	return apihandler.NewTenantDashboardHandler(logger, apihandler.TenantDashboardHandlerConfig{
 		Repository: staticDashboardRepo{now: now},
 		Now:        now,
 	})
-	if err != nil {
-		return loadMatrixHandlers{}, fmt.Errorf("tenant dashboard: %w", err)
-	}
+}
 
-	gmv, err := apihandler.NewGMVHandler(logger, apihandler.GMVHandlerConfig{
+func buildStaticGMVHandler(logger *slog.Logger, now func() time.Time) (http.Handler, error) {
+	return apihandler.NewGMVHandler(logger, apihandler.GMVHandlerConfig{
 		Repository: staticGMVRepo{},
 		Now:        now,
 	})
-	if err != nil {
-		return loadMatrixHandlers{}, fmt.Errorf("gmv: %w", err)
+}
+
+func buildStaticOperatorAlertsHandler(logger *slog.Logger, now func() time.Time) (http.Handler, error) {
+	repo := apihandler.NewInMemoryOperatorAlertRepository()
+	if err := repo.Insert(context.Background(), apihandler.OperatorAlert{
+		TenantID:  "load-test-tenant",
+		AlertID:   "alert-1",
+		AlertType: apihandler.AlertTypeChannelStatusFail,
+		Severity:  apihandler.AlertSeverityWarning,
+		CreatedAt: now(),
+	}); err != nil {
+		return nil, fmt.Errorf("seed static alert: %w", err)
 	}
 
-	return loadMatrixHandlers{
-		payments:        payments,
-		adminMobile:     admin,
-		tenantDashboard: dashboard,
-		gmv:             gmv,
-	}, nil
+	handler, err := apihandler.NewOperatorAlertHandler(logger, apihandler.OperatorAlertHandlerConfig{
+		Repository: repo,
+		Now:        now,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return handler, nil
 }
 
 func (s *server) tenantAdminMux(w http.ResponseWriter, r *http.Request) {
