@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -89,6 +90,11 @@ type ProcessRequest struct {
 	Resize           ResizeOptions `json:"resize,omitempty"`
 	Format           string        `json:"format,omitempty"`
 	RemoveBackground bool          `json:"remove_background,omitempty"`
+}
+
+type ListFilter struct {
+	ProductID string
+	Status    string
 }
 
 type ResizeOptions struct {
@@ -215,12 +221,8 @@ func (s *Service) Process(ctx context.Context, req ProcessRequest) (Asset, error
 		Height:         height,
 	}
 	transitionAt := s.now()
-	source.ProcessState = MediaProcessStateProcessed
-	source.UpdatedAt = transitionAt
-	s.save(source)
-
 	processed := source
-	processed.ID = mediaID(metadata.ChecksumSHA256)
+	processed.ID = mediaID("processed", metadata.ChecksumSHA256, processed.ProductID, processed.SourceURL)
 	processed.Metadata = metadata
 	processed.Processing = ProcessingInfo{Operations: operations}
 	processed.ProcessState = MediaProcessStateProcessed
@@ -329,6 +331,41 @@ func (s *Service) Get(mediaID string) (Asset, bool) {
 	return asset, true
 }
 
+func (s *Service) List(filter ListFilter) []Asset {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	assets := make([]Asset, 0, len(s.assets))
+	for _, asset := range s.assets {
+		if !matchesListFilter(asset, filter) {
+			continue
+		}
+		assets = append(assets, cloneAsset(asset))
+	}
+	sort.SliceStable(assets, func(i, j int) bool { return newerAsset(assets[i], assets[j]) })
+	return assets
+}
+
+func matchesListFilter(asset Asset, filter ListFilter) bool {
+	productID := strings.TrimSpace(filter.ProductID)
+	if productID != "" && asset.ProductID != productID {
+		return false
+	}
+
+	status := strings.TrimSpace(filter.Status)
+	if status != "" && status != "all" && assetProcessingStatus(asset) != status {
+		return false
+	}
+
+	return true
+}
+
+func newerAsset(left, right Asset) bool {
+	if left.UpdatedAt.Equal(right.UpdatedAt) {
+		return left.CreatedAt.After(right.CreatedAt)
+	}
+	return left.UpdatedAt.After(right.UpdatedAt)
+}
+
 func (s *Service) save(asset Asset) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -397,7 +434,7 @@ func (s *Service) newSourcedAsset(req SourceRequest, sourceURL string, body []by
 	metadata := extractMetadata(body, header.Get("Content-Type"), header.Get("Content-Length"))
 	now := s.now()
 	return Asset{
-		ID:           mediaID(metadata.ChecksumSHA256),
+		ID:           mediaID("source", metadata.ChecksumSHA256, req.ProductID, sourceURL),
 		ProductID:    strings.TrimSpace(req.ProductID),
 		SourceURL:    sourceURL,
 		AltText:      strings.TrimSpace(req.AltText),
@@ -484,11 +521,15 @@ func checksum(body []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func mediaID(checksumSHA256 string) string {
-	if len(checksumSHA256) >= 16 {
-		return "media_" + checksumSHA256[:16]
-	}
-	return "media_" + checksumSHA256
+func mediaID(stage, checksumSHA256, productID, sourceURL string) string {
+	seed := strings.Join([]string{
+		strings.TrimSpace(stage),
+		strings.TrimSpace(productID),
+		strings.TrimSpace(sourceURL),
+		strings.TrimSpace(checksumSHA256),
+	}, "|")
+	sum := sha256.Sum256([]byte(seed))
+	return "media_" + hex.EncodeToString(sum[:8])
 }
 
 func resizedDimensions(width, height int, opts ResizeOptions) (int, int) {
@@ -615,4 +656,28 @@ func qualityFromIssues(issues []QualityIssue) QualityReport {
 		score = 0
 	}
 	return QualityReport{Pass: blocking == 0, Score: score, Issues: issues}
+}
+
+func assetProcessingStatus(asset Asset) string {
+	if asset.ReviewState == MediaReviewStateRejected {
+		return "failed"
+	}
+	switch {
+	case asset.ProcessState == MediaProcessStateProcessed:
+		return processedAssetStatus(asset)
+	case asset.ReviewState == MediaReviewStateApproved:
+		return "processing"
+	default:
+		return "sourced"
+	}
+}
+
+func processedAssetStatus(asset Asset) string {
+	if asset.Quality.Pass {
+		return "validated"
+	}
+	if asset.Quality.Score > 0 || len(asset.Quality.Issues) > 0 {
+		return "failed"
+	}
+	return "processed"
 }

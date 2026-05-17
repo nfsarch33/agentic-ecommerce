@@ -640,6 +640,7 @@ func (s *server) mux() http.Handler {
 		mux.HandleFunc("/api/v1/analytics/gmv/", gmvAPI)
 	}
 	mediaAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.mediaHandler)))
+	mux.HandleFunc("/api/v1/media", mediaAPI)
 	mux.HandleFunc("/api/v1/media/source", mediaAPI)
 	mux.HandleFunc("/api/v1/media/process", mediaAPI)
 	mux.HandleFunc("/api/v1/media/", mediaAPI)

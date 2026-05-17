@@ -63,6 +63,61 @@ func TestMediaSourceEndpointMarksDuplicateRequestsAsReplay(t *testing.T) {
 	}
 }
 
+func TestMediaListEndpointReturnsAssetsAndSupportsProductFilter(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := testServer(t)
+	srv.mediaService = intelligence.NewService(intelligence.ServiceConfig{HTTPClient: mediaRoundTripClient(func(req *http.Request) (*http.Response, error) {
+		body := mediaOnePixelPNGString()
+		contentType := "image/png"
+		if strings.Contains(req.URL.String(), "thumb.gif") {
+			body = mediaOnePixelGIFString()
+			contentType = "image/gif"
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{contentType}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}, nil
+	})})
+
+	first := mustSourceMediaAsset(t, srv, loadOpenAPIContract(t), strings.NewReader(`{"url":"https://supplier.example/images/lamp.png","product_id":"product-123","alt_text":"Matte black desk lamp on white background"}`))
+	second := mustSourceMediaAsset(t, srv, loadOpenAPIContract(t), strings.NewReader(`{"url":"https://supplier.example/images/thumb.gif","product_id":"product-999","alt_text":"Supplier thumbnail in fallback format"}`))
+	if first.ID == second.ID {
+		t.Fatalf("fixture ids collided: first=%q second=%q", first.ID, second.ID)
+	}
+
+	listRec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(listRec, httptest.NewRequest(http.MethodGet, "/api/v1/media", nil))
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want 200; body=%s", listRec.Code, listRec.Body.String())
+	}
+	var listBody struct {
+		Assets []intelligence.Asset `json:"assets"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(listRec.Body.Bytes())).Decode(&listBody); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listBody.Assets) != 2 {
+		t.Fatalf("list assets = %d, want 2; body=%s", len(listBody.Assets), listRec.Body.String())
+	}
+
+	filteredRec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(filteredRec, httptest.NewRequest(http.MethodGet, "/api/v1/media?product_id=product-123", nil))
+	if filteredRec.Code != http.StatusOK {
+		t.Fatalf("filtered list status = %d, want 200; body=%s", filteredRec.Code, filteredRec.Body.String())
+	}
+	var filteredBody struct {
+		Assets []intelligence.Asset `json:"assets"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(filteredRec.Body.Bytes())).Decode(&filteredBody); err != nil {
+		t.Fatalf("decode filtered response: %v", err)
+	}
+	if len(filteredBody.Assets) != 1 || filteredBody.Assets[0].ProductID != "product-123" {
+		t.Fatalf("filtered assets = %+v, want single product-123 asset", filteredBody.Assets)
+	}
+}
+
 func TestMediaReviewEndpointsGateProcessingLifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -207,6 +262,11 @@ func (c mediaRoundTripClient) Do(req *http.Request) (*http.Response, error) {
 
 func mediaOnePixelPNGString() string {
 	raw, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=")
+	return string(raw)
+}
+
+func mediaOnePixelGIFString() string {
+	raw, _ := base64.StdEncoding.DecodeString("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==")
 	return string(raw)
 }
 
