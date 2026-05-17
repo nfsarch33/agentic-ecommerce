@@ -30,6 +30,11 @@ type contentFactCheckResponse struct {
 	FactCheck       contentagent.FactCheckResult `json:"fact_check"`
 }
 
+type storedFactCheckResult struct {
+	result   contentagent.FactCheckResult
+	tenantID string
+}
+
 func (s *server) contentFactCheckHandler(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/api/v1/content/generate" && r.Method == http.MethodPost:
@@ -105,7 +110,7 @@ func (s *server) generateContentWithFactCheck(w http.ResponseWriter, r *http.Req
 	}
 	factCheck.ID = uuid.NewString()
 	factCheck.ProductID = productID.String()
-	s.storeFactCheckResult(factCheck)
+	s.storeFactCheckResult(r, factCheck)
 	evaluation := normalizeContentEvaluation(result.Evaluation)
 	pass := evaluation.Pass && factCheck.Pass
 
@@ -130,7 +135,7 @@ func (s *server) getFactCheckResult(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_fact_check_id"})
 		return
 	}
-	result, ok := s.loadFactCheckResult(id)
+	result, ok := s.loadFactCheckResult(r, id)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 		return
@@ -138,20 +143,34 @@ func (s *server) getFactCheckResult(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *server) storeFactCheckResult(result contentagent.FactCheckResult) {
+func (s *server) storeFactCheckResult(r *http.Request, result contentagent.FactCheckResult) {
+	entry := storedFactCheckResult{result: result}
+	if tenantID, scoped, err := s.tenantIDForScopedRequest(r); err == nil && scoped {
+		entry.tenantID = string(tenantID)
+	}
 	s.factChecksMu.Lock()
 	defer s.factChecksMu.Unlock()
 	if s.factChecks == nil {
-		s.factChecks = map[string]contentagent.FactCheckResult{}
+		s.factChecks = map[string]storedFactCheckResult{}
 	}
-	s.factChecks[result.ID] = result
+	s.factChecks[result.ID] = entry
 }
 
-func (s *server) loadFactCheckResult(id string) (contentagent.FactCheckResult, bool) {
+func (s *server) loadFactCheckResult(r *http.Request, id string) (contentagent.FactCheckResult, bool) {
 	s.factChecksMu.RLock()
 	defer s.factChecksMu.RUnlock()
-	result, ok := s.factChecks[id]
-	return result, ok
+	stored, ok := s.factChecks[id]
+	if !ok {
+		return contentagent.FactCheckResult{}, false
+	}
+	if stored.tenantID == "" {
+		return stored.result, true
+	}
+	tenantID, scoped, err := s.tenantIDForScopedRequest(r)
+	if err != nil || !scoped || string(tenantID) != stored.tenantID {
+		return contentagent.FactCheckResult{}, false
+	}
+	return stored.result, true
 }
 
 func (s *server) factCheckerForRequest(r *http.Request) (*contentagent.FactChecker, error) {
