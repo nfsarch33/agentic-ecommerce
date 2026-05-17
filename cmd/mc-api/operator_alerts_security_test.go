@@ -77,6 +77,7 @@ func assertOperatorAlertMutationAudit(t *testing.T, path, action string) {
 	var logs bytes.Buffer
 	srv := secureTestServer(t, &logs)
 	defer srv.Close()
+	prepareOperatorAlertResolveState(t, srv, path)
 
 	req := httptest.NewRequest(http.MethodPost, path, nil)
 	req.Header.Set("Authorization", "Bearer "+mintTestAccessToken(t, srv, "operator@example.com", security.RoleOperator))
@@ -104,6 +105,7 @@ func assertOperatorAlertMutationTimestamp(t *testing.T, path, field string) {
 
 	srv := secureTestServer(t, nil)
 	defer srv.Close()
+	prepareOperatorAlertResolveState(t, srv, path)
 
 	req := httptest.NewRequest(http.MethodPost, path, nil)
 	req.Header.Set("Authorization", "Bearer "+mintTestAccessToken(t, srv, "operator@example.com", security.RoleOperator))
@@ -128,6 +130,7 @@ func assertOperatorAlertMutationStatus(t *testing.T, path, subject string, role 
 
 	srv := secureTestServer(t, nil)
 	defer srv.Close()
+	prepareOperatorAlertResolveState(t, srv, path)
 
 	req := httptest.NewRequest(http.MethodPost, path, nil)
 	req.Header.Set("Authorization", "Bearer "+mintTestAccessToken(t, srv, subject, role))
@@ -138,6 +141,24 @@ func assertOperatorAlertMutationStatus(t *testing.T, path, subject string, role 
 
 	if rec.Code != wantStatus {
 		t.Fatalf("%s status = %d, want %d; body=%s", subject, rec.Code, wantStatus, rec.Body.String())
+	}
+}
+
+func prepareOperatorAlertResolveState(t *testing.T, srv *server, path string) {
+	t.Helper()
+	if !strings.Contains(path, "/resolve") {
+		return
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/operator/alerts/alert-1/acknowledge?tenant_id=load-test-tenant", nil)
+	req.Header.Set("Authorization", "Bearer "+mintTestAccessToken(t, srv, "operator@example.com", security.RoleOperator))
+	req.Header.Set("X-Tenant-Id", "load-test-tenant")
+	rec := httptest.NewRecorder()
+
+	srv.mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("prepare resolve state status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
 }
 

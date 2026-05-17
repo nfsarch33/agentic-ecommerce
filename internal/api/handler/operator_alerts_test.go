@@ -143,7 +143,16 @@ func TestOperatorAlerts_ResolveWithActionEmitsEvent(t *testing.T) {
 	t.Parallel()
 	h, repo, metrics, pub := newOperatorAlertHarness(t)
 	ctx := context.Background()
-	must(t, repo.Insert(ctx, OperatorAlert{TenantID: "tenant-1", AlertID: "a1", AlertType: AlertTypePriceChange, Severity: AlertSeverityWarning, CreatedAt: time.Now().UTC()}))
+	now := time.Now().UTC()
+	must(t, repo.Insert(ctx, OperatorAlert{
+		TenantID:       "tenant-1",
+		AlertID:        "a1",
+		AlertType:      AlertTypePriceChange,
+		Severity:       AlertSeverityWarning,
+		Status:         AlertStatusAcknowledged,
+		CreatedAt:      now,
+		AcknowledgedAt: now,
+	}))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/operator/alerts/a1/resolve?tenant_id=tenant-1&action=approve", nil)
 	rec := httptest.NewRecorder()

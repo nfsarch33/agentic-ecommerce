@@ -1001,7 +1001,7 @@ paths:
     post:
       summary: Resolve an operator alert
       operationId: resolveOperatorAlert
-      description: Resolves a pending or acknowledged operator alert with an explicit approve or deny action.
+      description: Resolves an acknowledged operator alert with an explicit approve or deny action.
       security:
         - bearerAuth: []
       parameters:

@@ -9,7 +9,7 @@
 //   - POST   /api/v1/operator/alerts/{alert_id}/acknowledge
 //     -> mark a pending alert as acknowledged.
 //   - POST   /api/v1/operator/alerts/{alert_id}/resolve?action=approve|deny
-//     -> resolve an acknowledged or pending alert with an action.
+//     -> resolve an acknowledged alert with an action.
 //
 // Alert lifecycle: pending -> acknowledged -> resolved (or expired
 // after 24h via a sweeper).
@@ -65,6 +65,14 @@ var (
 	// ErrAlertAlreadyResolved is returned when a resolve / acknowledge
 	// call targets an alert that is already in the resolved state.
 	ErrAlertAlreadyResolved = errors.New("handler: alert already resolved")
+
+	// ErrAlertAlreadyAcknowledged is returned when an acknowledge
+	// call targets an alert already in the acknowledged state.
+	ErrAlertAlreadyAcknowledged = errors.New("handler: alert already acknowledged")
+
+	// ErrAlertRequiresAcknowledgement is returned when a resolve call
+	// targets a pending alert before acknowledgement.
+	ErrAlertRequiresAcknowledgement = errors.New("handler: alert must be acknowledged before resolution")
 
 	// ErrInvalidAlertAction is returned when the action query
 	// parameter is missing or outside {approve, deny}.
@@ -294,6 +302,10 @@ func (h *OperatorAlertHandler) handleAcknowledge(w http.ResponseWriter, r *http.
 		writeJSONError(w, http.StatusConflict, fmt.Errorf("%w: id=%s", ErrAlertAlreadyResolved, alertID))
 		return
 	}
+	if current.Status == AlertStatusAcknowledged {
+		writeJSONError(w, http.StatusConflict, fmt.Errorf("%w: id=%s", ErrAlertAlreadyAcknowledged, alertID))
+		return
+	}
 	acknowledgedAt := h.now()
 	if uerr := h.repo.UpdateStatus(r.Context(), tenantID, alertID, AlertStatusAcknowledged, "", acknowledgedAt); uerr != nil {
 		writeJSONError(w, http.StatusInternalServerError, uerr)
@@ -328,6 +340,10 @@ func (h *OperatorAlertHandler) handleResolve(w http.ResponseWriter, r *http.Requ
 	}
 	if current.Status == AlertStatusResolved {
 		writeJSONError(w, http.StatusConflict, fmt.Errorf("%w: id=%s", ErrAlertAlreadyResolved, alertID))
+		return
+	}
+	if current.Status == AlertStatusPending {
+		writeJSONError(w, http.StatusConflict, fmt.Errorf("%w: id=%s", ErrAlertRequiresAcknowledgement, alertID))
 		return
 	}
 	resolutionStart := current.CreatedAt
