@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -79,6 +81,12 @@ const (
 )
 
 var errOrderTenantRequired = errors.New("tenant_required")
+var errOrderCreateReplayConflict = errors.New("order_create_replay_conflict")
+
+type orderCreateReplayEntry struct {
+	Order     orderdomain.Order
+	Signature [sha256.Size]byte
+}
 
 type createOrderValidationError struct {
 	cause error
@@ -123,6 +131,8 @@ func (s *server) createOrder(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, toOrderResponse(order))
 	case errors.Is(err, errOrderTenantRequired):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": errOrderTenantRequired.Error()})
+	case errors.Is(err, errOrderCreateReplayConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "idempotency_payload_mismatch"})
 	case errors.As(err, &validationErr):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 	default:
@@ -144,13 +154,17 @@ func (s *server) createPersistedOrder(r *http.Request, req createOrderRequest) (
 	if err != nil {
 		return orderdomain.Order{}, &createOrderValidationError{cause: err}
 	}
-	if order, ok := s.lookupOrderCreateReplay(s.orderCreateReplayKey(r, req.IdempotencyKey)); ok {
-		return order, nil
+	signature := orderCreateReplaySignature(req)
+	if entry, ok := s.lookupOrderCreateReplay(s.orderCreateReplayKey(r, req.IdempotencyKey)); ok {
+		if entry.Signature != signature {
+			return orderdomain.Order{}, fmt.Errorf("%w: payload mismatch", errOrderCreateReplayConflict)
+		}
+		return entry.Order, nil
 	}
-	return s.createAndStoreOrder(r, req.IdempotencyKey, input)
+	return s.createAndStoreOrder(r, req.IdempotencyKey, input, signature)
 }
 
-func (s *server) createAndStoreOrder(r *http.Request, idempotencyKey string, input orderdomain.OrderInput) (orderdomain.Order, error) {
+func (s *server) createAndStoreOrder(r *http.Request, idempotencyKey string, input orderdomain.OrderInput, signature [sha256.Size]byte) (orderdomain.Order, error) {
 	order, err := orderdomain.NewOrder(input)
 	if err != nil {
 		return orderdomain.Order{}, &createOrderValidationError{cause: err}
@@ -158,7 +172,10 @@ func (s *server) createAndStoreOrder(r *http.Request, idempotencyKey string, inp
 	if err := s.persistOrderForRequest(r, order); err != nil {
 		return orderdomain.Order{}, err
 	}
-	s.storeOrderCreateReplay(s.orderCreateReplayKey(r, idempotencyKey), order)
+	s.storeOrderCreateReplay(s.orderCreateReplayKey(r, idempotencyKey), orderCreateReplayEntry{
+		Order:     order,
+		Signature: signature,
+	})
 	return order, nil
 }
 
@@ -365,29 +382,93 @@ func (s *server) orderCreateReplayKey(r *http.Request, idempotencyKey string) st
 	return "public:" + idempotencyKey
 }
 
-func (s *server) lookupOrderCreateReplay(key string) (orderdomain.Order, bool) {
+func (s *server) lookupOrderCreateReplay(key string) (orderCreateReplayEntry, bool) {
 	if s == nil || key == "" {
-		return orderdomain.Order{}, false
+		return orderCreateReplayEntry{}, false
 	}
 	s.orderCreateReplayMu.Lock()
 	defer s.orderCreateReplayMu.Unlock()
 	if s.orderCreateReplay == nil {
-		return orderdomain.Order{}, false
+		return orderCreateReplayEntry{}, false
 	}
-	order, ok := s.orderCreateReplay[key]
-	return order, ok
+	entry, ok := s.orderCreateReplay[key]
+	return entry, ok
 }
 
-func (s *server) storeOrderCreateReplay(key string, order orderdomain.Order) {
+func (s *server) storeOrderCreateReplay(key string, entry orderCreateReplayEntry) {
 	if s == nil || key == "" {
 		return
 	}
 	s.orderCreateReplayMu.Lock()
 	defer s.orderCreateReplayMu.Unlock()
 	if s.orderCreateReplay == nil {
-		s.orderCreateReplay = map[string]orderdomain.Order{}
+		s.orderCreateReplay = map[string]orderCreateReplayEntry{}
 	}
-	s.orderCreateReplay[key] = order
+	s.orderCreateReplay[key] = entry
+}
+
+func orderCreateReplaySignature(req createOrderRequest) [sha256.Size]byte {
+	type replayMoney struct {
+		Amount   int    `json:"amount"`
+		Currency string `json:"currency"`
+	}
+	type replayAddress struct {
+		Name       string `json:"name"`
+		Line1      string `json:"line1"`
+		Line2      string `json:"line2,omitempty"`
+		City       string `json:"city"`
+		Region     string `json:"region,omitempty"`
+		PostalCode string `json:"postal_code"`
+		Country    string `json:"country"`
+	}
+	type replayItem struct {
+		ProductID string      `json:"product_id"`
+		SKU       string      `json:"sku"`
+		Title     string      `json:"title"`
+		Quantity  int         `json:"quantity"`
+		UnitPrice replayMoney `json:"unit_price"`
+	}
+	payload := struct {
+		CustomerEmail   string        `json:"customer_email"`
+		DeliveryOption  string        `json:"delivery_option"`
+		Items           []replayItem  `json:"items"`
+		ShippingAddress replayAddress `json:"shipping_address"`
+		Shipping        replayMoney   `json:"shipping"`
+	}{
+		CustomerEmail:  strings.ToLower(strings.TrimSpace(req.CustomerEmail)),
+		DeliveryOption: strings.ToLower(strings.TrimSpace(req.DeliveryOption)),
+		Items:          make([]replayItem, 0, len(req.Items)),
+		ShippingAddress: replayAddress{
+			Name:       strings.TrimSpace(req.ShippingAddress.Name),
+			Line1:      strings.TrimSpace(req.ShippingAddress.Line1),
+			Line2:      strings.TrimSpace(req.ShippingAddress.Line2),
+			City:       strings.TrimSpace(req.ShippingAddress.City),
+			Region:     strings.TrimSpace(req.ShippingAddress.Region),
+			PostalCode: strings.TrimSpace(req.ShippingAddress.PostalCode),
+			Country:    strings.ToUpper(strings.TrimSpace(req.ShippingAddress.Country)),
+		},
+		Shipping: replayMoney{
+			Amount:   req.Shipping.Amount,
+			Currency: strings.ToUpper(strings.TrimSpace(req.Shipping.Currency)),
+		},
+	}
+	if payload.Shipping.Amount == 0 && payload.Shipping.Currency == "" {
+		payload.Shipping.Currency = "AUD"
+	}
+	for _, item := range req.Items {
+		payload.Items = append(payload.Items, replayItem{
+			ProductID: strings.TrimSpace(item.ProductID),
+			SKU:       strings.TrimSpace(item.SKU),
+			Title:     strings.TrimSpace(item.Title),
+			Quantity:  item.Quantity,
+			UnitPrice: replayMoney{
+				Amount:   item.UnitPrice.Amount,
+				Currency: strings.ToUpper(strings.TrimSpace(item.UnitPrice.Currency)),
+			},
+		})
+	}
+	raw, _ := json.Marshal(payload)
+	return sha256.Sum256(raw)
 }
 
 func requestItemsToOrderInputs(items []orderItemPayload) ([]orderdomain.OrderItemInput, error) {

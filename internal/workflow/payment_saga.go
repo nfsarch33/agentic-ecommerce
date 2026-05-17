@@ -158,6 +158,7 @@ func handlePersistentFailure(ctx temporalworkflow.Context, input PaymentSagaInpu
 		TenantID: input.TenantID, OrderID: input.OrderID,
 		Status: "failed", Retries: retries, FailReason: reason,
 	}
+	_ = temporalworkflow.ExecuteActivity(ctx, UpdateOrderStatusActivity, orderStatusUpdate{Input: input, Status: "failed"}).Get(ctx, nil)
 	_ = temporalworkflow.ExecuteActivity(ctx, NotifyPaymentOperatorActivity, paymentOperatorAlert{Input: input, Reason: reason}).Get(ctx, nil)
 	_ = temporalworkflow.ExecuteActivity(ctx, PublishPaymentEventActivity, paymentPublishArgs{Input: input, State: "failed", FailReason: reason}).Get(ctx, nil)
 	return res, fmt.Errorf("%w: %v", ErrPaymentRetryExhausted, cause)
