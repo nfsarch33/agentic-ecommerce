@@ -614,6 +614,12 @@ paths:
             schema:
               $ref: '#/components/schemas/MediaSourceRequest'
       responses:
+        '200':
+          description: Existing media asset replayed for a duplicate source request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAsset'
         '201':
           description: Media asset sourced and registered.
           content:
@@ -676,6 +682,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Media asset is not in an approvable state for processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Missing media ID.
           content:
@@ -731,6 +743,108 @@ paths:
                 $ref: '#/components/schemas/MediaQualityReport'
         '404':
           description: Media asset not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/media/{id}/approve:
+    post:
+      summary: Approve sourced media
+      operationId: approveMedia
+      description: Transitions a sourced media asset from pending review to approved so it can be processed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MediaApproveRequest'
+      responses:
+        '200':
+          description: Media asset approved for processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAsset'
+        '400':
+          description: Invalid JSON body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Media asset not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Media asset is not in a pending review state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Missing reviewer or invalid path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/media/{id}/reject:
+    post:
+      summary: Reject sourced media
+      operationId: rejectMedia
+      description: Rejects a sourced media asset and records reviewer audit information.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MediaRejectRequest'
+      responses:
+        '200':
+          description: Media asset rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAsset'
+        '400':
+          description: Invalid JSON body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Media asset not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Media asset is not in a pending review state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Missing reviewer, review note, or invalid path parameter.
           content:
             application/json:
               schema:
@@ -4740,6 +4854,24 @@ components:
         remove_background:
           type: boolean
           default: false
+    MediaApproveRequest:
+      type: object
+      required: [reviewer]
+      properties:
+        reviewer:
+          type: string
+        note:
+          type: string
+          description: Optional operator note captured with the approval decision.
+    MediaRejectRequest:
+      type: object
+      required: [reviewer, note]
+      properties:
+        reviewer:
+          type: string
+        note:
+          type: string
+          description: Required operator note explaining the rejection.
     MediaResizeOptions:
       type: object
       properties:
@@ -4751,7 +4883,7 @@ components:
           minimum: 1
     MediaAsset:
       type: object
-      required: [id, metadata]
+      required: [id, metadata, review_state, process_state, created_at, updated_at]
       properties:
         id:
           type: string
@@ -4770,7 +4902,23 @@ components:
           $ref: '#/components/schemas/MediaQualityReport'
         storage:
           $ref: '#/components/schemas/MediaStorageInfo'
+        review_state:
+          type: string
+          enum: [pending, approved, rejected]
+        process_state:
+          type: string
+          enum: [pending, processed]
+        review_note:
+          type: string
+        reviewed_at:
+          type: string
+          format: date-time
+        reviewer:
+          type: string
         created_at:
+          type: string
+          format: date-time
+        updated_at:
           type: string
           format: date-time
     MediaMetadata:

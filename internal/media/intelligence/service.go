@@ -35,7 +35,17 @@ var (
 	ErrInvalidSourceURL   = errors.New("invalid media source url")
 	ErrSourceFailed       = errors.New("media source request failed")
 	ErrMediaNotFound      = errors.New("media asset not found")
+	ErrLifecycleConflict  = errors.New("media lifecycle conflict")
 	ErrStoreRequired      = errors.New("media object store is required")
+)
+
+const (
+	MediaReviewStatePending  = "pending"
+	MediaReviewStateApproved = "approved"
+	MediaReviewStateRejected = "rejected"
+
+	MediaProcessStatePending   = "pending"
+	MediaProcessStateProcessed = "processed"
 )
 
 type MediaObject = port.MediaObject
@@ -86,17 +96,28 @@ type ResizeOptions struct {
 	MaxHeight int `json:"max_height,omitempty"`
 }
 
+type ReviewRequest struct {
+	Reviewer string `json:"reviewer"`
+	Note     string `json:"note,omitempty"`
+}
+
 type Asset struct {
-	ID         string         `json:"id"`
-	ProductID  string         `json:"product_id,omitempty"`
-	SourceURL  string         `json:"source_url,omitempty"`
-	AltText    string         `json:"alt_text,omitempty"`
-	Metadata   Metadata       `json:"metadata"`
-	Processing ProcessingInfo `json:"processing,omitempty"`
-	Quality    QualityReport  `json:"quality,omitempty"`
-	Storage    StorageInfo    `json:"storage,omitempty"`
-	CreatedAt  time.Time      `json:"created_at,omitempty"`
-	payload    []byte
+	ID           string         `json:"id"`
+	ProductID    string         `json:"product_id,omitempty"`
+	SourceURL    string         `json:"source_url,omitempty"`
+	AltText      string         `json:"alt_text,omitempty"`
+	Metadata     Metadata       `json:"metadata"`
+	Processing   ProcessingInfo `json:"processing,omitempty"`
+	Quality      QualityReport  `json:"quality,omitempty"`
+	Storage      StorageInfo    `json:"storage,omitempty"`
+	ReviewState  string         `json:"review_state"`
+	ProcessState string         `json:"process_state"`
+	ReviewNote   string         `json:"review_note,omitempty"`
+	ReviewedAt   time.Time      `json:"reviewed_at,omitempty"`
+	Reviewer     string         `json:"reviewer,omitempty"`
+	CreatedAt    time.Time      `json:"created_at,omitempty"`
+	UpdatedAt    time.Time      `json:"updated_at,omitempty"`
+	payload      []byte
 }
 
 type Metadata struct {
@@ -155,54 +176,29 @@ func NewService(cfg ServiceConfig) *Service {
 }
 
 func (s *Service) Source(ctx context.Context, req SourceRequest) (Asset, error) {
+	asset, _, err := s.SourceWithReplay(ctx, req)
+	return asset, err
+}
+
+func (s *Service) SourceWithReplay(ctx context.Context, req SourceRequest) (Asset, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return Asset{}, false, err
+	}
 	sourceURL, err := validateSourceURL(req.URL)
 	if err != nil {
-		return Asset{}, err
+		return Asset{}, false, err
 	}
-	if s.client == nil {
-		return Asset{}, ErrHTTPClientRequired
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
+	body, header, err := s.fetchSourceImage(ctx, sourceURL)
 	if err != nil {
-		return Asset{}, fmt.Errorf("create source request: %w", err)
+		return Asset{}, false, err
 	}
-	httpReq.Header.Set("User-Agent", "agentic-ecommerce-media-intelligence/1.4")
-	resp, err := s.client.Do(httpReq)
-	if err != nil {
-		return Asset{}, fmt.Errorf("%w: %v", ErrSourceFailed, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Asset{}, fmt.Errorf("%w: status %d", ErrSourceFailed, resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, s.maxSourceBytes+1))
-	if err != nil {
-		return Asset{}, fmt.Errorf("read source image: %w", err)
-	}
-	if int64(len(body)) > s.maxSourceBytes {
-		return Asset{}, fmt.Errorf("%w: source image exceeds %d bytes", ErrSourceFailed, s.maxSourceBytes)
-	}
-	metadata := extractMetadata(body, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Length"))
-	asset := Asset{
-		ID:        mediaID(metadata.ChecksumSHA256),
-		ProductID: strings.TrimSpace(req.ProductID),
-		SourceURL: sourceURL,
-		AltText:   strings.TrimSpace(req.AltText),
-		Metadata:  metadata,
-		CreatedAt: s.now(),
-		payload:   body,
-	}
-	s.save(asset)
-	return asset, nil
+	return s.storeOrReplay(s.newSourcedAsset(req, sourceURL, body, header))
 }
 
 func (s *Service) Process(ctx context.Context, req ProcessRequest) (Asset, error) {
-	if err := ctx.Err(); err != nil {
+	source, err := s.processSource(ctx, req.MediaID)
+	if err != nil {
 		return Asset{}, err
-	}
-	source, ok := s.Get(req.MediaID)
-	if !ok {
-		return Asset{}, ErrMediaNotFound
 	}
 	targetMime := normalizeOutputFormat(req.Format)
 	if targetMime == "" {
@@ -218,16 +214,31 @@ func (s *Service) Process(ctx context.Context, req ProcessRequest) (Asset, error
 		Width:          width,
 		Height:         height,
 	}
+	transitionAt := s.now()
+	source.ProcessState = MediaProcessStateProcessed
+	source.UpdatedAt = transitionAt
+	s.save(source)
+
 	processed := source
 	processed.ID = mediaID(metadata.ChecksumSHA256)
 	processed.Metadata = metadata
 	processed.Processing = ProcessingInfo{Operations: operations}
-	processed.CreatedAt = s.now()
+	processed.ProcessState = MediaProcessStateProcessed
+	processed.CreatedAt = transitionAt
+	processed.UpdatedAt = transitionAt
 	processed.payload = payload
 	processed.Quality = QualityReport{}
 	processed.Storage = StorageInfo{}
 	s.save(processed)
 	return processed, nil
+}
+
+func (s *Service) Approve(ctx context.Context, mediaID string, req ReviewRequest) (Asset, error) {
+	return s.review(ctx, mediaID, req, MediaReviewStateApproved)
+}
+
+func (s *Service) Reject(ctx context.Context, mediaID string, req ReviewRequest) (Asset, error) {
+	return s.review(ctx, mediaID, req, MediaReviewStateRejected)
 }
 
 func (s *Service) AssessQuality(asset Asset) QualityReport {
@@ -271,6 +282,7 @@ func (s *Service) Validate(ctx context.Context, mediaID string) (QualityReport, 
 	}
 	qa := s.AssessQuality(asset)
 	asset.Quality = qa
+	asset.UpdatedAt = s.now()
 	s.save(asset)
 	return qa, nil
 }
@@ -301,6 +313,7 @@ func (s *Service) Store(ctx context.Context, mediaID string) (Asset, error) {
 		ContentType: stored.ContentType,
 		SizeBytes:   stored.SizeBytes,
 	}
+	asset.UpdatedAt = s.now()
 	s.save(asset)
 	return asset, nil
 }
@@ -319,8 +332,112 @@ func (s *Service) Get(mediaID string) (Asset, bool) {
 func (s *Service) save(asset Asset) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.assets[asset.ID] = cloneAsset(asset)
+}
+
+func (s *Service) storeOrReplay(asset Asset) (Asset, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existing, ok := s.assets[asset.ID]; ok {
+		return cloneAsset(existing), true, nil
+	}
+	cloned := cloneAsset(asset)
+	s.assets[asset.ID] = cloned
+	return cloneAsset(cloned), false, nil
+}
+
+func (s *Service) review(ctx context.Context, mediaID string, req ReviewRequest, nextState string) (Asset, error) {
+	if err := ctx.Err(); err != nil {
+		return Asset{}, err
+	}
+	asset, ok := s.Get(mediaID)
+	if !ok {
+		return Asset{}, ErrMediaNotFound
+	}
+	if asset.ReviewState != MediaReviewStatePending || asset.ProcessState != MediaProcessStatePending {
+		return Asset{}, ErrLifecycleConflict
+	}
+
+	transitionAt := s.now()
+	asset.ReviewState = nextState
+	asset.ReviewNote = strings.TrimSpace(req.Note)
+	asset.Reviewer = strings.TrimSpace(req.Reviewer)
+	asset.ReviewedAt = transitionAt
+	asset.UpdatedAt = transitionAt
+	s.save(asset)
+	return asset, nil
+}
+
+func cloneAsset(asset Asset) Asset {
 	asset.payload = append([]byte(nil), asset.payload...)
-	s.assets[asset.ID] = asset
+	return asset
+}
+
+func (s *Service) fetchSourceImage(ctx context.Context, sourceURL string) ([]byte, http.Header, error) {
+	if s.client == nil {
+		return nil, nil, ErrHTTPClientRequired
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create source request: %w", err)
+	}
+	httpReq.Header.Set("User-Agent", "agentic-ecommerce-media-intelligence/1.4")
+
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %v", ErrSourceFailed, err)
+	}
+	defer resp.Body.Close()
+
+	return s.readSourcePayload(resp)
+}
+
+func (s *Service) newSourcedAsset(req SourceRequest, sourceURL string, body []byte, header http.Header) Asset {
+	metadata := extractMetadata(body, header.Get("Content-Type"), header.Get("Content-Length"))
+	now := s.now()
+	return Asset{
+		ID:           mediaID(metadata.ChecksumSHA256),
+		ProductID:    strings.TrimSpace(req.ProductID),
+		SourceURL:    sourceURL,
+		AltText:      strings.TrimSpace(req.AltText),
+		Metadata:     metadata,
+		ReviewState:  MediaReviewStatePending,
+		ProcessState: MediaProcessStatePending,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		payload:      body,
+	}
+}
+
+func (s *Service) processSource(ctx context.Context, mediaID string) (Asset, error) {
+	if err := ctx.Err(); err != nil {
+		return Asset{}, err
+	}
+	source, ok := s.Get(mediaID)
+	if !ok {
+		return Asset{}, ErrMediaNotFound
+	}
+	if source.ReviewState != MediaReviewStateApproved || source.ProcessState != MediaProcessStatePending {
+		return Asset{}, ErrLifecycleConflict
+	}
+	return source, nil
+}
+
+func (s *Service) readSourcePayload(resp *http.Response) ([]byte, http.Header, error) {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, nil, fmt.Errorf("%w: status %d", ErrSourceFailed, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, s.maxSourceBytes+1))
+	if err != nil {
+		return nil, nil, fmt.Errorf("read source image: %w", err)
+	}
+	if int64(len(body)) > s.maxSourceBytes {
+		return nil, nil, fmt.Errorf("%w: source image exceeds %d bytes", ErrSourceFailed, s.maxSourceBytes)
+	}
+
+	return body, resp.Header.Clone(), nil
 }
 
 func validateSourceURL(raw string) (string, error) {

@@ -96,6 +96,8 @@ func assertReleaseMediaWorkflow(t *testing.T, productID string) {
 		Format:      "webp",
 	}
 	source := intelligence.Asset{ID: "release-media-source", ProductID: productID, SourceURL: input.SourceURL, AltText: input.AltText}
+	approved := source
+	approved.ReviewState = intelligence.MediaReviewStateApproved
 	processed := intelligence.Asset{ID: "release-media-processed", ProductID: productID, SourceURL: input.SourceURL, AltText: input.AltText}
 	stored := processed
 	stored.Storage = intelligence.StorageInfo{Key: "products/release-product/hero.webp", URL: "/media/products/release-product/hero.webp"}
@@ -103,6 +105,11 @@ func assertReleaseMediaWorkflow(t *testing.T, productID string) {
 	link := MediaProductLinkResult{Linked: true, ProductID: productID, MediaID: processed.ID, StorageKey: stored.Storage.Key}
 
 	env.OnActivity(MediaSourceActivity, mock.Anything, input).Return(source, nil).Once()
+	env.OnActivity(MediaApproveActivity, mock.Anything, MediaReviewActivityInput{
+		MediaID:  source.ID,
+		Reviewer: "release-demo",
+		Note:     "Approved via media processing workflow request",
+	}).Return(approved, nil).Once()
 	env.OnActivity(MediaProcessActivity, mock.Anything, MediaProcessActivityInput{MediaID: source.ID, Format: input.Format}).Return(processed, nil).Once()
 	env.OnActivity(MediaQualityActivity, mock.Anything, MediaQualityActivityInput{MediaID: processed.ID}).Return(quality, nil).Once()
 	env.OnActivity(MediaStoreActivity, mock.Anything, MediaStoreActivityInput{MediaID: processed.ID}).Return(stored, nil).Once()

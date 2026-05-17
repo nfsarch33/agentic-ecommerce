@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 //go:embed testdata/source_metadata.golden.json testdata/quality_report.golden.json
@@ -61,6 +62,7 @@ func TestServiceProcessesImageWithDeterministicStub(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Source: %v", err)
 	}
+	mustApproveAsset(t, service, source.ID, "lead@example.com", "ready for deterministic processing")
 
 	got, err := service.Process(context.Background(), ProcessRequest{
 		MediaID:          source.ID,
@@ -71,21 +73,7 @@ func TestServiceProcessesImageWithDeterministicStub(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Process: %v", err)
 	}
-
-	if got.ID == source.ID {
-		t.Fatal("processed asset should have a distinct id")
-	}
-	if got.Metadata.MimeType != "image/webp" {
-		t.Fatalf("mime type = %q", got.Metadata.MimeType)
-	}
-	if got.Metadata.Width != 1 || got.Metadata.Height != 1 {
-		t.Fatalf("dimensions = %dx%d, want source dimensions preserved for small image", got.Metadata.Width, got.Metadata.Height)
-	}
-	if !containsOperation(got.Processing.Operations, "resize_stub") ||
-		!containsOperation(got.Processing.Operations, "format_conversion_stub") ||
-		!containsOperation(got.Processing.Operations, "background_removal_todo") {
-		t.Fatalf("operations = %#v", got.Processing.Operations)
-	}
+	assertProcessedStubAsset(t, got, source.ID)
 }
 
 func TestQualityAssessmentCoversResolutionAspectFormatAltAndBrandSafety(t *testing.T) {
@@ -184,11 +172,13 @@ func TestServiceResizesLargeImageMetadataAndNormalizesFormats(t *testing.T) {
 
 	service := NewService(ServiceConfig{})
 	service.save(Asset{
-		ID:        "media_source",
-		ProductID: "p1",
-		Metadata:  Metadata{MimeType: "image/jpeg", ContentLength: 4, ChecksumSHA256: strings.Repeat("a", 64), Width: 1200, Height: 900},
-		AltText:   "Studio product photo with clear context",
-		payload:   []byte("jpeg"),
+		ID:           "media_source",
+		ProductID:    "p1",
+		Metadata:     Metadata{MimeType: "image/jpeg", ContentLength: 4, ChecksumSHA256: strings.Repeat("a", 64), Width: 1200, Height: 900},
+		AltText:      "Studio product photo with clear context",
+		ReviewState:  MediaReviewStateApproved,
+		ProcessState: MediaProcessStatePending,
+		payload:      []byte("jpeg"),
 	})
 	got, err := service.Process(context.Background(), ProcessRequest{
 		MediaID: "media_source",
@@ -226,6 +216,58 @@ func TestServiceSourcesGoldenMetadataAndAltTextValidation(t *testing.T) {
 	}
 }
 
+func TestServiceSourceIsIdempotentAndSeedsPendingLifecycleState(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, 5, 17, 14, 4, 17, 0, time.FixedZone("AEST", 10*60*60))
+	replayedAt := startedAt.Add(2 * time.Minute)
+	timestamps := []time.Time{startedAt, replayedAt}
+	service := NewService(ServiceConfig{
+		HTTPClient: fixedImageClient(t),
+		Now: func() time.Time {
+			next := timestamps[0]
+			timestamps = timestamps[1:]
+			return next
+		},
+	})
+
+	first, err := service.Source(context.Background(), SourceRequest{
+		URL:       "https://supplier.example/images/lamp.png",
+		ProductID: "product-123",
+		AltText:   "Matte black desk lamp on white background",
+	})
+	if err != nil {
+		t.Fatalf("first Source: %v", err)
+	}
+	second, err := service.Source(context.Background(), SourceRequest{
+		URL:       "https://supplier.example/images/lamp.png",
+		ProductID: "product-123",
+		AltText:   "Matte black desk lamp on white background",
+	})
+	if err != nil {
+		t.Fatalf("second Source: %v", err)
+	}
+	assertIdempotentSourceReplay(t, first, second, startedAt)
+}
+
+func TestServiceProcessRejectsAssetsThatHaveNotBeenApproved(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(ServiceConfig{HTTPClient: fixedImageClient(t)})
+	source, err := service.Source(context.Background(), SourceRequest{
+		URL:       "https://supplier.example/images/lamp.png",
+		ProductID: "product-123",
+		AltText:   "Matte black desk lamp on white background",
+	})
+	if err != nil {
+		t.Fatalf("Source: %v", err)
+	}
+
+	if _, err := service.Process(context.Background(), ProcessRequest{MediaID: source.ID}); err == nil {
+		t.Fatal("Process err = nil, want lifecycle rejection for unapproved asset")
+	}
+}
+
 func BenchmarkMediaQAValidate(b *testing.B) {
 	service := NewService(ServiceConfig{})
 	service.save(Asset{
@@ -251,6 +293,98 @@ func BenchmarkMediaQAValidate(b *testing.B) {
 		if !qa.Pass {
 			b.Fatalf("qa failed: %#v", qa)
 		}
+	}
+}
+
+func assetJSONFields(t *testing.T, asset Asset) map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(asset)
+	if err != nil {
+		t.Fatalf("marshal asset: %v", err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatalf("decode asset fields: %v", err)
+	}
+	return fields
+}
+
+func mustApproveAsset(t *testing.T, service *Service, mediaID, reviewer, note string) {
+	t.Helper()
+	if _, err := service.Approve(context.Background(), mediaID, ReviewRequest{
+		Reviewer: reviewer,
+		Note:     note,
+	}); err != nil {
+		t.Fatalf("Approve: %v", err)
+	}
+}
+
+func assertProcessedStubAsset(t *testing.T, got Asset, sourceID string) {
+	t.Helper()
+	assertProcessedAssetIdentity(t, got, sourceID)
+	assertProcessedAssetOperations(t, got.Processing.Operations)
+}
+
+func assertIdempotentSourceReplay(t *testing.T, first, second Asset, startedAt time.Time) {
+	t.Helper()
+	assertSourceReplayIdentity(t, first, second, startedAt)
+	assertLifecycleJSONFields(t, second)
+}
+
+func assertProcessedAssetIdentity(t *testing.T, got Asset, sourceID string) {
+	t.Helper()
+	if got.ID == sourceID {
+		t.Fatal("processed asset should have a distinct id")
+	}
+	if got.Metadata.MimeType != "image/webp" {
+		t.Fatalf("mime type = %q", got.Metadata.MimeType)
+	}
+	if got.Metadata.Width != 1 || got.Metadata.Height != 1 {
+		t.Fatalf("dimensions = %dx%d, want source dimensions preserved for small image", got.Metadata.Width, got.Metadata.Height)
+	}
+}
+
+func assertProcessedAssetOperations(t *testing.T, operations []ProcessingOperation) {
+	t.Helper()
+	for _, want := range []string{"resize_stub", "format_conversion_stub", "background_removal_todo"} {
+		if !containsOperation(operations, want) {
+			t.Fatalf("operations = %#v, missing %q", operations, want)
+		}
+	}
+}
+
+func assertSourceReplayIdentity(t *testing.T, first, second Asset, startedAt time.Time) {
+	t.Helper()
+	if second.ID != first.ID {
+		t.Fatalf("duplicate source id = %q, want %q", second.ID, first.ID)
+	}
+	if !first.CreatedAt.Equal(startedAt) {
+		t.Fatalf("first created_at = %s, want %s", first.CreatedAt, startedAt)
+	}
+	if !second.CreatedAt.Equal(startedAt) {
+		t.Fatalf("duplicate created_at = %s, want original %s", second.CreatedAt, startedAt)
+	}
+}
+
+func assertLifecycleJSONFields(t *testing.T, asset Asset) {
+	t.Helper()
+	fields := assetJSONFields(t, asset)
+	assertJSONFieldEquals(t, fields, "review_state", "pending")
+	assertJSONFieldEquals(t, fields, "process_state", "pending")
+	assertJSONFieldPresent(t, fields, "updated_at")
+}
+
+func assertJSONFieldEquals(t *testing.T, fields map[string]any, key string, want any) {
+	t.Helper()
+	if got := fields[key]; got != want {
+		t.Fatalf("%s = %#v, want %#v; fields=%v", key, got, want, fields)
+	}
+}
+
+func assertJSONFieldPresent(t *testing.T, fields map[string]any, key string) {
+	t.Helper()
+	if fields[key] == nil {
+		t.Fatalf("%s missing from asset payload; fields=%v", key, fields)
 	}
 }
 
