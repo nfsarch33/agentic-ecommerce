@@ -30,6 +30,7 @@ import (
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	pricingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/pricing"
 	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
+	apihandler "github.com/nfsarch33/agentic-ecommerce/internal/api/handler"
 	"github.com/nfsarch33/agentic-ecommerce/internal/billing"
 	compliancedomain "github.com/nfsarch33/agentic-ecommerce/internal/compliance"
 	"github.com/nfsarch33/agentic-ecommerce/internal/digital"
@@ -158,6 +159,7 @@ type server struct {
 	factChecksMu          sync.RWMutex
 	factChecks            map[string]contentagent.FactCheckResult
 	mediaService          *intelligence.Service
+	agentActivityHandler  http.Handler
 	workflowClient        temporalWorkflowClient
 	agentRegistry         *orchestrator.Registry
 	agentScheduler        *orchestrator.Scheduler
@@ -427,6 +429,12 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	if loadMatrixErr != nil {
 		logger.Warn("load matrix handlers disabled", "error", loadMatrixErr)
 	}
+	agentActivityHandler, agentActivityErr := apihandler.NewAgentActivitySSEHandler(logger, apihandler.AgentActivitySSEHandlerConfig{
+		Subscriber: bus,
+	})
+	if agentActivityErr != nil {
+		logger.Warn("agent activity stream disabled", "error", agentActivityErr)
+	}
 	marketplaceSyncRouter, marketplaceSyncErr := buildMarketplaceSyncRouter()
 	if marketplaceSyncErr != nil {
 		logger.Warn("marketplace sync router disabled", "error", marketplaceSyncErr)
@@ -469,6 +477,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		rag:                   ragService,
 		factChecks:            map[string]contentagent.FactCheckResult{},
 		mediaService:          intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
+		agentActivityHandler:  agentActivityHandler,
 		workflowClient:        workflowClient,
 		agentRegistry:         registry,
 		agentScheduler:        orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), eventbus.NewEventBusAdapter(bus, "mc-api.agent"), nil, schedulerOptions(2)),
@@ -622,6 +631,10 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/api/v1/agent-schedules/", agentSchedulesAPI)
 	eventsAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.recentEventsHandler)))
 	mux.HandleFunc("/api/v1/events/recent", eventsAPI)
+	if s.agentActivityHandler != nil {
+		agentActivityAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.agentActivityHandler.ServeHTTP)))
+		mux.HandleFunc("/api/v1/agent-activity/stream", agentActivityAPI)
+	}
 	workflowsAPI := s.withCORS(s.withRateLimit(s.withRBAC(workflowRole, s.withAudit(workflowAuditAction, s.workflowsHandler))))
 	mux.HandleFunc("/api/v1/workflows/product-publish", workflowsAPI)
 	mux.HandleFunc("/api/v1/workflows/content-generation", workflowsAPI)
@@ -1366,6 +1379,17 @@ func (r *responseStatusRecorder) Write(body []byte) (int, error) {
 		r.WriteHeader(http.StatusOK)
 	}
 	return r.ResponseWriter.Write(body)
+}
+
+func (r *responseStatusRecorder) Flush() {
+	flusher, ok := r.ResponseWriter.(http.Flusher)
+	if !ok {
+		return
+	}
+	if r.status == 0 {
+		r.WriteHeader(http.StatusOK)
+	}
+	flusher.Flush()
 }
 
 func toProductResponse(p catalog.Product) productResponse {
