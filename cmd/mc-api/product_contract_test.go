@@ -334,6 +334,16 @@ func TestContentHandlersMatchOpenAPIContract(t *testing.T) {
 	})
 }
 
+func TestContentOpenAPIOperationsIncludeTimeoutResponses(t *testing.T) {
+	t.Parallel()
+
+	spec := loadOpenAPISpec(t)
+	paths := specMap(t, spec, "paths")
+
+	assertOperation(t, paths, "/api/v1/products/{id}/generate-description", "post", "generateProductDescription", []string{"200", "400", "404", "502", "503", "504"})
+	assertOperation(t, paths, "/api/v1/products/{id}/ai-suggestions", "get", "getProductAISuggestions", []string{"200", "400", "404", "502", "503", "504"})
+}
+
 func TestComplianceHandlersMatchOpenAPIContract(t *testing.T) {
 	t.Parallel()
 	spec := loadOpenAPIContract(t)
