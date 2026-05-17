@@ -18,8 +18,19 @@ func TestBuildLoadMatrixHandlersReturnsAllHandlers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildLoadMatrixHandlers: %v", err)
 	}
-	if handlers.payments == nil || handlers.adminMobile == nil || handlers.tenantDashboard == nil || handlers.gmv == nil {
-		t.Fatalf("expected all load matrix handlers to be configured: %#v", handlers)
+	for _, tt := range []struct {
+		name    string
+		handler http.Handler
+	}{
+		{name: "payments", handler: handlers.payments},
+		{name: "admin_mobile", handler: handlers.adminMobile},
+		{name: "operator_alerts", handler: handlers.operatorAlerts},
+		{name: "tenant_dashboard", handler: handlers.tenantDashboard},
+		{name: "gmv", handler: handlers.gmv},
+	} {
+		if tt.handler == nil {
+			t.Fatalf("expected %s handler to be configured: %#v", tt.name, handlers)
+		}
 	}
 }
 

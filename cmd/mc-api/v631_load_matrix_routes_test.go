@@ -26,6 +26,7 @@ func TestV631LoadMatrixRoutesAreMounted(t *testing.T) {
 		{name: "webhooks", method: http.MethodGet, path: "/api/v1/webhooks"},
 		{name: "admin_summary", method: http.MethodGet, path: "/api/v1/admin/summary"},
 		{name: "admin_orders", method: http.MethodGet, path: "/api/v1/admin/orders?page=1&limit=20"},
+		{name: "operator_alerts", method: http.MethodGet, path: "/api/v1/operator/alerts?tenant_id=load-test-tenant&status=pending"},
 		{name: "marketplace_plugins", method: http.MethodGet, path: "/api/v1/marketplace/plugins?per_page=20"},
 		{name: "tenant_dashboard", method: http.MethodGet, path: "/api/v1/tenants/load-test-tenant/dashboard"},
 		{name: "gmv_daily", method: http.MethodGet, path: "/api/v1/analytics/gmv?tenant_id=load-test-tenant&from=2026-05-01&to=2026-05-31"},

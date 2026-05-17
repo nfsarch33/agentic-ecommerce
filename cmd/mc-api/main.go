@@ -171,6 +171,7 @@ type server struct {
 	marketplaceSubs       *marketplace.SubmissionService
 	paymentsHandler       http.Handler
 	adminMobileHandler    http.Handler
+	operatorAlertsHandler http.Handler
 	tenantDashboard       http.Handler
 	gmvHandler            http.Handler
 	billingSvc            *billing.Service
@@ -480,6 +481,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		marketplaceSubs:       marketplaceSubsSvc,
 		paymentsHandler:       loadMatrixHandlers.payments,
 		adminMobileHandler:    loadMatrixHandlers.adminMobile,
+		operatorAlertsHandler: loadMatrixHandlers.operatorAlerts,
 		tenantDashboard:       loadMatrixHandlers.tenantDashboard,
 		gmvHandler:            loadMatrixHandlers.gmv,
 		billingSvc:            billingSvc,
@@ -634,16 +636,12 @@ func (s *server) mux() http.Handler {
 	contentAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.contentFactCheckHandler)))
 	mux.HandleFunc("/api/v1/content/generate", contentAPI)
 	mux.HandleFunc("/api/v1/content/fact-checks/", contentAPI)
-	if s.gmvHandler != nil {
-		gmvAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.gmvHandler.ServeHTTP)))
-		mux.HandleFunc("/api/v1/analytics/gmv", gmvAPI)
-		mux.HandleFunc("/api/v1/analytics/gmv/", gmvAPI)
-	}
 	mediaAPI := s.withCORS(s.withRateLimit(s.withRBAC(agentsRole, s.mediaHandler)))
 	mux.HandleFunc("/api/v1/media", mediaAPI)
 	mux.HandleFunc("/api/v1/media/source", mediaAPI)
 	mux.HandleFunc("/api/v1/media/process", mediaAPI)
 	mux.HandleFunc("/api/v1/media/", mediaAPI)
+	s.mountLoadMatrixRoutes(mux)
 
 	membershipPlansAPI := s.withCORS(s.withRateLimit(s.withRBAC(membershipPlansRole, s.withTenantRequired(s.withAudit(membershipPlansAuditAction, s.membershipPlansHandler)))))
 	mux.HandleFunc("/api/v1/membership-plans", membershipPlansAPI)
@@ -669,14 +667,6 @@ func (s *server) mux() http.Handler {
 	tenantAdminAPI := s.withCORS(s.withRateLimit(s.withRBAC(tenantAdminRole, s.withAudit(tenantAdminAuditAction, s.tenantAdminMux))))
 	mux.HandleFunc("/api/v1/tenants", tenantAdminAPI)
 	mux.HandleFunc("/api/v1/tenants/", tenantAdminAPI)
-	if s.adminMobileHandler != nil {
-		adminMobileAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.adminMobileHandler.ServeHTTP)))
-		mux.HandleFunc("/api/v1/admin/summary", adminMobileAPI)
-		mux.HandleFunc("/api/v1/admin/orders", adminMobileAPI)
-		mux.HandleFunc("/api/v1/admin/channels", adminMobileAPI)
-		mux.HandleFunc("/api/v1/admin/alerts/", adminMobileAPI)
-	}
-
 	// v2.7.0 Marketplace plugin submission queue.
 	submitAPI := s.withCORS(s.withRateLimit(s.withRBAC(submissionRole, s.withTenantRequired(s.withAudit(submissionAuditAction, s.submitMarketplacePlugin)))))
 	mux.HandleFunc("/api/v1/marketplace/plugins/submit", submitAPI)
@@ -697,6 +687,26 @@ func (s *server) mux() http.Handler {
 	mux.HandleFunc("/webhooks/stripe", stripeWebhookAPI)
 
 	return s.withSecurityHeaders(s.withTelemetry(s.withRequestLogging(mux)))
+}
+
+func (s *server) mountLoadMatrixRoutes(mux *http.ServeMux) {
+	if s.gmvHandler != nil {
+		gmvAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.gmvHandler.ServeHTTP)))
+		mux.HandleFunc("/api/v1/analytics/gmv", gmvAPI)
+		mux.HandleFunc("/api/v1/analytics/gmv/", gmvAPI)
+	}
+	if s.adminMobileHandler != nil {
+		adminMobileAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.adminMobileHandler.ServeHTTP)))
+		mux.HandleFunc("/api/v1/admin/summary", adminMobileAPI)
+		mux.HandleFunc("/api/v1/admin/orders", adminMobileAPI)
+		mux.HandleFunc("/api/v1/admin/channels", adminMobileAPI)
+		mux.HandleFunc("/api/v1/admin/alerts/", adminMobileAPI)
+	}
+	if s.operatorAlertsHandler != nil {
+		operatorAlertsAPI := s.withCORS(s.withRateLimit(s.withRBAC(viewerRole, s.operatorAlertsHandler.ServeHTTP)))
+		mux.HandleFunc("/api/v1/operator/alerts", operatorAlertsAPI)
+		mux.HandleFunc("/api/v1/operator/alerts/", operatorAlertsAPI)
+	}
 }
 
 // buildMarketplaceService wires the v2.4.0 marketplace registry with

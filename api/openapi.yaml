@@ -5,8 +5,8 @@ info:
   description: |
     Public v1.x.y contract for the Agentic Ecommerce Go backend consumed by
     agentic-ecommerce-web. This spec intentionally excludes private
-    operator endpoints and credential-bearing surfaces. Protected endpoints
-    use short-lived HMAC-signed JWT bearer tokens and RBAC roles:
+    mobile-only operator endpoints and credential-bearing surfaces.
+    Protected endpoints use short-lived HMAC-signed JWT bearer tokens and RBAC roles:
     admin, operator, and viewer.
 
     Version policy: v1 endpoints are stable through host v9.x. The
@@ -876,6 +876,154 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Missing reviewer, review note, or invalid path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/operator/alerts:
+    get:
+      summary: List operator alerts
+      operationId: listOperatorAlerts
+      description: Approved public operator-alert surface consumed by the web BFF for alert review queues.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, acknowledged, resolved, expired]
+            default: pending
+      responses:
+        '200':
+          description: Operator alerts for the requested tenant and lifecycle state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorAlertListResponse'
+        '400':
+          description: Missing tenant identifier or invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Operator alert repository failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/operator/alerts/{alert_id}/acknowledge:
+    post:
+      summary: Acknowledge an operator alert
+      operationId: acknowledgeOperatorAlert
+      description: Moves a pending operator alert into the acknowledged state without resolving the underlying action.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Operator alert acknowledged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorAlertAcknowledgeResponse'
+        '400':
+          description: Missing tenant identifier or invalid alert path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Operator alert not found for the tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Operator alert is already resolved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Operator alert repository failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/operator/alerts/{alert_id}/resolve:
+    post:
+      summary: Resolve an operator alert
+      operationId: resolveOperatorAlert
+      description: Resolves a pending or acknowledged operator alert with an explicit approve or deny action.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [approve, deny]
+      responses:
+        '200':
+          description: Operator alert resolved with an explicit action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorAlertResolveResponse'
+        '400':
+          description: Missing tenant identifier, invalid alert path, or unsupported action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Operator alert not found for the tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Operator alert is already resolved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Operator alert repository or event publication failure.
           content:
             application/json:
               schema:
@@ -6214,6 +6362,85 @@ components:
         data:
           type: array
           items: { $ref: '#/components/schemas/AdminChannelStatus' }
+    OperatorAlert:
+      type: object
+      required: [tenant_id, alert_id, alert_type, severity, status, created_at, expires_at]
+      properties:
+        tenant_id: { type: string }
+        alert_id: { type: string }
+        alert_type:
+          type: string
+          enum:
+            - large_refund_pending_approval
+            - large_dropship_pending_approval
+            - price_change_pending_approval
+            - captcha_detected
+            - omniparser_unavailable
+            - rate_limit_drain
+            - channel_status_update_failed
+            - large_margin_alert
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        status:
+          type: string
+          enum: [pending, acknowledged, resolved, expired]
+        payload:
+          type: object
+          additionalProperties: true
+        action_taken:
+          type: string
+          enum: [approve, deny]
+        operator_email:
+          type: string
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        acknowledged_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+    OperatorAlertListResponse:
+      type: object
+      required: [tenant_id, status, alerts, count]
+      properties:
+        tenant_id: { type: string }
+        status:
+          type: string
+          enum: [pending, acknowledged, resolved, expired]
+        alerts:
+          type: array
+          items: { $ref: '#/components/schemas/OperatorAlert' }
+        count:
+          type: integer
+    OperatorAlertAcknowledgeResponse:
+      type: object
+      required: [tenant_id, alert_id, status]
+      properties:
+        tenant_id: { type: string }
+        alert_id: { type: string }
+        status:
+          type: string
+          enum: [acknowledged]
+    OperatorAlertResolveResponse:
+      type: object
+      required: [tenant_id, alert_id, status, action_taken]
+      properties:
+        tenant_id: { type: string }
+        alert_id: { type: string }
+        status:
+          type: string
+          enum: [resolved]
+        action_taken:
+          type: string
+          enum: [approve, deny]
 
     # v4.8.0 Coaching schemas.
     CoachingTipRequest:
