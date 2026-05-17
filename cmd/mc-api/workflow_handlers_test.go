@@ -15,6 +15,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/security"
@@ -369,15 +370,21 @@ func TestGetWorkflowStatusDescribesTemporalExecution(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
-	var got workflowStatusResponse
+	var got workflowDetailResponse
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.WorkflowID != "wf-123" || got.RunID != "run-123" || got.Status != "running" {
+	if got.ID != "wf-123" || got.RunID != "run-123" || got.Status != "running" {
 		t.Fatalf("response = %+v", got)
 	}
-	if got.StartTime == nil || !got.StartTime.Equal(start) {
-		t.Fatalf("start time = %v, want %v", got.StartTime, start)
+	if got.Type != "workflow" {
+		t.Fatalf("type = %q, want workflow", got.Type)
+	}
+	if got.StartedAt != start.Format(time.RFC3339) {
+		t.Fatalf("started_at = %q, want %s", got.StartedAt, start.Format(time.RFC3339))
+	}
+	if len(got.Activities) != 1 || got.Activities[0].Name != "Temporal execution" {
+		t.Fatalf("activities = %+v, want one temporal execution activity", got.Activities)
 	}
 }
 
@@ -562,18 +569,22 @@ func workflowAuthServerConfig() serverConfig {
 }
 
 type fakeTemporalWorkflowClient struct {
-	run              fakeWorkflowRun
-	describe         *workflowservicepb.DescribeWorkflowExecutionResponse
-	describeErr      error
-	startErr         error
-	signalErr        error
-	startedOptions   client.StartWorkflowOptions
-	startedWorkflow  any
-	startedArgs      []any
-	signalWorkflowID string
-	signalRunID      string
-	signalName       string
-	signalArg        any
+	run               fakeWorkflowRun
+	describe          *workflowservicepb.DescribeWorkflowExecutionResponse
+	describeErr       error
+	list              *workflowservicepb.ListWorkflowExecutionsResponse
+	listErr           error
+	queryByWorkflowID map[string]converter.EncodedValue
+	queryErr          error
+	startErr          error
+	signalErr         error
+	startedOptions    client.StartWorkflowOptions
+	startedWorkflow   any
+	startedArgs       []any
+	signalWorkflowID  string
+	signalRunID       string
+	signalName        string
+	signalArg         any
 }
 
 func (f *fakeTemporalWorkflowClient) ExecuteWorkflow(_ context.Context, options client.StartWorkflowOptions, workflow any, args ...any) (workflowRun, error) {
@@ -602,6 +613,23 @@ func (f *fakeTemporalWorkflowClient) SignalWorkflow(_ context.Context, workflowI
 	f.signalName = signalName
 	f.signalArg = arg
 	return nil
+}
+
+func (f *fakeTemporalWorkflowClient) ListWorkflow(context.Context, *workflowservicepb.ListWorkflowExecutionsRequest) (*workflowservicepb.ListWorkflowExecutionsResponse, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.list, nil
+}
+
+func (f *fakeTemporalWorkflowClient) QueryWorkflow(_ context.Context, workflowID, _ string, _ string, _ ...interface{}) (converter.EncodedValue, error) {
+	if f.queryErr != nil {
+		return nil, f.queryErr
+	}
+	if f.queryByWorkflowID == nil {
+		return nil, nil
+	}
+	return f.queryByWorkflowID[workflowID], nil
 }
 
 type fakeWorkflowRun struct {
