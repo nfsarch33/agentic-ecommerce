@@ -136,13 +136,16 @@ type paymentChargeInput struct {
 }
 
 func handleChargeSuccess(ctx temporalworkflow.Context, input PaymentSagaInput, result ChargeResult, retries int) (PaymentSagaResult, error) {
+	status := resolvedCommercialStatus(result.Status)
 	res := PaymentSagaResult{
 		TenantID: input.TenantID, OrderID: input.OrderID,
 		PaymentID: result.PaymentID, Provider: result.Provider,
-		Status: "completed", Retries: retries,
+		Status: status, Retries: retries,
 	}
-	_ = temporalworkflow.ExecuteActivity(ctx, UpdateOrderStatusActivity, orderStatusUpdate{Input: input, Status: "paid"}).Get(ctx, nil)
-	_ = temporalworkflow.ExecuteActivity(ctx, PublishPaymentEventActivity, paymentPublishArgs{Input: input, Result: result, State: "completed"}).Get(ctx, nil)
+	if status == "completed" {
+		_ = temporalworkflow.ExecuteActivity(ctx, UpdateOrderStatusActivity, orderStatusUpdate{Input: input, Status: "paid"}).Get(ctx, nil)
+	}
+	_ = temporalworkflow.ExecuteActivity(ctx, PublishPaymentEventActivity, paymentPublishArgs{Input: input, Result: result, State: status}).Get(ctx, nil)
 	return res, nil
 }
 
@@ -214,6 +217,13 @@ func validatePaymentInput(in PaymentSagaInput) error {
 		return fmt.Errorf("payment: currency required")
 	}
 	return nil
+}
+
+func resolvedCommercialStatus(chargeStatus string) string {
+	if strings.EqualFold(strings.TrimSpace(chargeStatus), "pending") {
+		return "pending"
+	}
+	return "completed"
 }
 
 // PaymentGatewayPort is the port the saga activities consume.
