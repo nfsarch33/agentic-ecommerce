@@ -122,6 +122,97 @@ func TestFactCheckLookupHandlesMissingResult(t *testing.T) {
 	}
 }
 
+func TestFactCheckLookupRejectsCrossTenantReads(t *testing.T) {
+	t.Parallel()
+
+	srv, repo := testServer(t)
+	product := addTenantProduct(t, repo, "tenant-a", "RB-TENANT-FC", "Resistance Band Set", 4995)
+	srv.contentAgent = &fakeContentAgent{result: content.GenerateResult{
+		GeneratedContent: content.GeneratedContent{
+			Description:     "Resistance Band Set includes five resistance levels.",
+			SEOTitle:        "Resistance Band Set",
+			MetaDescription: "Resistance Band Set includes five resistance levels.",
+		},
+		Evaluation: content.Evaluation{Score: 90, Pass: true},
+		TokensUsed: 42,
+	}}
+	srv.factChecker = content.NewFactChecker(
+		rag.NewService(rag.NewHashEmbedder(16), rag.NewInMemoryVectorStore(16), rag.ChunkOptions{}),
+		content.FactCheckOptions{},
+	)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/content/generate",
+		bytes.NewBufferString(`{"product_id":"`+product.ID().String()+`"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-ID", "tenant-a")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("generate status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var generated contentFactCheckResponse
+	if err := json.NewDecoder(rec.Body).Decode(&generated); err != nil {
+		t.Fatalf("decode generate: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/content/fact-checks/"+generated.FactCheckID, nil)
+	req.Header.Set("X-Tenant-ID", "tenant-b")
+	rec = httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+	assertErrorResponse(t, rec.Body.Bytes(), "not_found")
+}
+
+func TestFactCheckLookupRejectsAnonymousReadsOfTenantScopedResults(t *testing.T) {
+	t.Parallel()
+
+	srv, repo := testServer(t)
+	product := addTenantProduct(t, repo, "tenant-a", "RB-ANON-FC", "Resistance Band Set", 4995)
+	srv.contentAgent = &fakeContentAgent{result: content.GenerateResult{
+		GeneratedContent: content.GeneratedContent{
+			Description:     "Resistance Band Set includes five resistance levels.",
+			SEOTitle:        "Resistance Band Set",
+			MetaDescription: "Resistance Band Set includes five resistance levels.",
+		},
+		Evaluation: content.Evaluation{Score: 90, Pass: true},
+		TokensUsed: 42,
+	}}
+	srv.factChecker = content.NewFactChecker(
+		rag.NewService(rag.NewHashEmbedder(16), rag.NewInMemoryVectorStore(16), rag.ChunkOptions{}),
+		content.FactCheckOptions{},
+	)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/content/generate",
+		bytes.NewBufferString(`{"product_id":"`+product.ID().String()+`"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-ID", "tenant-a")
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("generate status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var generated contentFactCheckResponse
+	if err := json.NewDecoder(rec.Body).Decode(&generated); err != nil {
+		t.Fatalf("decode generate: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/content/fact-checks/"+generated.FactCheckID, nil)
+	rec = httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+	assertErrorResponse(t, rec.Body.Bytes(), "not_found")
+}
+
 func TestGenerateContentWithFactCheckingMapsGenerationFailure(t *testing.T) {
 	t.Parallel()
 

@@ -158,7 +158,7 @@ type server struct {
 	rag                   *rag.Service
 	factChecker           *contentagent.FactChecker
 	factChecksMu          sync.RWMutex
-	factChecks            map[string]contentagent.FactCheckResult
+	factChecks            map[string]storedFactCheckResult
 	mediaService          *intelligence.Service
 	agentActivityHandler  http.Handler
 	workflowClient        temporalWorkflowClient
@@ -480,7 +480,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		marketplaceSync:       marketplaceSyncRouter,
 		contentAgent:          generator,
 		rag:                   ragService,
-		factChecks:            map[string]contentagent.FactCheckResult{},
+		factChecks:            map[string]storedFactCheckResult{},
 		mediaService:          intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
 		agentActivityHandler:  agentActivityHandler,
 		workflowClient:        workflowClient,
