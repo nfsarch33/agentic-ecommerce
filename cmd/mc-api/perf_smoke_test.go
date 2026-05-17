@@ -31,6 +31,7 @@ type releasePerfFixture struct {
 	adminToken         string
 	productID          string
 	webhookReceiverURL string
+	server             *server
 }
 
 type releasePerfScenario struct {
@@ -65,13 +66,7 @@ func newReleasePerformanceFixture(t *testing.T) releasePerfFixture {
 		TokensUsed: 42,
 	}}
 	srv.workflowClient = &fakeTemporalWorkflowClient{run: fakeWorkflowRun{id: "product-publish-" + product.ID().String(), runID: "run-perf-smoke"}}
-	srv.mediaService = intelligence.NewService(intelligence.ServiceConfig{HTTPClient: mediaRoundTripClient(func(*http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"image/png"}},
-			Body:       io.NopCloser(strings.NewReader(mediaOnePixelPNGString())),
-		}, nil
-	})})
+	srv.mediaService = newReleasePerfMediaService()
 	webhookReceiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -95,6 +90,7 @@ func newReleasePerformanceFixture(t *testing.T) releasePerfFixture {
 		adminToken:         perfLogin(t, client, httpServer.URL),
 		productID:          product.ID().String(),
 		webhookReceiverURL: webhookReceiver.URL,
+		server:             srv,
 	}
 }
 
@@ -195,8 +191,12 @@ func (f releasePerfFixture) startProductPublishWorkflow() error {
 }
 
 func (f releasePerfFixture) validateMedia() error {
+	f.server.mediaService = newReleasePerfMediaService()
 	sourcedID, err := f.sourceMedia()
 	if err != nil {
+		return err
+	}
+	if err := f.approveMedia(sourcedID); err != nil {
 		return err
 	}
 	processedID, err := f.processMedia(sourcedID)
@@ -222,6 +222,21 @@ func (f releasePerfFixture) processMedia(mediaID string) (string, error) {
 		return "", err
 	}
 	return perfIDFromPayload(payload, "processed media")
+}
+
+func (f releasePerfFixture) approveMedia(mediaID string) error {
+	body := []byte(`{"reviewer":"perf-smoke","note":"approved for media validation perf smoke"}`)
+	return perfRequest(f.client, http.MethodPost, f.baseURL+"/api/v1/media/"+mediaID+"/approve", f.adminToken, body)
+}
+
+func newReleasePerfMediaService() *intelligence.Service {
+	return intelligence.NewService(intelligence.ServiceConfig{HTTPClient: mediaRoundTripClient(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"image/png"}},
+			Body:       io.NopCloser(strings.NewReader(mediaOnePixelPNGString())),
+		}, nil
+	})})
 }
 
 func (f releasePerfFixture) testWebhookDelivery() error {

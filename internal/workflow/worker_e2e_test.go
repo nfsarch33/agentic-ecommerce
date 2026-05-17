@@ -52,6 +52,7 @@ func TestWorkerRegistrationCoversAllProductionNames(t *testing.T) {
 	env.RegisterActivityWithOptions(noopEvaluateActivity, activity.RegisterOptions{Name: ContentEvaluateActivity})
 	env.RegisterActivityWithOptions(noopRecordContentFactCheckActivity, activity.RegisterOptions{Name: RecordContentFactCheckActivity})
 	env.RegisterActivityWithOptions(noopMediaSourceActivity, activity.RegisterOptions{Name: MediaSourceActivity})
+	env.RegisterActivityWithOptions(noopMediaApproveActivity, activity.RegisterOptions{Name: MediaApproveActivity})
 	env.RegisterActivityWithOptions(noopMediaProcessActivity, activity.RegisterOptions{Name: MediaProcessActivity})
 	env.RegisterActivityWithOptions(noopMediaQualityActivity, activity.RegisterOptions{Name: MediaQualityActivity})
 	env.RegisterActivityWithOptions(noopMediaStoreActivity, activity.RegisterOptions{Name: MediaStoreActivity})
@@ -120,6 +121,10 @@ func noopRecordContentFactCheckActivity(_ context.Context, _ ContentGenerationRe
 
 func noopMediaSourceActivity(_ context.Context, _ MediaProcessingInput) (intelligence.Asset, error) {
 	return intelligence.Asset{ID: "media-id"}, nil
+}
+
+func noopMediaApproveActivity(_ context.Context, input MediaReviewActivityInput) (intelligence.Asset, error) {
+	return intelligence.Asset{ID: input.MediaID, ReviewState: intelligence.MediaReviewStateApproved}, nil
 }
 
 func noopMediaProcessActivity(_ context.Context, _ MediaProcessActivityInput) (intelligence.Asset, error) {

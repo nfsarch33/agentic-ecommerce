@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 
 const (
 	MediaSourceActivity      = "media_processing.source"
+	MediaApproveActivity     = "media_processing.approve"
 	MediaProcessActivity     = "media_processing.process"
 	MediaQualityActivity     = "media_processing.quality"
 	MediaStoreActivity       = "media_processing.store"
@@ -53,6 +55,12 @@ type MediaProcessActivityInput struct {
 	Resize           intelligence.ResizeOptions `json:"resize,omitempty"`
 	Format           string                     `json:"format,omitempty"`
 	RemoveBackground bool                       `json:"remove_background,omitempty"`
+}
+
+type MediaReviewActivityInput struct {
+	MediaID   string `json:"media_id"`
+	Reviewer  string `json:"reviewer"`
+	Note      string `json:"note,omitempty"`
 }
 
 type MediaQualityActivityInput struct {
@@ -120,6 +128,15 @@ func MediaProcessingWorkflow(ctx temporalworkflow.Context, input MediaProcessing
 	result.MediaID = result.Source.ID
 	result.Status = MediaProcessingStatusSourced
 
+	approvalInput := MediaReviewActivityInput{
+		MediaID:  result.Source.ID,
+		Reviewer: mediaWorkflowReviewer(input.RequestedBy),
+		Note:     "Approved via media processing workflow request",
+	}
+	if err := temporalworkflow.ExecuteActivity(ctx, MediaApproveActivity, approvalInput).Get(ctx, &result.Source); err != nil {
+		return result, err
+	}
+
 	processInput := MediaProcessActivityInput{
 		MediaID:          result.Source.ID,
 		Resize:           input.Resize,
@@ -169,6 +186,16 @@ func (a *MediaProcessingActivities) SourceMedia(ctx context.Context, input Media
 	})
 }
 
+func (a *MediaProcessingActivities) ApproveMedia(ctx context.Context, input MediaReviewActivityInput) (intelligence.Asset, error) {
+	if a.media == nil {
+		return intelligence.Asset{}, errors.New("media intelligence service is not configured")
+	}
+	return a.media.Approve(ctx, input.MediaID, intelligence.ReviewRequest{
+		Reviewer: input.Reviewer,
+		Note:     input.Note,
+	})
+}
+
 func (a *MediaProcessingActivities) ProcessMedia(ctx context.Context, input MediaProcessActivityInput) (intelligence.Asset, error) {
 	if a.media == nil {
 		return intelligence.Asset{}, errors.New("media intelligence service is not configured")
@@ -213,4 +240,11 @@ func (a *MediaProcessingActivities) LinkMediaToProduct(ctx context.Context, inpu
 		return a.linker.LinkMediaToProduct(ctx, input)
 	}
 	return MediaProductLinkResult{Linked: true, ProductID: input.ProductID, MediaID: input.MediaID, StorageKey: input.Storage.Key}, nil
+}
+
+func mediaWorkflowReviewer(requestedBy string) string {
+	if reviewer := strings.TrimSpace(requestedBy); reviewer != "" {
+		return reviewer
+	}
+	return "media-workflow"
 }
