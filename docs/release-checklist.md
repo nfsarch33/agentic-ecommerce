@@ -25,6 +25,7 @@ go vet ./...
 make build
 make coverage-check
 make contract-test
+make govulncheck-scan
 make release-perf-smoke
 make monitoring-validate
 ```

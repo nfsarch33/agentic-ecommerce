@@ -1,12 +1,13 @@
 # EC v9.0.0 Release Final Evidence
 
-**Date**: 2026-05-16
+**Date**: 2026-05-19
 **Release**: `agentic-ecommerce` v9.0.0
 **Base**: v8.0.0 release tag
-**Head**: 9715a7e8ea94544bbf8dccb344b1aa44b75aa682
-Frontend SHA: `53a4598415f488756950b040ae7ad2b022c6790c`
+**Head**: ef15859bf46d73029fac404b83b05c7c0cf7b9de
+**v5025 pre-release QA merged**: PR #194 at ef15859bf46d73029fac404b83b05c7c0cf7b9de
+Frontend SHA: `0b2fad90071785fd3a27c244cf9bc2c6c7066b0a`
 OpenAPI contract path: `api/openapi.yaml`
-**Status**: pre-release freeze captured; semver tag still blocked
+**Status**: publication path open; semver tag gate ready for primary-testing run
 
 ## Scope
 
@@ -47,13 +48,15 @@ v9.0.0 establishes the backend platform baseline for the post-v8 program:
 - External-provider live execution remains operator-gated even after the
   self-hosted release gates are green.
 
-Current blockers:
+Current blockers (v5026 publication path update -- 2026-05-19T00:00+10:00):
 
-- `node-b`, `host-b`, and `host-b-travel` still time out from the controller.
-- Blocking `primary-testing` release lanes have not yet all been re-run on the
-  frozen backend/frontend SHAs above.
-- Stack-level publication remains blocked on the frontend stable Playwright and
-  UIAuto evidence captured on `primary-testing`.
+- `node-b`, `host-b`, and `host-b-travel` remain non-primary and do not block the tag.
+- `primary-testing` backend-integration and full-stack-e2e lanes must be re-run
+  on the merged v5025 HEAD `ef15859bf46d73029fac404b83b05c7c0cf7b9de` before
+  the semver tag is cut.
+- Stack-level publication still requires frontend stable Playwright and UIAuto
+  evidence on `primary-testing`. Frontend v5027 QA sprint will capture this.
+- Operator action: run primary-pool canaries and lane gates, then cut tag.
 
 ## Release Gates
 
