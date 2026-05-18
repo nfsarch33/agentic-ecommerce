@@ -63,11 +63,12 @@ func TestV900ReleaseMetadataUsesSemverOnlyGateLanguage(t *testing.T) {
 func TestV900ReleaseMetadataPinsExactPromotionInputs(t *testing.T) {
 	t.Parallel()
 
+	// v5026: promotion inputs advanced to v5025 merged SHA (PR #194)
 	assertFileContainsAll(t, "../../docs/operations/v9-release-final.md",
-		"**Head**: 9715a7e8ea94544bbf8dccb344b1aa44b75aa682",
-		"Frontend SHA: `53a4598415f488756950b040ae7ad2b022c6790c`",
+		"ef15859bf46d73029fac404b83b05c7c0cf7b9de",
+		"0b2fad90071785fd3a27c244cf9bc2c6c7066b0a",
 		"OpenAPI contract path: `api/openapi.yaml`",
-		"Current blockers:",
+		"primary-testing",
 	)
 	assertFileNotContains(t, "../../docs/operations/v9-release-final.md", "pending final v9 release merge commit")
 }
@@ -92,9 +93,10 @@ func TestV900VersionPolicySurfacesAlignWithV9Freeze(t *testing.T) {
 func TestV900ReleaseMetadataTracksMergedPromotionInputs(t *testing.T) {
 	t.Parallel()
 
+	// v5026: tracks v5025 merged SHAs (backend PR #194, frontend PR #93)
 	assertFileContainsAll(t, "../../docs/operations/v9-release-final.md",
-		"**Head**: 9715a7e8ea94544bbf8dccb344b1aa44b75aa682",
-		"Frontend SHA: `53a4598415f488756950b040ae7ad2b022c6790c`",
+		"ef15859bf46d73029fac404b83b05c7c0cf7b9de",
+		"0b2fad90071785fd3a27c244cf9bc2c6c7066b0a",
 	)
 	assertFileNotContainsAll(t, "../../docs/operations/v9-release-final.md",
 		"17eab44dfdfc807e34fbf4ee05b6bd9f2322e41c",
