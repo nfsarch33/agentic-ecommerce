@@ -42,7 +42,7 @@ func TestRAGSearchMapsDeadlineExceededToGatewayTimeout(t *testing.T) {
 	t.Parallel()
 
 	srv, _ := testServer(t)
-	srv.rag = rag.NewService(contextDeadlineEmbedder{}, rag.NewInMemoryVectorStore(1), rag.ChunkOptions{MaxWords: 12})
+	srv.rag = rag.NewService(alwaysDeadlineExceededEmbedder{}, rag.NewInMemoryVectorStore(1), rag.ChunkOptions{MaxWords: 12})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 	defer cancel()
@@ -196,6 +196,12 @@ func (contextDeadlineEmbedder) Embed(ctx context.Context, texts []string) ([][]f
 		}
 		return out, nil
 	}
+}
+
+type alwaysDeadlineExceededEmbedder struct{}
+
+func (alwaysDeadlineExceededEmbedder) Embed(context.Context, []string) ([][]float64, error) {
+	return nil, context.DeadlineExceeded
 }
 
 type deadlineAwareContentAgent struct{}
