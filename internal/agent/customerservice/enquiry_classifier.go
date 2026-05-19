@@ -29,7 +29,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // Intent is the closed enum of EC-8-1 intent categories.

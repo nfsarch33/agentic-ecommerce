@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/coord"
-	"github.com/nfsarch33/agentic-ecommerce/internal/evomap"
+	"github.com/nfsarch33/helixon-ec/internal/coord"
+	"github.com/nfsarch33/helixon-ec/internal/evomap"
 )
 
 var ErrInvalidEvidence = errors.New("selfimprove: invalid evidence")

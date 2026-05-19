@@ -20,12 +20,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/coord"
-	"github.com/nfsarch33/agentic-ecommerce/internal/evomap"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
-	"github.com/nfsarch33/agentic-ecommerce/internal/observability/agentrace"
-	"github.com/nfsarch33/agentic-ecommerce/internal/resilience"
-	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
+	"github.com/nfsarch33/helixon-ec/internal/coord"
+	"github.com/nfsarch33/helixon-ec/internal/evomap"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/observability/agentrace"
+	"github.com/nfsarch33/helixon-ec/internal/resilience"
+	"github.com/nfsarch33/helixon-ec/internal/workerpool"
 )
 
 // safeFileSink is a filesystem sink that flushes after every write

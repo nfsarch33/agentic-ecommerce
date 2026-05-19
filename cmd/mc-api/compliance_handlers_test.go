@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
 )
 
 func TestComplianceCheckEndpointReturnsRuleBreakdown(t *testing.T) {

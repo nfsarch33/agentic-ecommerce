@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
+	"github.com/nfsarch33/helixon-ec/internal/marketplacesync"
 	"go.temporal.io/sdk/temporal"
 	temporalworkflow "go.temporal.io/sdk/workflow"
 )

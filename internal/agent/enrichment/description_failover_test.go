@@ -41,7 +41,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // ErrCircuitBreakerOpen mirrors the typical sentinel a downstream

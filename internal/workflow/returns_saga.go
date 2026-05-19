@@ -42,7 +42,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 	"go.temporal.io/sdk/temporal"
 	temporalworkflow "go.temporal.io/sdk/workflow"
 )

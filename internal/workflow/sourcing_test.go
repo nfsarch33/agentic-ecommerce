@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
+	sourcingagent "github.com/nfsarch33/helixon-ec/internal/agent/sourcing"
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"

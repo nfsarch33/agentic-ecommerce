@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/inmemory"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"

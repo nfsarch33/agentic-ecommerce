@@ -3,7 +3,7 @@ package postgres_test
 import (
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/postgres"
 )
 
 func TestLoadStatementTimeoutConfigDefaults(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
-	tenantpkg "github.com/nfsarch33/agentic-ecommerce/internal/tenant"
+	"github.com/nfsarch33/helixon-ec/internal/security"
+	tenantpkg "github.com/nfsarch33/helixon-ec/internal/tenant"
 )
 
 // tenantAdminCreateRequest is the JSON body for POST /api/v1/tenants.

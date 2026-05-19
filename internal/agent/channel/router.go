@@ -45,9 +45,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/channelport"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
+	"github.com/nfsarch33/helixon-ec/internal/channelport"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/workerpool"
 )
 
 // ChannelAdapter is the port every storefront channel implements.

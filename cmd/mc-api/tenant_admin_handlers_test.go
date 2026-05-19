@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/tenant"
+	"github.com/nfsarch33/helixon-ec/internal/tenant"
 )
 
 func newTenantAdminTestServer(t *testing.T) *server {

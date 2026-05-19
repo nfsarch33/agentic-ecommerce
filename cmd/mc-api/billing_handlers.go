@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/billing"
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
+	"github.com/nfsarch33/helixon-ec/internal/billing"
+	"github.com/nfsarch33/helixon-ec/internal/security"
 )
 
 // adminBillingSubscriptionResponse is the wire shape for a Subscription

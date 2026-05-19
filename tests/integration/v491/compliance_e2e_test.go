@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/compliance"
+	"github.com/nfsarch33/helixon-ec/internal/compliance"
 )
 
 // inMemRepo is a full in-memory ComplianceRepository for E2E testing.

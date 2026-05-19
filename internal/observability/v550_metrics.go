@@ -12,7 +12,7 @@
 package observability
 
 import (
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 // PGPoolMetrics is the port the pool sampler records through.

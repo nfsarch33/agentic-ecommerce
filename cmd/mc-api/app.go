@@ -9,11 +9,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
-	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
-	"github.com/nfsarch33/agentic-ecommerce/internal/observability/hooks"
-	"github.com/nfsarch33/agentic-ecommerce/internal/runtimeobs"
+	"github.com/nfsarch33/helixon-ec/internal/lifecycle"
+	"github.com/nfsarch33/helixon-ec/internal/memwatch"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/observability/hooks"
+	"github.com/nfsarch33/helixon-ec/internal/runtimeobs"
 )
 
 // app.go (v2.6.1 cmd/* DI refactor): keep main.go's main() body

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/coord"
+	"github.com/nfsarch33/helixon-ec/internal/coord"
 )
 
 func TestCoordSentinelErrorsAreDetectable(t *testing.T) {

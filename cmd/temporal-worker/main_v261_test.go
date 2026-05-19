@@ -10,8 +10,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
-	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
+	"github.com/nfsarch33/helixon-ec/internal/marketplacesync"
+	ecworkflow "github.com/nfsarch33/helixon-ec/internal/workflow"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 )

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/llm"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
-	"github.com/nfsarch33/agentic-ecommerce/internal/resilience"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/llm"
+	"github.com/nfsarch33/helixon-ec/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/resilience"
 )
 
 func TestE2ENormalOperationKey1Serves(t *testing.T) {

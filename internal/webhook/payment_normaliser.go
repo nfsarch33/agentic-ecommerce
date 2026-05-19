@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // v4.3.0 payment webhook normaliser errors.

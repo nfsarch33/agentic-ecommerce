@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/media"
+	"github.com/nfsarch33/helixon-ec/internal/media"
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"

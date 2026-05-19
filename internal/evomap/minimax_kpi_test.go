@@ -3,7 +3,7 @@ package evomap_test
 import (
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/evomap"
+	"github.com/nfsarch33/helixon-ec/internal/evomap"
 )
 
 func TestBuildMinimaxKPIsFromSnapshots(t *testing.T) {

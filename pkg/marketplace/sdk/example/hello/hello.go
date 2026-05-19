@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/nfsarch33/agentic-ecommerce/pkg/marketplace/sdk"
+	"github.com/nfsarch33/helixon-ec/pkg/marketplace/sdk"
 )
 
 // Plugin is the example "hello" plugin. It records every lifecycle

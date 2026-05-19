@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/woocommerce"
 )
 
 const defaultBatchSize = 100

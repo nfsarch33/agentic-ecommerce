@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
-	"github.com/nfsarch33/agentic-ecommerce/internal/tenant"
+	"github.com/nfsarch33/helixon-ec/internal/registration"
+	"github.com/nfsarch33/helixon-ec/internal/tenant"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 )

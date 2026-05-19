@@ -51,7 +51,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/social"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/social"
 )
 
 // VideoBridgePostPath is the canonical path the video bridge exposes

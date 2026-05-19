@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/billing"
+	"github.com/nfsarch33/helixon-ec/internal/billing"
 )
 
 func TestRefundFullCycleWithVCR(t *testing.T) {

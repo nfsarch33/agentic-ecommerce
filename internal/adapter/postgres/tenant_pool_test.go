@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/postgres"
 )
 
 type fakeConn struct {

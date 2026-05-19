@@ -48,11 +48,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/fulfilment"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
-	"github.com/nfsarch33/agentic-ecommerce/internal/observability"
+	"github.com/nfsarch33/helixon-ec/internal/agent/fulfilment"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/lifecycle"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/observability"
 )
 
 // sagaRollbackDeadline is the per-scenario rollback budget per the

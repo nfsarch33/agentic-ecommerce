@@ -34,10 +34,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
-	"github.com/nfsarch33/agentic-ecommerce/internal/observability/hooks"
-	"github.com/nfsarch33/agentic-ecommerce/internal/resilience"
-	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/observability/hooks"
+	"github.com/nfsarch33/helixon-ec/internal/resilience"
+	"github.com/nfsarch33/helixon-ec/internal/workerpool"
 )
 
 const (

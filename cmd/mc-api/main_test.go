@@ -13,15 +13,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/notification"
-	stripeadapter "github.com/nfsarch33/agentic-ecommerce/internal/adapter/stripe"
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
-	"github.com/nfsarch33/agentic-ecommerce/internal/observability/hooks"
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/inmemory"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/notification"
+	stripeadapter "github.com/nfsarch33/helixon-ec/internal/adapter/stripe"
+	"github.com/nfsarch33/helixon-ec/internal/agent"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/observability/hooks"
+	"github.com/nfsarch33/helixon-ec/internal/security"
 )
 
 func testServer(t *testing.T) (*server, *inmemory.ProductRepository) {

@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	digitaldomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/digital"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	digitaldomain "github.com/nfsarch33/helixon-ec/internal/domain/digital"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // EventPublisher is the narrow seam the service uses to emit

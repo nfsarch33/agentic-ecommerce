@@ -49,7 +49,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 // Existing #10 typed sentinels.

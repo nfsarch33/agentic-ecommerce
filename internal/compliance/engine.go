@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	"github.com/nfsarch33/agentic-ecommerce/internal/media"
-	"github.com/nfsarch33/agentic-ecommerce/internal/seo"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/media"
+	"github.com/nfsarch33/helixon-ec/internal/seo"
 )
 
 type Severity string

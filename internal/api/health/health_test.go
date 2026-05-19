@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/api/health"
+	"github.com/nfsarch33/helixon-ec/internal/api/health"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

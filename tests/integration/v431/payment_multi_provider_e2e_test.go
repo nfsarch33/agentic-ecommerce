@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/payment"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
-	"github.com/nfsarch33/agentic-ecommerce/internal/webhook"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/payment"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/webhook"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

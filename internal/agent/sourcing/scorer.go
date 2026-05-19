@@ -1,8 +1,8 @@
 package sourcing
 
 import (
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/china"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/china"
+	"github.com/nfsarch33/helixon-ec/internal/domain"
 )
 
 // scoreInput pairs a candidate product with its supplier-score so

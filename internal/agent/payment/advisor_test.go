@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	paymentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/payment"
+	paymentagent "github.com/nfsarch33/helixon-ec/internal/agent/payment"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

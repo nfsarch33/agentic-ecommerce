@@ -40,8 +40,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/carrier"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/carrier"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 // EC-7-4 typed sentinels.

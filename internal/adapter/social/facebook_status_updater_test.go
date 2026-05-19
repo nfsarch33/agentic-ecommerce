@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/fulfilment"
+	"github.com/nfsarch33/helixon-ec/internal/agent/fulfilment"
 )
 
 func TestFacebookStatusUpdater_NilClientRejected(t *testing.T) {

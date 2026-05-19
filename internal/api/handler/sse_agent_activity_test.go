@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 // fakeSubscriber is the SSE-side test double for

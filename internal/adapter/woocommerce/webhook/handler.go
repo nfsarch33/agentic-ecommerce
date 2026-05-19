@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"strings"
 
-	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
+	enginesync "github.com/nfsarch33/helixon-ec/internal/sync"
 )
 
 const maxPayloadSize = 1 * 1024 * 1024

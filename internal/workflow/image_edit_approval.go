@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/media"
+	"github.com/nfsarch33/helixon-ec/internal/media"
 	"go.temporal.io/sdk/temporal"
 	temporalworkflow "go.temporal.io/sdk/workflow"
 )

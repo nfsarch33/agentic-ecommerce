@@ -29,10 +29,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/social"
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/channel"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/social"
+	"github.com/nfsarch33/helixon-ec/internal/agent/channel"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/lifecycle"
 )
 
 // e2eDeadline is the per-event deadline AND the p95 ceiling per

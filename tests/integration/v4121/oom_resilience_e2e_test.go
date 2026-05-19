@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
-	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
-	"github.com/nfsarch33/agentic-ecommerce/internal/resilience"
-	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
+	"github.com/nfsarch33/helixon-ec/internal/lifecycle"
+	"github.com/nfsarch33/helixon-ec/internal/memwatch"
+	"github.com/nfsarch33/helixon-ec/internal/resilience"
+	"github.com/nfsarch33/helixon-ec/internal/workerpool"
 )
 
 func testLogger() *slog.Logger { return slog.New(slog.NewJSONHandler(io.Discard, nil)) }

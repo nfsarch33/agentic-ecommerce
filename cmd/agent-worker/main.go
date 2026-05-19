@@ -16,11 +16,11 @@ import (
 	"syscall"
 	"time"
 
-	agentruntime "github.com/nfsarch33/agentic-ecommerce/internal/agent/runtime"
-	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
-	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
-	"github.com/nfsarch33/agentic-ecommerce/internal/runtimeobs"
+	agentruntime "github.com/nfsarch33/helixon-ec/internal/agent/runtime"
+	"github.com/nfsarch33/helixon-ec/internal/lifecycle"
+	"github.com/nfsarch33/helixon-ec/internal/memwatch"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/runtimeobs"
 )
 
 var (

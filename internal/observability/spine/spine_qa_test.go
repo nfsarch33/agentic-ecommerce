@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/evomap"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/evomap"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 func TestReplayNDJSONCapsulesBuildsDashboardSnapshots(t *testing.T) {

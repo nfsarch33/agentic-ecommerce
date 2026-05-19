@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 const fuzzIssuerSecret = "fuzz-secret-at-least-32-bytes-long-yes"

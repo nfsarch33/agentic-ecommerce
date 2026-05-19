@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/evomap"
+	"github.com/nfsarch33/helixon-ec/internal/evomap"
 )
 
 const SchemaVersion = "ec-observability-spine/v1"

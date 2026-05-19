@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	tenantpkg "github.com/nfsarch33/agentic-ecommerce/internal/tenant"
-	"github.com/nfsarch33/agentic-ecommerce/internal/webhook/outbound"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	tenantpkg "github.com/nfsarch33/helixon-ec/internal/tenant"
+	"github.com/nfsarch33/helixon-ec/internal/webhook/outbound"
 )
 
 type createWebhookRequest struct {

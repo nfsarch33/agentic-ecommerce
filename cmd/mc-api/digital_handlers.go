@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/digital"
-	digitaldomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/digital"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
+	"github.com/nfsarch33/helixon-ec/internal/digital"
+	digitaldomain "github.com/nfsarch33/helixon-ec/internal/domain/digital"
+	"github.com/nfsarch33/helixon-ec/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/security"
 )
 
 // digitalProductRequest is the JSON body for POST/PATCH /digital-products.

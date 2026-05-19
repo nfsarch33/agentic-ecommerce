@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/inmemory"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/woocommerce"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
 )
 
 type fakeWooCommerce struct {

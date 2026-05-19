@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // File scope: targeted coverage for previously-uncovered branches in the

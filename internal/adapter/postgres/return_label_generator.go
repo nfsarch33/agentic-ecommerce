@@ -22,8 +22,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/fulfilment"
-	"github.com/nfsarch33/agentic-ecommerce/internal/workflow"
+	"github.com/nfsarch33/helixon-ec/internal/agent/fulfilment"
+	"github.com/nfsarch33/helixon-ec/internal/workflow"
 )
 
 // ErrReturnLabelGeneratorUnconfigured is returned by

@@ -34,10 +34,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/social"
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/channel"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	syncsaga "github.com/nfsarch33/agentic-ecommerce/internal/sync"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/social"
+	"github.com/nfsarch33/helixon-ec/internal/agent/channel"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	syncsaga "github.com/nfsarch33/helixon-ec/internal/sync"
 )
 
 // TestTikTokSaga_ListingAgentRollsBackOnAPIFailure is Task 3

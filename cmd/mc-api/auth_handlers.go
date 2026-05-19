@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
+	"github.com/nfsarch33/helixon-ec/internal/security"
 )
 
 type loginRequest struct {

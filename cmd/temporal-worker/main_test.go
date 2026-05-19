@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
-	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
+	contentagent "github.com/nfsarch33/helixon-ec/internal/agent/content"
+	ecworkflow "github.com/nfsarch33/helixon-ec/internal/workflow"
 )
 
 func TestSyncPublisherParsesProductID(t *testing.T) {

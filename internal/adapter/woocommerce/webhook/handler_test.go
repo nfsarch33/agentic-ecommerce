@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
+	enginesync "github.com/nfsarch33/helixon-ec/internal/sync"
 )
 
 const testSecret = "wc-webhook-secret"

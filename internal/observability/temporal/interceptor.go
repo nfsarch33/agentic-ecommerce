@@ -18,7 +18,7 @@ import (
 // linking them with parent-child relationships for end-to-end trace
 // visibility.
 func TemporalInterceptor() interceptor.WorkerInterceptor {
-	return &temporalTracer{tracer: otel.Tracer("github.com/nfsarch33/agentic-ecommerce/internal/observability/temporal")}
+	return &temporalTracer{tracer: otel.Tracer("github.com/nfsarch33/helixon-ec/internal/observability/temporal")}
 }
 
 type temporalTracer struct {

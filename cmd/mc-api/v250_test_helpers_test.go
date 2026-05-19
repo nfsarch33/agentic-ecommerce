@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
-	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/inmemory"
+	"github.com/nfsarch33/helixon-ec/internal/registration"
 )
 
 // newTestServer returns a server preconfigured for v2.5.0 unit tests.

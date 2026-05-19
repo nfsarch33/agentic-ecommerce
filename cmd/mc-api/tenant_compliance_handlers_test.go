@@ -11,11 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/compliance"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
-	"github.com/nfsarch33/agentic-ecommerce/internal/tenant"
+	"github.com/nfsarch33/helixon-ec/internal/compliance"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/rag"
+	"github.com/nfsarch33/helixon-ec/internal/security"
+	"github.com/nfsarch33/helixon-ec/internal/tenant"
 )
 
 func TestTenantSettingsEndpointRequiresTenantAndStoresPerTenant(t *testing.T) {

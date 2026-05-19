@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 func TestTikTokShopClient_SendMessageSucceeds(t *testing.T) {

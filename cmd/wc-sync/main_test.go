@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/woocommerce"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
 )
 
 func TestRunDryRun(t *testing.T) {

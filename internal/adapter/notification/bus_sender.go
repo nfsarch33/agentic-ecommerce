@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/membership"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/domain/membership"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // BusSender is a MembershipNotificationSender that publishes lifecycle

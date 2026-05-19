@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/woocommerce"
 )
 
 // File scope: smoke coverage for noopChannel.ListProducts which sat at

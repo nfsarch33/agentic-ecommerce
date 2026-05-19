@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
+	"github.com/nfsarch33/helixon-ec/internal/security"
 )
 
 func TestGetMembershipPlanByID(t *testing.T) {

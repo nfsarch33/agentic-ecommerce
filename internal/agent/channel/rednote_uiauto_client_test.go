@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/social"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/social"
 )
 
 const testRedNoteSecret = "rednote-bridge-test-secret-bytes-fixture" // gitleaks:allow

@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
-	"github.com/nfsarch33/agentic-ecommerce/internal/tenant"
+	"github.com/nfsarch33/helixon-ec/internal/registration"
+	"github.com/nfsarch33/helixon-ec/internal/tenant"
 )
 
 // registrationSubmitRequest is the JSON body for POST /register.

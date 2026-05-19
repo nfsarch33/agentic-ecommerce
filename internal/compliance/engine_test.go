@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
 )
 
 func TestEnginePassesCompliantProductContent(t *testing.T) {

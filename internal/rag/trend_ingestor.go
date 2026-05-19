@@ -42,7 +42,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
+	"github.com/nfsarch33/helixon-ec/internal/workerpool"
 )
 
 // EC-2-4 typed sentinels. Callers branch via errors.Is.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
+	"github.com/nfsarch33/helixon-ec/internal/marketplacesync"
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"

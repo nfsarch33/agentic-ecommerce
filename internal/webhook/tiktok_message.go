@@ -27,7 +27,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/social"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/social"
 )
 
 // MaxMessageWebhookBodyBytes is the upper bound for an inbound

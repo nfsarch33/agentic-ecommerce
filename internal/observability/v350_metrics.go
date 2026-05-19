@@ -21,7 +21,7 @@
 package observability
 
 import (
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 // V350Metrics is the EC-6/7 typed facade.

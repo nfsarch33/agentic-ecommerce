@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	contentagent "github.com/nfsarch33/helixon-ec/internal/agent/content"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
 )
 
 type generateDescriptionRequest struct {

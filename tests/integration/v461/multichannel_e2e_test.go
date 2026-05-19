@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/social"
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/fulfilment"
-	"github.com/nfsarch33/agentic-ecommerce/internal/channelport"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/social"
+	"github.com/nfsarch33/helixon-ec/internal/agent/fulfilment"
+	"github.com/nfsarch33/helixon-ec/internal/channelport"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 var allChannels = []string{

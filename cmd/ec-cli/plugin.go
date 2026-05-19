@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nfsarch33/agentic-ecommerce/pkg/marketplace/sdk"
+	"github.com/nfsarch33/helixon-ec/pkg/marketplace/sdk"
 )
 
 // pluginValidationReport summarises the issues found in a plugin

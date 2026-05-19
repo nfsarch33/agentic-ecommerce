@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
+	sourcingagent "github.com/nfsarch33/helixon-ec/internal/agent/sourcing"
 )
 
 // File scope: pure-activity unit coverage for SourcingActivities. The

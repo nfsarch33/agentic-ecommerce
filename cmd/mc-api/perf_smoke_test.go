@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
-	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
-	"github.com/nfsarch33/agentic-ecommerce/internal/webhook/outbound"
+	"github.com/nfsarch33/helixon-ec/internal/agent/content"
+	"github.com/nfsarch33/helixon-ec/internal/media/intelligence"
+	"github.com/nfsarch33/helixon-ec/internal/security"
+	"github.com/nfsarch33/helixon-ec/internal/webhook/outbound"
 )
 
 func TestReleasePerformanceSmoke(t *testing.T) {

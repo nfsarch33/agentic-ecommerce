@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/worktree"
+	"github.com/nfsarch33/helixon-ec/internal/worktree"
 )
 
 // TestE2E_TwoAgentsDifferentBranches verifies that two agents can

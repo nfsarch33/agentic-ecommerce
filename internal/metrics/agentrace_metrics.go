@@ -1,6 +1,6 @@
 package metrics
 
-import "github.com/nfsarch33/agentic-ecommerce/internal/evomap"
+import "github.com/nfsarch33/helixon-ec/internal/evomap"
 
 // RegisterAgentraceMetrics extends the Registry with Agentrace-derived
 // metric surfaces. Called once during NewRegistry construction.

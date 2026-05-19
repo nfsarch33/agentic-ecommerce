@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // TestDescriptionGen_TranslatesChineseToEnglish is the v3.2.0 EC-2-1

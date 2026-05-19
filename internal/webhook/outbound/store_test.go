@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 func TestInMemoryStoreCreatesRegistrationWithoutExposingSecret(t *testing.T) {

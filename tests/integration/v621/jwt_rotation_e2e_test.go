@@ -30,7 +30,7 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	authjwt "github.com/nfsarch33/agentic-ecommerce/internal/auth/jwt"
+	authjwt "github.com/nfsarch33/helixon-ec/internal/auth/jwt"
 )
 
 const (

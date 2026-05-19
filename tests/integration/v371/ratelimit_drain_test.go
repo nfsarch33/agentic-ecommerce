@@ -52,7 +52,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/uiauto/ratelimit"
+	"github.com/nfsarch33/helixon-ec/internal/uiauto/ratelimit"
 )
 
 // ratelimitSecret is the deterministic HMAC fixture key for the

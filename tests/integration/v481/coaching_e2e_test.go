@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/coaching"
+	"github.com/nfsarch33/helixon-ec/internal/agent/coaching"
 )
 
 type stubCoachingRepo struct {

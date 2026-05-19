@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	contentagent "github.com/nfsarch33/helixon-ec/internal/agent/content"
 )
 
 type generateFactCheckedContentRequest struct {

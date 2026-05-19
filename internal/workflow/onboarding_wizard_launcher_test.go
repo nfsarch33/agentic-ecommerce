@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/api/handler"
+	"github.com/nfsarch33/helixon-ec/internal/api/handler"
 )
 
 func TestOnboardingWizardLauncher_NilClientError(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
+	"github.com/nfsarch33/helixon-ec/internal/security"
 )
 
 func TestOperatorAlertMutationsRequireOperatorRole(t *testing.T) {

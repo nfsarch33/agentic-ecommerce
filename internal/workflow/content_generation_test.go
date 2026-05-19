@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	contentagent "github.com/nfsarch33/helixon-ec/internal/agent/content"
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"

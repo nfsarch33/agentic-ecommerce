@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
-	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
+	"github.com/nfsarch33/helixon-ec/internal/lifecycle"
+	"github.com/nfsarch33/helixon-ec/internal/memwatch"
 )
 
 // TestHeapCeilingTriggersGracefulShutdown is the v2.10.1 Task 1 OOM

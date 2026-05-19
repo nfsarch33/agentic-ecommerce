@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	orchestrator "github.com/nfsarch33/helixon-ec/internal/agent"
+	contentagent "github.com/nfsarch33/helixon-ec/internal/agent/content"
 )
 
 func TestCheckWrapsContentEvaluatorWithPassReasons(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
+	"github.com/nfsarch33/helixon-ec/internal/workerpool"
 )
 
 func TestExtractTrendStrengthFallbacks(t *testing.T) {

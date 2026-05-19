@@ -24,9 +24,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	orderdomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/order"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/postgres"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	orderdomain "github.com/nfsarch33/helixon-ec/internal/domain/order"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )

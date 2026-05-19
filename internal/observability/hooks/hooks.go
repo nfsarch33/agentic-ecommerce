@@ -25,10 +25,10 @@
 package hooks
 
 import (
-	"github.com/nfsarch33/agentic-ecommerce/internal/coord"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
-	"github.com/nfsarch33/agentic-ecommerce/internal/resilience"
-	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
+	"github.com/nfsarch33/helixon-ec/internal/coord"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/resilience"
+	"github.com/nfsarch33/helixon-ec/internal/workerpool"
 )
 
 // Hooks bundles the v6.2.0 production adapter implementations. The

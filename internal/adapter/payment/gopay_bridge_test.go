@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/payment"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/payment"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

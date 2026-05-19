@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/evomap"
-	"github.com/nfsarch33/agentic-ecommerce/internal/observability/spine"
+	"github.com/nfsarch33/helixon-ec/internal/evomap"
+	"github.com/nfsarch33/helixon-ec/internal/observability/spine"
 )
 
 func TestResourceGuardKPIsAggregateAndReachSpine(t *testing.T) {

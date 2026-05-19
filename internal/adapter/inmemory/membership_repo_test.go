@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/membership"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/inmemory"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/domain/membership"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 func mustMoney(t *testing.T, amount int, currency string) catalog.Money {

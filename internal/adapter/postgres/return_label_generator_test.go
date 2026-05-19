@@ -7,10 +7,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/carrier"
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/fulfilment"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/workflow"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/carrier"
+	"github.com/nfsarch33/helixon-ec/internal/agent/fulfilment"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/workflow"
 	"github.com/stretchr/testify/require"
 )
 

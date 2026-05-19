@@ -41,7 +41,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	syncsaga "github.com/nfsarch33/agentic-ecommerce/internal/sync"
+	syncsaga "github.com/nfsarch33/helixon-ec/internal/sync"
 )
 
 // stormScenarios + stormResults capture the storm parameters and

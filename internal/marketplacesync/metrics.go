@@ -3,7 +3,7 @@ package marketplacesync
 import (
 	"strings"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 type RegistryMetrics struct {

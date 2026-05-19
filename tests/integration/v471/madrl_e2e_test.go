@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/api/handler"
-	"github.com/nfsarch33/agentic-ecommerce/internal/coord"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/api/handler"
+	"github.com/nfsarch33/helixon-ec/internal/coord"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 // Scenario 1: Pricing+fulfilment conflict → weighted resolution correct

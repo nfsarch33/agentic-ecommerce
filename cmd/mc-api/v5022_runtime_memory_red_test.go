@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
+	contentagent "github.com/nfsarch33/helixon-ec/internal/agent/content"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/rag"
 )
 
 func TestRAGSearchAddsHandlerDeadlineBeforeEmbedding(t *testing.T) {

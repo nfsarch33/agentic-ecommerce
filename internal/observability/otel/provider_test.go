@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	ecotel "github.com/nfsarch33/agentic-ecommerce/internal/observability/otel"
+	ecotel "github.com/nfsarch33/helixon-ec/internal/observability/otel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"

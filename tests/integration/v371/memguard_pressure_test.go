@@ -46,7 +46,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/uiauto/memguard"
+	"github.com/nfsarch33/helixon-ec/internal/uiauto/memguard"
 )
 
 // memguardCeiling is the per-test memory ceiling (1 GiB). The

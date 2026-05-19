@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/billing"
+	"github.com/nfsarch33/helixon-ec/internal/billing"
 )
 
 // stripeWebhookMaxBody caps the Stripe request body to a megabyte.

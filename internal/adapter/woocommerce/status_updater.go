@@ -19,7 +19,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/fulfilment"
+	"github.com/nfsarch33/helixon-ec/internal/agent/fulfilment"
 )
 
 // WooCommerceChannelName is the canonical channel label.

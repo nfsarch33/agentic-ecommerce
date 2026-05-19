@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/carrier"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/china"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/carrier"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/china"
 )
 
 func TestCarrier_DualKeyVerification_AusPost(t *testing.T) {

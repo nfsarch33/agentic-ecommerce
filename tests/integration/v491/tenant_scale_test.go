@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/compliance"
+	"github.com/nfsarch33/helixon-ec/internal/compliance"
 )
 
 // TestTenantScale_ExplainAnalyze simulates the 1000-tenant scale test

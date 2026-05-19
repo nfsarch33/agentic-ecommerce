@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/evomap"
+	"github.com/nfsarch33/helixon-ec/internal/evomap"
 )
 
 func TestAgentraceMetrics_Registered(t *testing.T) {

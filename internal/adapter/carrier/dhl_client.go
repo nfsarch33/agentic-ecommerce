@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/httpclient"
+	"github.com/nfsarch33/helixon-ec/internal/httpclient"
 )
 
 // DefaultDHLTimeout is the per-call deadline applied if the caller

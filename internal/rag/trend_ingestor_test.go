@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
+	"github.com/nfsarch33/helixon-ec/internal/workerpool"
 )
 
 // TestTrendIngestor_StoresKeywordSignalToVector is the RED test for

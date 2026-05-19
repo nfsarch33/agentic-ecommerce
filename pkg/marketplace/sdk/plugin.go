@@ -12,7 +12,7 @@
 //	import (
 //		"context"
 //
-//		"github.com/nfsarch33/agentic-ecommerce/pkg/marketplace/sdk"
+//		"github.com/nfsarch33/helixon-ec/pkg/marketplace/sdk"
 //	)
 //
 //	type HelloPlugin struct{}
@@ -32,7 +32,7 @@
 package sdk
 
 import (
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
+	"github.com/nfsarch33/helixon-ec/internal/marketplace"
 )
 
 // Plugin is the lifecycle interface every marketplace plugin

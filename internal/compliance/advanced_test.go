@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
 )
 
 func TestCustomRuleValidationAndEvaluation(t *testing.T) {

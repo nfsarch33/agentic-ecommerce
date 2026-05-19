@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
+	"github.com/nfsarch33/helixon-ec/internal/registration"
 )
 
 func TestRegistrationRepositoryList(t *testing.T) {

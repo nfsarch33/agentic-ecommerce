@@ -1,4 +1,4 @@
-module github.com/nfsarch33/agentic-ecommerce
+module github.com/nfsarch33/helixon-ec
 
 go 1.26.3
 

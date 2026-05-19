@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"strings"
 
-	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
-	complianceagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/compliance"
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
-	pricingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/pricing"
-	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
+	orchestrator "github.com/nfsarch33/helixon-ec/internal/agent"
+	complianceagent "github.com/nfsarch33/helixon-ec/internal/agent/compliance"
+	contentagent "github.com/nfsarch33/helixon-ec/internal/agent/content"
+	pricingagent "github.com/nfsarch33/helixon-ec/internal/agent/pricing"
+	sourcingagent "github.com/nfsarch33/helixon-ec/internal/agent/sourcing"
 )
 
 type Mode string

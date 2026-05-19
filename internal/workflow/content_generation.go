@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	contentagent "github.com/nfsarch33/helixon-ec/internal/agent/content"
 	"go.temporal.io/sdk/temporal"
 	temporalworkflow "go.temporal.io/sdk/workflow"
 )

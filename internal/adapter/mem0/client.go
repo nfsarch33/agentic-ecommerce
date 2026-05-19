@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/httpclient"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
-	"github.com/nfsarch33/agentic-ecommerce/internal/resilience"
+	"github.com/nfsarch33/helixon-ec/internal/httpclient"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/resilience"
 )
 
 // MemoryResult is a single result from a mem0 Search.

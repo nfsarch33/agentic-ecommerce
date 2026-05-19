@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent"
+	"github.com/nfsarch33/helixon-ec/internal/agent"
 )
 
 // EventBusAdapter bridges the agent orchestrator's EventSink to the event bus Publisher.

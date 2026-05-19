@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/resilience"
+	"github.com/nfsarch33/helixon-ec/internal/resilience"
 )
 
 // RequestHook is called before the request is dispatched. Use it

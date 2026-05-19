@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/evomap"
+	"github.com/nfsarch33/helixon-ec/internal/evomap"
 )
 
 func TestMetricInventoryDeclaresDashboardAndIngestionContracts(t *testing.T) {

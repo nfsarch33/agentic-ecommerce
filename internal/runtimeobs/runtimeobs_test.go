@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/evomap"
-	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
+	"github.com/nfsarch33/helixon-ec/internal/evomap"
+	"github.com/nfsarch33/helixon-ec/internal/memwatch"
 )
 
 func TestRuntimeObservabilityEmitsPrometheusAndEvomap(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
+	"github.com/nfsarch33/helixon-ec/internal/security"
 )
 
 // File scope: v2.6.1 cmd/* DI refactor coverage. Additional uniform

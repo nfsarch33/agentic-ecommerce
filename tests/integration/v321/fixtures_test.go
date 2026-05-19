@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/enrichment"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
-	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
-	"github.com/nfsarch33/agentic-ecommerce/internal/seo"
+	"github.com/nfsarch33/helixon-ec/internal/agent/enrichment"
+	"github.com/nfsarch33/helixon-ec/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/rag"
+	"github.com/nfsarch33/helixon-ec/internal/seo"
 )
 
 // fixtureProduct is the slim shape used to drive the v3.2.1 50-product

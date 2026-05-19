@@ -45,8 +45,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/alert"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/alert"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 // EC-9-5 typed sentinels.

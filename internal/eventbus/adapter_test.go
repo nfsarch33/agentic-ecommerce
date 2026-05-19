@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent"
+	"github.com/nfsarch33/helixon-ec/internal/agent"
 )
 
 func TestEventBusAdapter_Emit(t *testing.T) {

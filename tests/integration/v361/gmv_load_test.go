@@ -47,7 +47,7 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/api/handler"
+	"github.com/nfsarch33/helixon-ec/internal/api/handler"
 )
 
 // gmvP95Budget is the per-scenario p95 latency budget. EC-9-1

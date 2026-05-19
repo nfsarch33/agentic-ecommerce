@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/evomap"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/evomap"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 func TestAgentraceE2E_MockHTTP_AdapterReads_KPIEmitted_CapsuleIncludesSummary(t *testing.T) {

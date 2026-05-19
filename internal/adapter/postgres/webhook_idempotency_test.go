@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/webhook"
+	"github.com/nfsarch33/helixon-ec/internal/webhook"
 )
 
 // fakeIdempotencyRow drives the QueryRow Scan path for the

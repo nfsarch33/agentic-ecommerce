@@ -22,8 +22,8 @@
 package observability
 
 import (
-	"github.com/nfsarch33/agentic-ecommerce/internal/alert"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/alert"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 // V391Metrics is the v3.9.1 typed facade.

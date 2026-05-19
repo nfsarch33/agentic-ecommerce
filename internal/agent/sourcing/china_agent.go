@@ -49,12 +49,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/china"
-	"github.com/nfsarch33/agentic-ecommerce/internal/compliance"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
-	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/china"
+	"github.com/nfsarch33/helixon-ec/internal/compliance"
+	"github.com/nfsarch33/helixon-ec/internal/domain"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/workerpool"
 )
 
 // OmniParserBridgeEnvVar is the env-var the agent reads to discover

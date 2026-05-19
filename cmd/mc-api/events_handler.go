@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 type recentEventsResponse struct {

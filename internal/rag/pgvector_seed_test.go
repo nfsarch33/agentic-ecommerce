@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
+	"github.com/nfsarch33/helixon-ec/internal/rag"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )

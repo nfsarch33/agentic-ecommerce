@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/social"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/social"
 )
 
 const testBridgeSecret = "omniparser-bridge-test-secret-bytes-fixture" // gitleaks:allow

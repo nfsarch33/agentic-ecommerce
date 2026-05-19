@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // WeChatAdapter implements port.MultiPaymentGateway for WeChat Pay.

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 func TestServiceDeliversEventToMatchingRegistrationsAndRecordsResults(t *testing.T) {

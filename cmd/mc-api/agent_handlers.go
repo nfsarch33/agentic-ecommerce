@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
+	orchestrator "github.com/nfsarch33/helixon-ec/internal/agent"
 )
 
 type agentsListResponse struct {

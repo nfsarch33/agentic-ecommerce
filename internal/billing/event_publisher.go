@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 // BusEventPublisher is the production EventPublisher that bridges

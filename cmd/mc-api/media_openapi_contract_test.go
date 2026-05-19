@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
+	"github.com/nfsarch33/helixon-ec/internal/media/intelligence"
 )
 
 func TestMediaOpenAPIContracts(t *testing.T) {

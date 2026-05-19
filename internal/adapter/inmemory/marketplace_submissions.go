@@ -6,7 +6,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
+	"github.com/nfsarch33/helixon-ec/internal/marketplace"
 )
 
 // MarketplaceSubmissions is the in-memory implementation of

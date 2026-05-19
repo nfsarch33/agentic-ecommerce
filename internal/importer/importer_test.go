@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/woocommerce"
 )
 
 type mockWCClient struct {

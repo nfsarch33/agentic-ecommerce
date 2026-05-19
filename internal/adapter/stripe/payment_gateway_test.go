@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/stripe"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/membership"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/stripe"
+	"github.com/nfsarch33/helixon-ec/internal/domain/membership"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 type fixedClock struct{ now time.Time }

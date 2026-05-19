@@ -18,7 +18,7 @@ import (
 	"regexp"
 	"sync"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // Backend selects the underlying secret store strategy.

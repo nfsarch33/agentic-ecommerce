@@ -19,7 +19,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // Shared payment adapter errors. All 4 adapters map their

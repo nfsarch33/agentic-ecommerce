@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
+	"github.com/nfsarch33/helixon-ec/internal/marketplacesync"
 )
 
 func TestClientApplyBuildsSignedShopeeProductRequest(t *testing.T) {

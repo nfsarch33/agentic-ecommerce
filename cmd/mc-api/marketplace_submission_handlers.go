@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
+	"github.com/nfsarch33/helixon-ec/internal/marketplace"
+	"github.com/nfsarch33/helixon-ec/internal/security"
 )
 
 // submissionRequest is the wire shape posted by vendors to

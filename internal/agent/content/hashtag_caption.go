@@ -41,7 +41,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // HashtagPlatform is the supported destination platform identifier.

@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/nfsarch33/agentic-ecommerce/internal/billing"
+	"github.com/nfsarch33/helixon-ec/internal/billing"
 )
 
 func fakeBillingSubscriptionRow(sub billing.Subscription) fakeRow {

@@ -31,12 +31,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/enrichment"
-	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
-	"github.com/nfsarch33/agentic-ecommerce/internal/media"
-	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
-	"github.com/nfsarch33/agentic-ecommerce/internal/seo"
-	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
+	"github.com/nfsarch33/helixon-ec/internal/agent/enrichment"
+	"github.com/nfsarch33/helixon-ec/internal/lifecycle"
+	"github.com/nfsarch33/helixon-ec/internal/media"
+	"github.com/nfsarch33/helixon-ec/internal/rag"
+	"github.com/nfsarch33/helixon-ec/internal/seo"
+	"github.com/nfsarch33/helixon-ec/internal/workerpool"
 )
 
 // productEvidence captures every field a reviewer needs to decide

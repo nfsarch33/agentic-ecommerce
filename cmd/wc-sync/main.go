@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/inmemory"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/woocommerce"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	enginesync "github.com/nfsarch33/helixon-ec/internal/sync"
 )
 
 type noopChannel struct{}

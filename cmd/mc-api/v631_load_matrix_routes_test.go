@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/inmemory"
 )
 
 func TestV631LoadMatrixRoutesAreMounted(t *testing.T) {

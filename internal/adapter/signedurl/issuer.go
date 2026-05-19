@@ -28,8 +28,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/domain/digital"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // ErrSecretTooShort is returned when an issuer is built with a secret

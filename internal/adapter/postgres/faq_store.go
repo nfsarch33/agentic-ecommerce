@@ -18,7 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/customerservice"
+	"github.com/nfsarch33/helixon-ec/internal/agent/customerservice"
 )
 
 // FAQStore is the Postgres-backed implementation of

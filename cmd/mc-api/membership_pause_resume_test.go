@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/membership"
+	"github.com/nfsarch33/helixon-ec/internal/domain/membership"
 )
 
 // TestMembershipsHandlerPauseResumeOnActiveSubscription drives the full

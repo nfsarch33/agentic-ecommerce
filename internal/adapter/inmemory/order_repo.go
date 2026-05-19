@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	orderdomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/order"
+	orderdomain "github.com/nfsarch33/helixon-ec/internal/domain/order"
 )
 
 var (

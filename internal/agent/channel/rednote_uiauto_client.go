@@ -37,7 +37,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/social"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/social"
 )
 
 // MaxRedNoteBridgeBodyBytes caps the omniparser-bridge response.

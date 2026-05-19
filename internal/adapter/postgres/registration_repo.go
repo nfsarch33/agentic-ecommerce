@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
+	"github.com/nfsarch33/helixon-ec/internal/registration"
 )
 
 // RegistrationRepository is the postgres adapter for the v2.5.0

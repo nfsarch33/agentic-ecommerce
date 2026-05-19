@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // gopay SDK evaluation decision (v4.3.0):

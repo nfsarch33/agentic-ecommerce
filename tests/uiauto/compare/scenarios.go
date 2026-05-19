@@ -4,7 +4,7 @@
 // from the agentic-ecommerce-web frontend.
 package compare_scenarios
 
-import "github.com/nfsarch33/agentic-ecommerce/internal/uiauto/compare"
+import "github.com/nfsarch33/helixon-ec/internal/uiauto/compare"
 
 // ProductListing verifies the product listing page renders
 // correctly: navigate → verify product count → verify first title.

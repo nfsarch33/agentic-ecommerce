@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/nfsarch33/agentic-ecommerce/internal/tenant"
+	"github.com/nfsarch33/helixon-ec/internal/tenant"
 )
 
 func TestTenantSettingsRepositoryGetSettingsDecodesJSONColumns(t *testing.T) {

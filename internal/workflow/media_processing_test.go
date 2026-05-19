@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
+	"github.com/nfsarch33/helixon-ec/internal/media/intelligence"
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"

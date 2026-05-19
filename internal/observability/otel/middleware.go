@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const tracerName = "github.com/nfsarch33/agentic-ecommerce/internal/observability/otel"
+const tracerName = "github.com/nfsarch33/helixon-ec/internal/observability/otel"
 
 // HTTPMiddleware wraps an http.Handler to create a span per inbound
 // request. Extracts W3C trace context from headers so distributed

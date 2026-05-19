@@ -21,8 +21,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/social"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/social"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 // CategoryMapper maps an internal category id (or path) to the

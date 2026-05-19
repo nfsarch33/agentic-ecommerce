@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/inmemory"
 )
 
 // repos.go (v2.6.1 cmd/* DI refactor): tiny constructors that wrap

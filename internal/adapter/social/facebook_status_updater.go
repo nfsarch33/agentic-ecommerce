@@ -13,7 +13,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/fulfilment"
+	"github.com/nfsarch33/helixon-ec/internal/agent/fulfilment"
 )
 
 // FacebookChannelName is the canonical channel label.

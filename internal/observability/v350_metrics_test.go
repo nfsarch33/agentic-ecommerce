@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 func TestV350Metrics_NilSafe(t *testing.T) {

@@ -17,7 +17,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/webhook/verifier"
+	"github.com/nfsarch33/helixon-ec/internal/webhook/verifier"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

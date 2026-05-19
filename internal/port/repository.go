@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	orderdomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/order"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	orderdomain "github.com/nfsarch33/helixon-ec/internal/domain/order"
 )
 
 type ListResult struct {

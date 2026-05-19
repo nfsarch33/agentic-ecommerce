@@ -7,7 +7,7 @@ package observability
 import (
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 func TestV470MetricsRecordersTolerateNilRegistry(t *testing.T) {

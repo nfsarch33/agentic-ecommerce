@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	domain "github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	domain "github.com/nfsarch33/helixon-ec/internal/domain/catalog"
 )
 
 type recordingChannel struct {

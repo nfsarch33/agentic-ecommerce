@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
-	"github.com/nfsarch33/agentic-ecommerce/internal/billing"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/postgres"
+	"github.com/nfsarch33/helixon-ec/internal/billing"
 )
 
 // TestRLSTenantIsolationPositiveAndNegative verifies that the v2.5.0

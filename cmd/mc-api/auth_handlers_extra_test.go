@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
+	"github.com/nfsarch33/helixon-ec/internal/security"
 )
 
 // File scope: targeted coverage for the previously-uncovered branches in

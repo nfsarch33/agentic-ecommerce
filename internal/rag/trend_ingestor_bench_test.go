@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/workerpool"
+	"github.com/nfsarch33/helixon-ec/internal/workerpool"
 )
 
 // BenchmarkTrendIngestor_Run measures the steady-state cost of a

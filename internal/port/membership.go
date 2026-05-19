@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/membership"
+	"github.com/nfsarch33/helixon-ec/internal/domain/membership"
 )
 
 // ErrMemberNotFound is returned when a Member cannot be located.

@@ -34,8 +34,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/customerservice"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/agent/customerservice"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 //go:embed fixtures/bilingual_50.json

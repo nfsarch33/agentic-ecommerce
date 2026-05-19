@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 func benchIssuerFixture(b *testing.B) (*HMACIssuer, port.IssueDownloadRequest, string) {

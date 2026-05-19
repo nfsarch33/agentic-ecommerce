@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	agentruntime "github.com/nfsarch33/agentic-ecommerce/internal/agent/runtime"
+	agentruntime "github.com/nfsarch33/helixon-ec/internal/agent/runtime"
 )
 
 func TestLoadConfigDefaultsRuntimeModeToLegacy(t *testing.T) {

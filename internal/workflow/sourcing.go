@@ -7,7 +7,7 @@ import (
 	"sort"
 	"time"
 
-	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
+	sourcingagent "github.com/nfsarch33/helixon-ec/internal/agent/sourcing"
 	"go.temporal.io/sdk/temporal"
 	temporalworkflow "go.temporal.io/sdk/workflow"
 )

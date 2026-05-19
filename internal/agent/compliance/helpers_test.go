@@ -3,7 +3,7 @@ package compliance
 import (
 	"testing"
 
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	contentagent "github.com/nfsarch33/helixon-ec/internal/agent/content"
 )
 
 // File scope: covers the compliance helper functions that previously

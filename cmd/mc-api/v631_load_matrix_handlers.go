@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	apihandler "github.com/nfsarch33/agentic-ecommerce/internal/api/handler"
+	apihandler "github.com/nfsarch33/helixon-ec/internal/api/handler"
 )
 
 type loadMatrixHandlers struct {

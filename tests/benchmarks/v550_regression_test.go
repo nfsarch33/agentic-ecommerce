@@ -6,15 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/redis"
-	"github.com/nfsarch33/agentic-ecommerce/internal/compliance"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
-	"github.com/nfsarch33/agentic-ecommerce/internal/media"
-	"github.com/nfsarch33/agentic-ecommerce/internal/residency"
-	"github.com/nfsarch33/agentic-ecommerce/internal/seo"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/postgres"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/redis"
+	"github.com/nfsarch33/helixon-ec/internal/compliance"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/marketplace"
+	"github.com/nfsarch33/helixon-ec/internal/media"
+	"github.com/nfsarch33/helixon-ec/internal/residency"
+	"github.com/nfsarch33/helixon-ec/internal/seo"
 )
 
 // v5.5.0 benchmark regression suite.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/workflow"
+	"github.com/nfsarch33/helixon-ec/internal/workflow"
 )
 
 func TestSentinelErrorsAreDetectable(t *testing.T) {

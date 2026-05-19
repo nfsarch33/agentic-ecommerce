@@ -8,8 +8,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/inmemory"
+	"github.com/nfsarch33/helixon-ec/internal/marketplace"
 )
 
 func makeSubmission(id, tenant string, state marketplace.SubmissionState, submittedAt string) marketplace.Submission {

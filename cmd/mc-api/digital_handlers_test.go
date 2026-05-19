@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl"
-	"github.com/nfsarch33/agentic-ecommerce/internal/digital"
-	digitaldomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/digital"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/inmemory"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/signedurl"
+	"github.com/nfsarch33/helixon-ec/internal/digital"
+	digitaldomain "github.com/nfsarch33/helixon-ec/internal/domain/digital"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/security"
 )
 
 func newDigitalTestServer(t *testing.T) (*server, *inmemory.DigitalProductRepository) {

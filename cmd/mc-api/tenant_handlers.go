@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/compliance"
-	tenantpkg "github.com/nfsarch33/agentic-ecommerce/internal/tenant"
+	"github.com/nfsarch33/helixon-ec/internal/compliance"
+	tenantpkg "github.com/nfsarch33/helixon-ec/internal/tenant"
 )
 
 type tenantSettingsResponse = tenantpkg.Settings

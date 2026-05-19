@@ -59,13 +59,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/social"
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/customerservice"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
-	"github.com/nfsarch33/agentic-ecommerce/internal/observability"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
-	"github.com/nfsarch33/agentic-ecommerce/internal/webhook"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/social"
+	"github.com/nfsarch33/helixon-ec/internal/agent/customerservice"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/observability"
+	"github.com/nfsarch33/helixon-ec/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/webhook"
 )
 
 // e2eDeadline is the per-scenario end-to-end latency budget per

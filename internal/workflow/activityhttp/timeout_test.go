@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/workflow/activityhttp"
+	"github.com/nfsarch33/helixon-ec/internal/workflow/activityhttp"
 )
 
 func TestTimeoutDefaultIs30s(t *testing.T) {

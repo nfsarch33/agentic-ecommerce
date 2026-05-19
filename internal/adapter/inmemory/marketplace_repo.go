@@ -9,7 +9,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
+	"github.com/nfsarch33/helixon-ec/internal/marketplace"
 )
 
 // MarketplaceCatalog is the in-memory implementation of

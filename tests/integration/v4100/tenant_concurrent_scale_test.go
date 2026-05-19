@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/compliance"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
-	"github.com/nfsarch33/agentic-ecommerce/internal/residency"
+	"github.com/nfsarch33/helixon-ec/internal/compliance"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/residency"
 )
 
 func TestConcurrentTenants_AllAPISurfaces(t *testing.T) {

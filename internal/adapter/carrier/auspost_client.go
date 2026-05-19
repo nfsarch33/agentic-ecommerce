@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/httpclient"
+	"github.com/nfsarch33/helixon-ec/internal/httpclient"
 )
 
 // DefaultAusPostTimeout is the per-call deadline applied if the caller

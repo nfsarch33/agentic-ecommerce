@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	mem0client "github.com/nfsarch33/agentic-ecommerce/internal/adapter/mem0"
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
-	"github.com/nfsarch33/agentic-ecommerce/internal/resilience"
+	mem0client "github.com/nfsarch33/helixon-ec/internal/adapter/mem0"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/resilience"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

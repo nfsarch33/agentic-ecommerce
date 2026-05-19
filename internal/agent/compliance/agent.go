@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	orchestrator "github.com/nfsarch33/helixon-ec/internal/agent"
+	contentagent "github.com/nfsarch33/helixon-ec/internal/agent/content"
 )
 
 var ErrMissingContent = errors.New("generated content description is required")

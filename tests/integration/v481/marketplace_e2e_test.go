@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
+	"github.com/nfsarch33/helixon-ec/internal/marketplace"
 )
 
 // Scenario 1: Vendor A creates products → Vendor B cannot see them

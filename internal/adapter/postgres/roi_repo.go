@@ -33,7 +33,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nfsarch33/agentic-ecommerce/internal/api/handler"
+	"github.com/nfsarch33/helixon-ec/internal/api/handler"
 )
 
 // ROIRepository is the v3.8.1 production adapter for the

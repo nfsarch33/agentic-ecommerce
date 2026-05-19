@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/billing"
+	"github.com/nfsarch33/helixon-ec/internal/billing"
 )
 
 func TestAdminBillingGetInvoice(t *testing.T) {

@@ -17,7 +17,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
+	ecworkflow "github.com/nfsarch33/helixon-ec/internal/workflow"
 )
 
 type workflowListResponse struct {

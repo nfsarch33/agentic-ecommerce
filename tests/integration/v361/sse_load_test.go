@@ -47,8 +47,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/api/handler"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/api/handler"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 // sseDeliveryBudget is the SSE-side per-event delivery budget.

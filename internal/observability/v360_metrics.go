@@ -16,7 +16,7 @@
 package observability
 
 import (
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 // V360Metrics is the EC-8 + EC-9 typed facade.

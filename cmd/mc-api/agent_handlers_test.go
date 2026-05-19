@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	orchestrator "github.com/nfsarch33/helixon-ec/internal/agent"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 func TestReadyz(t *testing.T) {

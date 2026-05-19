@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 func TestV360Metrics_RecordsAllSurfaces(t *testing.T) {

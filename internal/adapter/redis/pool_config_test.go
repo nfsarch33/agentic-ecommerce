@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	rediscfg "github.com/nfsarch33/agentic-ecommerce/internal/adapter/redis"
+	rediscfg "github.com/nfsarch33/helixon-ec/internal/adapter/redis"
 )
 
 func TestLoadPoolConfigDefaults(t *testing.T) {

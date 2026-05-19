@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	"github.com/nfsarch33/helixon-ec/internal/agent/content"
 )
 
 type fakeContentAgent struct {

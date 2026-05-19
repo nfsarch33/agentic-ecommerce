@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/pkg/marketplace/sdk"
-	"github.com/nfsarch33/agentic-ecommerce/pkg/marketplace/sdk/example/hello"
+	"github.com/nfsarch33/helixon-ec/pkg/marketplace/sdk"
+	"github.com/nfsarch33/helixon-ec/pkg/marketplace/sdk/example/hello"
 )
 
 func TestPluginManifestIsValid(t *testing.T) {

@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // AlipayAdapter implements port.MultiPaymentGateway for Alipay.

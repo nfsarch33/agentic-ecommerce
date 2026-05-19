@@ -22,7 +22,7 @@ package workflow
 import (
 	"context"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/api/handler"
+	"github.com/nfsarch33/helixon-ec/internal/api/handler"
 	"go.temporal.io/sdk/client"
 )
 

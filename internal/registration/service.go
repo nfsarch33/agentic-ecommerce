@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/tenant"
+	"github.com/nfsarch33/helixon-ec/internal/tenant"
 )
 
 // TenantProvisioner is the abstraction over the tenant aggregate

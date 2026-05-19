@@ -24,9 +24,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/notification"
-	stripeadapter "github.com/nfsarch33/agentic-ecommerce/internal/adapter/stripe"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/membership"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/notification"
+	stripeadapter "github.com/nfsarch33/helixon-ec/internal/adapter/stripe"
+	"github.com/nfsarch33/helixon-ec/internal/domain/membership"
 	"go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"

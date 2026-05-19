@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

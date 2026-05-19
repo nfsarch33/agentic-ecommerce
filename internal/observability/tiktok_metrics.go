@@ -26,7 +26,7 @@
 package observability
 
 import (
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 // TikTokMetrics is the EC-3 typed facade.

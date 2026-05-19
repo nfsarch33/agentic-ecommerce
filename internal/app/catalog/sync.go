@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	domain "github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	domain "github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 type SyncService struct {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/monitoring/grafana"
+	"github.com/nfsarch33/helixon-ec/monitoring/grafana"
 )
 
 func loadTemplate(t *testing.T) string {

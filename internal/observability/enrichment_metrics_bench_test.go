@@ -3,7 +3,7 @@ package observability
 import (
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 // BenchmarkEnrichmentMetrics_RecordRun measures the steady-state

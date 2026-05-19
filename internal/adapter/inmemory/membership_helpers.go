@@ -3,8 +3,8 @@ package inmemory
 import (
 	"sort"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/membership"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/domain/membership"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 func sortPlansByName(plans []membership.MembershipPlan) {

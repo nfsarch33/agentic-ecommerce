@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/social"
-	"github.com/nfsarch33/agentic-ecommerce/internal/eventbus"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/social"
+	"github.com/nfsarch33/helixon-ec/internal/eventbus"
 )
 
 const testTikTokWebhookSecret = "tiktok-webhook-test-secret-bytes-fixture" // gitleaks:allow

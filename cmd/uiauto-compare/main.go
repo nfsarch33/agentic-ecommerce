@@ -3,7 +3,7 @@
 //
 // The binary is deliberately thin: flag parsing, mode dispatch, and exit
 // code shaping. All semantic work lives in
-// github.com/nfsarch33/agentic-ecommerce/internal/uiauto/compare which
+// github.com/nfsarch33/helixon-ec/internal/uiauto/compare which
 // has table-driven tests covering parse, diff, and report rendering.
 //
 // Usage:
@@ -34,7 +34,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/uiauto/compare"
+	"github.com/nfsarch33/helixon-ec/internal/uiauto/compare"
 )
 
 const (

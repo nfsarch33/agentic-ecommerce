@@ -6,7 +6,7 @@ import (
 	"errors"
 	"math"
 
-	orchestrator "github.com/nfsarch33/agentic-ecommerce/internal/agent"
+	orchestrator "github.com/nfsarch33/helixon-ec/internal/agent"
 )
 
 var ErrInvalidCost = errors.New("cost_cents must be greater than zero")

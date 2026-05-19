@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/uiauto/compare"
+	"github.com/nfsarch33/helixon-ec/internal/uiauto/compare"
 )
 
 type mockToolExecutor struct {

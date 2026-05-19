@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
-	"github.com/nfsarch33/agentic-ecommerce/internal/tenant"
+	"github.com/nfsarch33/helixon-ec/internal/registration"
+	"github.com/nfsarch33/helixon-ec/internal/tenant"
 )
 
 func TestWriteRegistrationErrorTable(t *testing.T) {

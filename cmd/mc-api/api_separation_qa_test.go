@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/inmemory"
 )
 
 func newAPISeparationQAServer(t *testing.T) *server {

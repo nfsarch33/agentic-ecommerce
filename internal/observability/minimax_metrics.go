@@ -1,7 +1,7 @@
 package observability
 
 import (
-	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/helixon-ec/internal/metrics"
 )
 
 // MinimaxMetrics is the v4.13.0 typed facade for MiniMax quota-aware

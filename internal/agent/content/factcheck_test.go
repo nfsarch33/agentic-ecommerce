@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
+	"github.com/nfsarch33/helixon-ec/internal/rag"
 )
 
 func TestExtractClaimsFindsDeterministicProductClaims(t *testing.T) {

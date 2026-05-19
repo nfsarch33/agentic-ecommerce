@@ -15,12 +15,12 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
-	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
-	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
-	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
+	contentagent "github.com/nfsarch33/helixon-ec/internal/agent/content"
+	sourcingagent "github.com/nfsarch33/helixon-ec/internal/agent/sourcing"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/marketplacesync"
+	"github.com/nfsarch33/helixon-ec/internal/media/intelligence"
+	ecworkflow "github.com/nfsarch33/helixon-ec/internal/workflow"
 )
 
 type temporalWorkflowClient interface {

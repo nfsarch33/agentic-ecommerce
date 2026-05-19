@@ -19,17 +19,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/notification"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/objectstore"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/signedurl"
-	stripeadapter "github.com/nfsarch33/agentic-ecommerce/internal/adapter/stripe"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/digital"
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/membership"
-	orderdomain "github.com/nfsarch33/agentic-ecommerce/internal/domain/order"
-	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/inmemory"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/notification"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/objectstore"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/postgres"
+	"github.com/nfsarch33/helixon-ec/internal/adapter/signedurl"
+	stripeadapter "github.com/nfsarch33/helixon-ec/internal/adapter/stripe"
+	"github.com/nfsarch33/helixon-ec/internal/domain/catalog"
+	"github.com/nfsarch33/helixon-ec/internal/domain/digital"
+	"github.com/nfsarch33/helixon-ec/internal/domain/membership"
+	orderdomain "github.com/nfsarch33/helixon-ec/internal/domain/order"
+	"github.com/nfsarch33/helixon-ec/internal/port"
 )
 
 // Compile-time interface satisfaction checks.

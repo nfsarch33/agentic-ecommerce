@@ -25,7 +25,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/webhook"
+	"github.com/nfsarch33/helixon-ec/internal/webhook"
 )
 
 // WebhookIdempotencyStore is the Postgres-backed implementation of

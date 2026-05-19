@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	wcwebhook "github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce/webhook"
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
-	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
-	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
+	wcwebhook "github.com/nfsarch33/helixon-ec/internal/adapter/woocommerce/webhook"
+	"github.com/nfsarch33/helixon-ec/internal/marketplacesync"
+	enginesync "github.com/nfsarch33/helixon-ec/internal/sync"
+	ecworkflow "github.com/nfsarch33/helixon-ec/internal/workflow"
 	"go.temporal.io/sdk/client"
 )
 

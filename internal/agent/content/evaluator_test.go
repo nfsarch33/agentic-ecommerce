@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	"github.com/nfsarch33/helixon-ec/internal/agent/content"
 )
 
 func TestEvaluatorGoldenQualityScore(t *testing.T) {

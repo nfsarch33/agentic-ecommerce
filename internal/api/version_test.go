@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/api"
+	"github.com/nfsarch33/helixon-ec/internal/api"
 )
 
 func TestNegotiateVersion(t *testing.T) {

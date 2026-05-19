@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/marketplace"
-	"github.com/nfsarch33/agentic-ecommerce/internal/security"
-	tenantpkg "github.com/nfsarch33/agentic-ecommerce/internal/tenant"
+	"github.com/nfsarch33/helixon-ec/internal/marketplace"
+	"github.com/nfsarch33/helixon-ec/internal/security"
+	tenantpkg "github.com/nfsarch33/helixon-ec/internal/tenant"
 )
 
 // manifestResponse is the wire shape returned by /api/v1/marketplace/plugins.

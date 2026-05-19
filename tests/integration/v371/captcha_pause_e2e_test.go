@@ -59,7 +59,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/uiauto/captcha"
+	"github.com/nfsarch33/helixon-ec/internal/uiauto/captcha"
 )
 
 // captchaPauseBudget is the detection+pause SLO per the plan

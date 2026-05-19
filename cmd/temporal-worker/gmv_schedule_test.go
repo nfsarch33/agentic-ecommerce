@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
-	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
+	ecworkflow "github.com/nfsarch33/helixon-ec/internal/workflow"
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
