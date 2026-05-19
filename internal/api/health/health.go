@@ -10,6 +10,28 @@ import (
 	"time"
 )
 
+// Status strings emitted by the health endpoints. Prefer these constants
+// over bare string literals in tests and downstream consumers so a contract
+// change is caught at compile time rather than discovered at runtime.
+const (
+	// StatusOK is the liveness status returned by /healthz.
+	StatusOK = "ok"
+
+	// StatusReady is the readiness status returned by /readyz when all
+	// dependency checks pass.
+	StatusReady = "ready"
+
+	// StatusNotReady is the readiness status returned by /readyz when one
+	// or more dependency checks fail.
+	StatusNotReady = "not_ready"
+
+	// CheckStatusOK is the per-check status when the check passes.
+	CheckStatusOK = "ok"
+
+	// CheckStatusFail is the per-check status when the check fails.
+	CheckStatusFail = "fail"
+)
+
 // HealthCheck is the interface that dependency probes must satisfy.
 type HealthCheck interface {
 	Name() string
@@ -65,7 +87,7 @@ func (h *Handler) Mux() *http.ServeMux {
 
 // Liveness always returns 200 if the process is alive.
 func (h *Handler) Liveness(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, Response{Status: "ok"})
+	writeJSON(w, http.StatusOK, Response{Status: StatusOK})
 }
 
 // Readiness runs all registered checks concurrently and returns 200
@@ -74,13 +96,13 @@ func (h *Handler) Readiness(w http.ResponseWriter, r *http.Request) {
 	results := h.runChecks(r.Context())
 
 	resp := Response{
-		Status: "ready",
+		Status: StatusReady,
 		Checks: results,
 	}
 	code := http.StatusOK
 	for _, cr := range results {
-		if cr.Status != "ok" {
-			resp.Status = "not_ready"
+		if cr.Status != CheckStatusOK {
+			resp.Status = StatusNotReady
 			code = http.StatusServiceUnavailable
 			break
 		}
@@ -109,9 +131,9 @@ func (h *Handler) runChecks(parent context.Context) map[string]CheckResponse {
 			ctx, cancel := context.WithTimeout(parent, h.timeout)
 			defer cancel()
 
-			cr := CheckResponse{Status: "ok"}
+			cr := CheckResponse{Status: CheckStatusOK}
 			if err := c.Check(ctx); err != nil {
-				cr.Status = "fail"
+				cr.Status = CheckStatusFail
 				cr.Error = err.Error()
 			}
 			cr.LatencyMS = time.Since(start).Milliseconds()

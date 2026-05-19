@@ -30,7 +30,7 @@ func TestLiveness_AlwaysOK(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	var resp health.Response
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, "ok", resp.Status)
+	assert.Equal(t, health.StatusOK, resp.Status)
 }
 
 func TestReadiness_AllChecksPass(t *testing.T) {
@@ -46,10 +46,10 @@ func TestReadiness_AllChecksPass(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	var resp health.Response
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, "ready", resp.Status)
-	assert.Equal(t, "ok", resp.Checks["postgres"].Status)
-	assert.Equal(t, "ok", resp.Checks["redis"].Status)
-	assert.Equal(t, "ok", resp.Checks["temporal"].Status)
+	assert.Equal(t, health.StatusReady, resp.Status)
+	assert.Equal(t, health.CheckStatusOK, resp.Checks["postgres"].Status)
+	assert.Equal(t, health.CheckStatusOK, resp.Checks["redis"].Status)
+	assert.Equal(t, health.CheckStatusOK, resp.Checks["temporal"].Status)
 }
 
 func TestReadiness_PostgresDown(t *testing.T) {
@@ -65,8 +65,8 @@ func TestReadiness_PostgresDown(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	var resp health.Response
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, "not_ready", resp.Status)
-	assert.Equal(t, "fail", resp.Checks["postgres"].Status)
+	assert.Equal(t, health.StatusNotReady, resp.Status)
+	assert.Equal(t, health.CheckStatusFail, resp.Checks["postgres"].Status)
 	assert.Contains(t, resp.Checks["postgres"].Error, "connection refused")
 }
 
@@ -83,8 +83,8 @@ func TestReadiness_RedisDown(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	var resp health.Response
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, "not_ready", resp.Status)
-	assert.Equal(t, "fail", resp.Checks["redis"].Status)
+	assert.Equal(t, health.StatusNotReady, resp.Status)
+	assert.Equal(t, health.CheckStatusFail, resp.Checks["redis"].Status)
 }
 
 func TestReadiness_TemporalDown(t *testing.T) {
@@ -100,8 +100,8 @@ func TestReadiness_TemporalDown(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	var resp health.Response
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, "not_ready", resp.Status)
-	assert.Equal(t, "fail", resp.Checks["temporal"].Status)
+	assert.Equal(t, health.StatusNotReady, resp.Status)
+	assert.Equal(t, health.CheckStatusFail, resp.Checks["temporal"].Status)
 }
 
 func TestReadiness_Timeout(t *testing.T) {

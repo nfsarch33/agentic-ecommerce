@@ -83,8 +83,8 @@ func TestHealthReadyzResponseShape(t *testing.T) {
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("unmarshal /readyz body: %v\nbody: %s", err, body)
 	}
-	if got.Status != "ready" {
-		t.Errorf("want status=ready, got %q", got.Status)
+	if got.Status != health.StatusReady {
+		t.Errorf("want status=%s, got %q", health.StatusReady, got.Status)
 	}
 }
 
@@ -113,8 +113,8 @@ func TestHealthReadyzWithFailingCheck(t *testing.T) {
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("unmarshal: %v\nbody: %s", err, body)
 	}
-	if got.Status != "not_ready" {
-		t.Errorf("want status=not_ready, got %q", got.Status)
+	if got.Status != health.StatusNotReady {
+		t.Errorf("want status=%s, got %q", health.StatusNotReady, got.Status)
 	}
 	if _, ok := got.Checks["db"]; !ok {
 		t.Error("want checks[db] in response")
