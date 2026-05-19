@@ -2,9 +2,11 @@ package webhook_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,22 +39,45 @@ func (m *mockPaymentGateway) GetStatus(context.Context, string, string) (port.Pa
 }
 
 type spyPublisher struct {
+	mu     sync.Mutex
 	events []eventbus.Event
 }
 
 func (s *spyPublisher) Publish(_ context.Context, evt eventbus.Event) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.events = append(s.events, evt)
 	return nil
 }
 
 func (s *spyPublisher) Close() error { return nil }
 
+func (s *spyPublisher) len() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.events)
+}
+
 type spyMetrics struct {
+	mu    sync.Mutex
 	calls []string
 }
 
 func (s *spyMetrics) IncWebhookNormalised(provider, outcome string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.calls = append(s.calls, provider+":"+outcome)
+}
+
+func (s *spyMetrics) has(call string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range s.calls {
+		if c == call {
+			return true
+		}
+	}
+	return false
 }
 
 func buildNormaliser(t *testing.T, providers map[string]*mockPaymentGateway) (*webhook.PaymentNormaliser, *spyPublisher, *spyMetrics) {
@@ -194,4 +219,101 @@ func TestPaymentNormaliser_Idempotency(t *testing.T) {
 	n.ServeHTTP(rec2, req2)
 	assert.Equal(t, http.StatusOK, rec2.Code)
 	assert.Len(t, pub.events, 1)
+}
+
+// T-5038-1: payment webhook idempotency edge cases.
+
+// TestPaymentNormaliser_IdempotencyIsolatedPerProvider verifies that the
+// same payload ID for two different providers produces two distinct events
+// (the idempotency key is scoped to provider, not global).
+func TestPaymentNormaliser_IdempotencyIsolatedPerProvider(t *testing.T) {
+	t.Parallel()
+	n, pub, _ := buildNormaliser(t, map[string]*mockPaymentGateway{
+		"stripe": successGateway("stripe"),
+		"paypal": successGateway("paypal"),
+	})
+
+	sendPost := func(provider string) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payment/"+provider, strings.NewReader(`{}`))
+		rec := httptest.NewRecorder()
+		n.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code, "provider=%s", provider)
+	}
+
+	sendPost("stripe")
+	sendPost("paypal")
+	// both providers accepted their respective first delivery
+	assert.Equal(t, 2, pub.len())
+
+	// replay for stripe should be deduped; paypal replay too
+	sendPost("stripe")
+	sendPost("paypal")
+	assert.Equal(t, 2, pub.len())
+}
+
+// TestPaymentNormaliser_IdempotencyConcurrentDuplicates verifies that under
+// concurrent duplicate deliveries only one event reaches the bus.
+func TestPaymentNormaliser_IdempotencyConcurrentDuplicates(t *testing.T) {
+	t.Parallel()
+	n, pub, _ := buildNormaliser(t, map[string]*mockPaymentGateway{"stripe": successGateway("stripe")})
+
+	const goroutines = 20
+	done := make(chan struct{}, goroutines)
+	for range goroutines {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payment/stripe", strings.NewReader(`{}`))
+			rec := httptest.NewRecorder()
+			n.ServeHTTP(rec, req)
+			assert.Equal(t, http.StatusOK, rec.Code)
+		}()
+	}
+	for range goroutines {
+		<-done
+	}
+	// only one event must have been published regardless of concurrency
+	assert.Equal(t, 1, pub.len())
+}
+
+// TestPaymentNormaliser_IdempotencyStoreError verifies that a store error on
+// Reserve returns 500 and does not publish an event.
+func TestPaymentNormaliser_IdempotencyStoreError(t *testing.T) {
+	t.Parallel()
+
+	pub := &spyPublisher{}
+	gateways := map[string]port.MultiPaymentGateway{"stripe": successGateway("stripe")}
+	n, err := webhook.NewPaymentNormaliser(nil, webhook.PaymentNormaliserConfig{
+		Providers:  gateways,
+		Publisher:  pub,
+		Idempotent: &failingIdempotencyStore{},
+		Now:        func() time.Time { return time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC) },
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/payment/stripe", strings.NewReader(`{}`))
+	rec := httptest.NewRecorder()
+	n.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.Empty(t, pub.events)
+}
+
+// TestMemoryIdempotencyStore_RejectsMissingFields verifies that Reserve
+// returns an error when tenantID or key is empty.
+func TestMemoryIdempotencyStore_RejectsMissingFields(t *testing.T) {
+	t.Parallel()
+	store := webhook.NewMemoryIdempotencyStore()
+	ctx := context.Background()
+
+	_, err := store.Reserve(ctx, "", "some-key")
+	assert.Error(t, err, "empty tenantID must be rejected")
+
+	_, err = store.Reserve(ctx, "tenant-a", "")
+	assert.Error(t, err, "empty key must be rejected")
+}
+
+// failingIdempotencyStore always returns an error from Reserve.
+type failingIdempotencyStore struct{}
+
+func (f *failingIdempotencyStore) Reserve(_ context.Context, _, _ string) (bool, error) {
+	return false, errors.New("store: connection lost")
 }

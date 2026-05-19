@@ -369,6 +369,159 @@ func TestMembershipLifecycleWorkflowAcceptsMockedActivities(t *testing.T) {
 	}
 }
 
+// T-5036-1: Membership renewal edge cases.
+
+// TestMembershipLifecycleWorkflowPauseThenResumeThenCancel verifies the
+// pause/resume signal path: the workflow should enter paused state, stay
+// paused until a resume signal, then re-enter the renewal loop and accept
+// a cancel signal.
+func TestMembershipLifecycleWorkflowPauseThenResumeThenCancel(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.SetStartTime(time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC))
+
+	gateway := newDeterministicGateway()
+	notifier := notification.NewMembershipNotificationRecorder()
+	activities := NewMembershipLifecycleActivities(MembershipLifecycleActivityDeps{
+		Gateway: gateway, Notifier: notifier,
+	})
+	env.RegisterActivityWithOptions(activities.ChargeStripe, activity.RegisterOptions{Name: MembershipChargeStripeActivity})
+	env.RegisterActivityWithOptions(activities.SendNotification, activity.RegisterOptions{Name: MembershipSendNotificationActivity})
+	env.RegisterActivityWithOptions(activities.RecordBillingEvent, activity.RegisterOptions{Name: MembershipRecordBillingActivity})
+
+	// pause at day 2 (within trial), resume at day 3, cancel at day 4
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(MembershipPauseSignal, "user-pause")
+	}, 2*24*time.Hour)
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(MembershipResumeSignal, "user-resume")
+	}, 3*24*time.Hour)
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(MembershipCancelSignal, "user-cancel")
+	}, 4*24*time.Hour)
+
+	env.ExecuteWorkflow(MembershipLifecycleWorkflow, MembershipLifecycleInput{
+		TenantID: "tenant-a", SubscriptionID: uuid.New(), MemberID: uuid.New(),
+		MemberEmail: "alice@example.com", PlanID: uuid.New(), PlanName: "Gold",
+		BillingCycle: membership.BillingCycleMonthly, StripePriceID: "price_dev_pause",
+		TrialDays: 7,
+	})
+
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("workflow error: %v", err)
+	}
+	var result MembershipLifecycleResult
+	if err := env.GetWorkflowResult(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.FinalState != membership.StateCancelled {
+		t.Fatalf("want final state cancelled, got %s", result.FinalState)
+	}
+}
+
+// TestMembershipLifecycleWorkflowCancelDuringFirstRenewal verifies that a
+// cancel signal arriving exactly at the renewal boundary resolves cleanly
+// rather than causing a race between the timer and the cancel signal.
+func TestMembershipLifecycleWorkflowCancelDuringFirstRenewal(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.SetStartTime(time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC))
+
+	chargeCount := 0
+	env.RegisterActivityWithOptions(func(_ context.Context, _ ChargeRequest) (ChargeResponse, error) {
+		chargeCount++
+		return ChargeResponse{
+			StripeSubscriptionID: "sub_renewal_race",
+			StripeCustomerID:     "cus_renewal_race",
+			CurrentPeriodEnd:     time.Now().Add(30 * 24 * time.Hour),
+		}, nil
+	}, activity.RegisterOptions{Name: MembershipChargeStripeActivity})
+	env.RegisterActivityWithOptions(func(context.Context, NotificationRequest) error { return nil },
+		activity.RegisterOptions{Name: MembershipSendNotificationActivity})
+	env.RegisterActivityWithOptions(func(context.Context, BillingEventInput) error { return nil },
+		activity.RegisterOptions{Name: MembershipRecordBillingActivity})
+
+	// Cancel immediately after the trial expires (7 days) before renewal fires.
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(MembershipCancelSignal, "race-cancel")
+	}, 7*24*time.Hour)
+
+	env.ExecuteWorkflow(MembershipLifecycleWorkflow, MembershipLifecycleInput{
+		TenantID: "tenant-a", SubscriptionID: uuid.New(), MemberID: uuid.New(),
+		MemberEmail: "alice@example.com", PlanID: uuid.New(), PlanName: "Gold",
+		BillingCycle: membership.BillingCycleMonthly, StripePriceID: "price_dev_race",
+		TrialDays: 7,
+	})
+
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("workflow error: %v", err)
+	}
+	var result MembershipLifecycleResult
+	if err := env.GetWorkflowResult(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.FinalState != membership.StateCancelled {
+		t.Fatalf("want final state cancelled, got %s", result.FinalState)
+	}
+	// The initial charge must have fired exactly once.
+	if chargeCount != 1 {
+		t.Fatalf("want 1 charge (initial only), got %d", chargeCount)
+	}
+}
+
+// TestMembershipLifecycleWorkflowPauseThenExpiry verifies that a pause
+// signal does not block a renewal charge -- after the cycle timer fires
+// (post-resume), renewal proceeds normally.
+func TestMembershipLifecycleWorkflowPauseThenExpiry(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.SetStartTime(time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC))
+
+	chargeCount := 0
+	env.RegisterActivityWithOptions(func(_ context.Context, req ChargeRequest) (ChargeResponse, error) {
+		chargeCount++
+		if chargeCount >= 2 {
+			return ChargeResponse{}, errors.New("payment_required")
+		}
+		return ChargeResponse{
+			StripeSubscriptionID: "sub_pause_expiry",
+			StripeCustomerID:     "cus_pause_expiry",
+			CurrentPeriodEnd:     time.Now().Add(30 * 24 * time.Hour),
+		}, nil
+	}, activity.RegisterOptions{Name: MembershipChargeStripeActivity})
+	env.RegisterActivityWithOptions(func(context.Context, NotificationRequest) error { return nil },
+		activity.RegisterOptions{Name: MembershipSendNotificationActivity})
+	env.RegisterActivityWithOptions(func(context.Context, BillingEventInput) error { return nil },
+		activity.RegisterOptions{Name: MembershipRecordBillingActivity})
+
+	// Pause after activation (day 8), resume shortly after (day 9).
+	// Renewal fires at day 30; charge fails -> expiry.
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(MembershipPauseSignal, "pause-before-expiry")
+	}, 8*24*time.Hour)
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(MembershipResumeSignal, "resume-before-expiry")
+	}, 9*24*time.Hour)
+
+	env.ExecuteWorkflow(MembershipLifecycleWorkflow, MembershipLifecycleInput{
+		TenantID: "tenant-a", SubscriptionID: uuid.New(), MemberID: uuid.New(),
+		MemberEmail: "alice@example.com", PlanID: uuid.New(), PlanName: "Gold",
+		BillingCycle: membership.BillingCycleMonthly, StripePriceID: "price_dev_expiry",
+		TrialDays: 7,
+	})
+
+	err := env.GetWorkflowError()
+	if err == nil {
+		t.Fatal("expected workflow to fail on payment_required")
+	}
+}
+
 type recordingBillingLedger struct {
 	events []BillingEventInput
 }

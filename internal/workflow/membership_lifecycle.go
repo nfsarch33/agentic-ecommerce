@@ -370,7 +370,7 @@ func waitForLifecycleEvent(
 	cancelSignal, pauseSignal, resumeSignal temporalworkflow.ReceiveChannel,
 	currentlyPaused bool,
 ) (bool, membership.Transition, bool, error) {
-	timer := temporalworkflow.NewTimer(ctx, time.Until(deadline))
+	timer := temporalworkflow.NewTimer(ctx, deadline.Sub(temporalworkflow.Now(ctx)))
 	selector := temporalworkflow.NewSelector(ctx)
 
 	canceled := false

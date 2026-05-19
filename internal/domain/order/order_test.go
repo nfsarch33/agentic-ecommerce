@@ -119,6 +119,135 @@ func TestParseStatus(t *testing.T) {
 	}
 }
 
+// T-5040-1: exhaustive order lifecycle state machine transition table.
+
+func TestOrderStateMachine_AllValidTransitions(t *testing.T) {
+	t.Parallel()
+
+	validTransitions := []struct {
+		from Status
+		to   Status
+	}{
+		{StatusPending, StatusPaid},
+		{StatusPending, StatusCancelled},
+		{StatusPending, StatusFailed},
+		{StatusPaid, StatusFulfilled},
+		{StatusPaid, StatusCancelled},
+		{StatusPaid, StatusFailed},
+		{StatusFulfilled, StatusShipped},
+		{StatusFulfilled, StatusFailed},
+		{StatusShipped, StatusCompleted},
+		// idempotent: same status transitions
+		{StatusPending, StatusPending},
+		{StatusPaid, StatusPaid},
+		{StatusFulfilled, StatusFulfilled},
+		{StatusShipped, StatusShipped},
+		{StatusCompleted, StatusCompleted},
+		{StatusFailed, StatusFailed},
+		{StatusCancelled, StatusCancelled},
+	}
+
+	for _, tc := range validTransitions {
+		tc := tc
+		t.Run(string(tc.from)+"->"+string(tc.to), func(t *testing.T) {
+			t.Parallel()
+			ord := advanceOrderTo(t, tc.from)
+			if err := ord.AdvanceStatus(tc.to); err != nil {
+				t.Fatalf("AdvanceStatus(%q -> %q): unexpected error: %v", tc.from, tc.to, err)
+			}
+		})
+	}
+}
+
+func TestOrderStateMachine_AllInvalidTransitions(t *testing.T) {
+	t.Parallel()
+
+	invalidTransitions := []struct {
+		from Status
+		to   Status
+	}{
+		// pending cannot jump forward beyond paid/cancel/fail
+		{StatusPending, StatusFulfilled},
+		{StatusPending, StatusShipped},
+		{StatusPending, StatusCompleted},
+		// paid cannot go back or skip
+		{StatusPaid, StatusPending},
+		{StatusPaid, StatusShipped},
+		{StatusPaid, StatusCompleted},
+		// fulfilled cannot go back or cancel
+		{StatusFulfilled, StatusPending},
+		{StatusFulfilled, StatusPaid},
+		{StatusFulfilled, StatusCancelled},
+		{StatusFulfilled, StatusCompleted},
+		// shipped cannot go back or cancel
+		{StatusShipped, StatusPending},
+		{StatusShipped, StatusPaid},
+		{StatusShipped, StatusFulfilled},
+		{StatusShipped, StatusCancelled},
+		{StatusShipped, StatusFailed},
+		// terminal states cannot transition to anything other than themselves
+		{StatusCompleted, StatusPending},
+		{StatusCompleted, StatusPaid},
+		{StatusCompleted, StatusFulfilled},
+		{StatusCompleted, StatusShipped},
+		{StatusCompleted, StatusFailed},
+		{StatusCompleted, StatusCancelled},
+		{StatusFailed, StatusPending},
+		{StatusFailed, StatusPaid},
+		{StatusCancelled, StatusPending},
+		{StatusCancelled, StatusPaid},
+	}
+
+	for _, tc := range invalidTransitions {
+		tc := tc
+		t.Run(string(tc.from)+"->"+string(tc.to), func(t *testing.T) {
+			t.Parallel()
+			ord := advanceOrderTo(t, tc.from)
+			err := ord.AdvanceStatus(tc.to)
+			if !errors.Is(err, ErrInvalidStatusTransition) {
+				t.Fatalf("AdvanceStatus(%q -> %q): want ErrInvalidStatusTransition, got %v", tc.from, tc.to, err)
+			}
+		})
+	}
+}
+
+// advanceOrderTo returns an order whose status equals target by following
+// a valid transition path. Panics via t.Fatalf if the target is unreachable.
+func advanceOrderTo(t *testing.T, target Status) Order {
+	t.Helper()
+	ord := testOrder(t)
+	path := statusPath(target)
+	for _, s := range path {
+		if err := ord.AdvanceStatus(s); err != nil {
+			t.Fatalf("advance to %q: %v", s, err)
+		}
+	}
+	return ord
+}
+
+// statusPath returns the shortest valid transition sequence to reach target
+// starting from StatusPending.
+func statusPath(target Status) []Status {
+	switch target {
+	case StatusPending:
+		return nil
+	case StatusPaid:
+		return []Status{StatusPaid}
+	case StatusFulfilled:
+		return []Status{StatusPaid, StatusFulfilled}
+	case StatusShipped:
+		return []Status{StatusPaid, StatusFulfilled, StatusShipped}
+	case StatusCompleted:
+		return []Status{StatusPaid, StatusFulfilled, StatusShipped, StatusCompleted}
+	case StatusFailed:
+		return []Status{StatusFailed}
+	case StatusCancelled:
+		return []Status{StatusCancelled}
+	default:
+		return nil
+	}
+}
+
 func testOrder(t *testing.T) Order {
 	t.Helper()
 	ord, err := NewOrder(OrderInput{

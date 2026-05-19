@@ -38,13 +38,22 @@ type HealthCheck interface {
 	Check(ctx context.Context) error
 }
 
-// Response is the JSON body returned by the readiness endpoint.
-type Response struct {
+// LivenessResponse is the JSON body returned by the /healthz endpoint.
+type LivenessResponse struct {
+	Status string `json:"status"`
+}
+
+// ReadinessResponse is the JSON body returned by the /readyz endpoint.
+type ReadinessResponse struct {
 	Status string                   `json:"status"`
 	Checks map[string]CheckResponse `json:"checks,omitempty"`
 }
 
-// CheckResponse is the per-check result embedded in Response.
+// Response is kept for backwards compatibility; callers should prefer
+// LivenessResponse or ReadinessResponse.
+type Response = ReadinessResponse
+
+// CheckResponse is the per-check result embedded in ReadinessResponse.
 type CheckResponse struct {
 	Status    string `json:"status"`
 	LatencyMS int64  `json:"latency_ms"`
@@ -87,7 +96,7 @@ func (h *Handler) Mux() *http.ServeMux {
 
 // Liveness always returns 200 if the process is alive.
 func (h *Handler) Liveness(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, Response{Status: StatusOK})
+	writeJSON(w, http.StatusOK, LivenessResponse{Status: StatusOK})
 }
 
 // Readiness runs all registered checks concurrently and returns 200
@@ -95,7 +104,7 @@ func (h *Handler) Liveness(w http.ResponseWriter, _ *http.Request) {
 func (h *Handler) Readiness(w http.ResponseWriter, r *http.Request) {
 	results := h.runChecks(r.Context())
 
-	resp := Response{
+	resp := ReadinessResponse{
 		Status: StatusReady,
 		Checks: results,
 	}

@@ -144,3 +144,47 @@ func TestMux_WiresEndpoints(t *testing.T) {
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
+
+// T-5034-1: typed response structs -- verify /healthz returns LivenessResponse.
+
+func TestLiveness_TypedResponse(t *testing.T) {
+	h := health.NewHandler(nil)
+	rec := httptest.NewRecorder()
+	h.Liveness(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var got health.LivenessResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+	assert.Equal(t, health.StatusOK, got.Status)
+}
+
+func TestReadiness_TypedResponseAllPass(t *testing.T) {
+	checks := []health.HealthCheck{
+		&health.PostgresCheck{PingFunc: func(context.Context) error { return nil }},
+	}
+	h := health.NewHandler(checks)
+	rec := httptest.NewRecorder()
+	h.Readiness(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var got health.ReadinessResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+	assert.Equal(t, health.StatusReady, got.Status)
+	assert.Equal(t, health.CheckStatusOK, got.Checks["postgres"].Status)
+}
+
+func TestReadiness_TypedResponseDegraded(t *testing.T) {
+	checks := []health.HealthCheck{
+		&health.PostgresCheck{PingFunc: func(context.Context) error { return errors.New("conn refused") }},
+	}
+	h := health.NewHandler(checks)
+	rec := httptest.NewRecorder()
+	h.Readiness(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	var got health.ReadinessResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+	assert.Equal(t, health.StatusNotReady, got.Status)
+	assert.Equal(t, health.CheckStatusFail, got.Checks["postgres"].Status)
+	assert.Contains(t, got.Checks["postgres"].Error, "conn refused")
+}

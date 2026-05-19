@@ -26,16 +26,29 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/notification"
 	stripeadapter "github.com/nfsarch33/agentic-ecommerce/internal/adapter/stripe"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/membership"
-	"go.temporal.io/api/history/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func TestGenerateMembershipLifecycleHistory(t *testing.T) {
-	var suite testsuite.WorkflowTestSuite
-	env := suite.NewTestWorkflowEnvironment()
-	env.SetStartTime(time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	server, err := testsuite.StartDevServer(ctx, testsuite.DevServerOptions{LogLevel: "error"})
+	if err != nil {
+		t.Fatalf("start Temporal dev server: %v", err)
+	}
+	defer func() {
+		server.Client().Close()
+		if err := server.Stop(); err != nil {
+			t.Errorf("stop Temporal dev server: %v", err)
+		}
+	}()
 
 	gateway := stripeadapter.NewPaymentGateway(stripeadapter.Config{
 		Clock: fixedClock{now: time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)},
@@ -44,19 +57,21 @@ func TestGenerateMembershipLifecycleHistory(t *testing.T) {
 	activities := NewMembershipLifecycleActivities(MembershipLifecycleActivityDeps{
 		Gateway: gateway, Notifier: notifier,
 	})
-	env.RegisterActivityWithOptions(activities.ChargeStripe, activity.RegisterOptions{Name: MembershipChargeStripeActivity})
-	env.RegisterActivityWithOptions(activities.SendNotification, activity.RegisterOptions{Name: MembershipSendNotificationActivity})
-	env.RegisterActivityWithOptions(activities.RecordBillingEvent, activity.RegisterOptions{Name: MembershipRecordBillingActivity})
+
+	temporalWorker := worker.New(server.Client(), TaskQueue, worker.Options{})
+	temporalWorker.RegisterWorkflow(MembershipLifecycleWorkflow)
+	temporalWorker.RegisterActivityWithOptions(activities.ChargeStripe, activity.RegisterOptions{Name: MembershipChargeStripeActivity})
+	temporalWorker.RegisterActivityWithOptions(activities.SendNotification, activity.RegisterOptions{Name: MembershipSendNotificationActivity})
+	temporalWorker.RegisterActivityWithOptions(activities.RecordBillingEvent, activity.RegisterOptions{Name: MembershipRecordBillingActivity})
+	if err := temporalWorker.Start(); err != nil {
+		t.Fatalf("start Temporal worker: %v", err)
+	}
+	defer temporalWorker.Stop()
 
 	subID := uuid.MustParse("4d96a04a-6e30-49d0-9a4d-1a5dab6a44a5")
 	memberID := uuid.MustParse("4d96a04a-6e30-49d0-9a4d-1a5dab6a44a6")
 	planID := uuid.MustParse("4d96a04a-6e30-49d0-9a4d-1a5dab6a44a7")
-
-	env.RegisterDelayedCallback(func() {
-		env.SignalWorkflow(MembershipCancelSignal, "user-request")
-	}, 24*time.Hour)
-
-	env.ExecuteWorkflow(MembershipLifecycleWorkflow, MembershipLifecycleInput{
+	input := MembershipLifecycleInput{
 		TenantID:       "tenant-a",
 		SubscriptionID: subID,
 		MemberID:       memberID,
@@ -66,17 +81,37 @@ func TestGenerateMembershipLifecycleHistory(t *testing.T) {
 		BillingCycle:   membership.BillingCycleMonthly,
 		StripePriceID:  "price_dev_1",
 		TrialDays:      7,
-	})
-	if err := env.GetWorkflowError(); err != nil {
-		t.Fatalf("workflow error: %v", err)
 	}
 
-	historyMessage := captureHistory(t, env)
-	if historyMessage == nil || len(historyMessage.Events) == 0 {
+	workflowID := fmt.Sprintf("membership-lifecycle-history-%d", time.Now().UnixNano())
+	run, err := server.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: TaskQueue,
+	}, MembershipLifecycleWorkflow, input)
+	if err != nil {
+		t.Fatalf("start workflow: %v", err)
+	}
+
+	// Wait for trial period to begin, then cancel.
+	waitForMembershipStatus(ctx, t, server.Client(), run.GetID(), run.GetRunID(), membership.StateTrial)
+	if err := server.Client().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), MembershipCancelSignal, "qa-generator"); err != nil {
+		t.Fatalf("signal cancel: %v", err)
+	}
+
+	var result MembershipLifecycleResult
+	if err := run.Get(ctx, &result); err != nil {
+		t.Fatalf("workflow result: %v", err)
+	}
+	if result.FinalState != membership.StateCancelled {
+		t.Fatalf("want final state cancelled, got %s", result.FinalState)
+	}
+
+	historyMsg := fetchMembershipHistory(ctx, t, server.Client(), run.GetID(), run.GetRunID())
+	if historyMsg == nil || len(historyMsg.Events) == 0 {
 		t.Fatal("captured empty history")
 	}
 
-	out, err := protojson.MarshalOptions{Multiline: true, Indent: "  "}.Marshal(historyMessage)
+	out, err := protojson.MarshalOptions{Multiline: true, Indent: "  "}.Marshal(historyMsg)
 	if err != nil {
 		t.Fatalf("marshal history: %v", err)
 	}
@@ -91,22 +126,47 @@ func TestGenerateMembershipLifecycleHistory(t *testing.T) {
 	fmt.Println("wrote", target)
 }
 
-// captureHistory is a stub. The Temporal SDK v1.43+ test suite no longer
-// exposes GetWorkflowHistory on TestWorkflowEnvironment. Capturing a real
-// history requires a live Temporal server (temporal workflow show --output json).
-//
-// To generate the fixture against a real server:
-//
-//	temporal workflow show --workflow-id <id> --namespace default --output json \
-//	  > internal/workflow/testdata/membership_lifecycle_history.json
-//
-// Until then, TestMembershipLifecycleWorkflowReplaysGoldenHistory skips
-// when the fixture is absent.
-func captureHistory(t *testing.T, _ *testsuite.TestWorkflowEnvironment) *history.History {
+func waitForMembershipStatus(
+	ctx context.Context,
+	t *testing.T,
+	c client.Client,
+	workflowID, runID string,
+	want membership.State,
+) {
 	t.Helper()
-	t.Skip("captureHistory requires a live Temporal server in SDK v1.43+; run `temporal workflow show` to generate the fixture")
-	return nil
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		value, err := c.QueryWorkflow(ctx, workflowID, runID, MembershipStatusQuery)
+		if err == nil && value != nil && value.HasValue() {
+			var snapshot MembershipLifecycleResult
+			if err := value.Get(&snapshot); err == nil && snapshot.FinalState == want {
+				return
+			}
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("wait for state %q: %v", want, ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }
 
-// silence the import in non-build-tag mode
-var _ = context.Background
+func fetchMembershipHistory(
+	ctx context.Context,
+	t *testing.T,
+	c client.Client,
+	workflowID, runID string,
+) *historypb.History {
+	t.Helper()
+	iter := c.GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	h := &historypb.History{}
+	for iter.HasNext() {
+		event, err := iter.Next()
+		if err != nil {
+			t.Fatalf("iterate workflow history: %v", err)
+		}
+		h.Events = append(h.Events, event)
+	}
+	return h
+}
