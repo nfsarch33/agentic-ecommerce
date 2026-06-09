@@ -155,16 +155,23 @@ func (s *server) createPersistedOrder(r *http.Request, req createOrderRequest) (
 		return orderdomain.Order{}, &createOrderValidationError{cause: err}
 	}
 	signature := orderCreateReplaySignature(req)
-	if entry, ok := s.lookupOrderCreateReplay(s.orderCreateReplayKey(r, req.IdempotencyKey)); ok {
-		if entry.Signature != signature {
-			return orderdomain.Order{}, fmt.Errorf("%w: payload mismatch", errOrderCreateReplayConflict)
-		}
-		return entry.Order, nil
-	}
-	return s.createAndStoreOrder(r, req.IdempotencyKey, input, signature)
-}
+	key := s.orderCreateReplayKey(r, req.IdempotencyKey)
 
-func (s *server) createAndStoreOrder(r *http.Request, idempotencyKey string, input orderdomain.OrderInput, signature [sha256.Size]byte) (orderdomain.Order, error) {
+	s.orderCreateReplayMu.Lock()
+	defer s.orderCreateReplayMu.Unlock()
+
+	if key != "" {
+		if s.orderCreateReplay == nil {
+			s.orderCreateReplay = map[string]orderCreateReplayEntry{}
+		}
+		if entry, ok := s.orderCreateReplay[key]; ok {
+			if entry.Signature != signature {
+				return orderdomain.Order{}, fmt.Errorf("%w: payload mismatch", errOrderCreateReplayConflict)
+			}
+			return entry.Order, nil
+		}
+	}
+
 	order, err := orderdomain.NewOrder(input)
 	if err != nil {
 		return orderdomain.Order{}, &createOrderValidationError{cause: err}
@@ -172,10 +179,12 @@ func (s *server) createAndStoreOrder(r *http.Request, idempotencyKey string, inp
 	if err := s.persistOrderForRequest(r, order); err != nil {
 		return orderdomain.Order{}, err
 	}
-	s.storeOrderCreateReplay(s.orderCreateReplayKey(r, idempotencyKey), orderCreateReplayEntry{
-		Order:     order,
-		Signature: signature,
-	})
+	if key != "" {
+		s.orderCreateReplay[key] = orderCreateReplayEntry{
+			Order:     order,
+			Signature: signature,
+		}
+	}
 	return order, nil
 }
 
