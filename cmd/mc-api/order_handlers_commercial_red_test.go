@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -65,6 +66,48 @@ func TestCreateOrderWithSameIdempotencyKeyReturnsSameOrder(t *testing.T) {
 	}
 	if !firstResp.CreatedAt.Equal(secondResp.CreatedAt) {
 		t.Fatalf("duplicate checkout changed created_at: first=%s second=%s", firstResp.CreatedAt, secondResp.CreatedAt)
+	}
+}
+
+func TestCreateOrderConcurrentIdempotencyReturnsSameOrder(t *testing.T) {
+	t.Parallel()
+	srv, _ := testServer(t)
+
+	const workers = 12
+	var wg sync.WaitGroup
+	wg.Add(workers)
+
+	ids := make([]string, workers)
+	codes := make([]int, workers)
+
+	for i := 0; i < workers; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/orders", strings.NewReader(validCommercialOrderRequest))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			srv.mux().ServeHTTP(rec, req)
+			codes[idx] = rec.Code
+			var resp orderResponse
+			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+				t.Errorf("worker %d decode: %v", idx, err)
+				return
+			}
+			ids[idx] = resp.ID
+		}(i)
+	}
+	wg.Wait()
+
+	for i := 0; i < workers; i++ {
+		if codes[i] != http.StatusCreated {
+			t.Fatalf("worker %d status = %d, want 201", i, codes[i])
+		}
+		if ids[i] == "" {
+			t.Fatalf("worker %d returned empty order id", i)
+		}
+		if ids[i] != ids[0] {
+			t.Fatalf("concurrent duplicate checkout created different orders: first=%s worker=%d id=%s", ids[0], i, ids[i])
+		}
 	}
 }
 
