@@ -1,4 +1,42 @@
 # Add fingerprint hashes here to suppress verified-false-positive findings.
 # Use the gitleaks fingerprint hash (NOT the rule ID), one per line.
-# Format: <fingerprint>  # <rationale - one sentence>
+# NOTE: gitleaks does NOT support inline `# comment` syntax. Place each
+# fingerprint on its own line; put rationale in a separate `#`-prefixed
+# comment line above the fingerprint.
 # See: ~/.cursor/rules/00-p0-secrets-pre-push-hook.mdc
+#
+# All entries below were added during v18726-3 ("126-unignored cleanup")
+# which was cancelled; the agent resumed cleanup here under
+# v18733-1 ("workspace doctor GREEN") to unblock the repo push.
+
+# tests/integration/v621/jwt_rotation_e2e_test.go:43-44
+# Synthetic JWT secrets for v6.21 rotation e2e fixture
+ee8981ca7ba26b483a2715564b6199736de11768:tests/integration/v621/jwt_rotation_e2e_test.go:generic-api-key:43
+ee8981ca7ba26b483a2715564b6199736de11768:tests/integration/v621/jwt_rotation_e2e_test.go:generic-api-key:44
+
+# internal/auth/jwt/rotator_test.go:12-13
+# Synthetic JWT secrets for rotator unit tests
+dd116a88feb4f46bec6ebb62a543ee1fcf4f842c:internal/auth/jwt/rotator_test.go:generic-api-key:12
+dd116a88feb4f46bec6ebb62a543ee1fcf4f842c:internal/auth/jwt/rotator_test.go:generic-api-key:13
+6224ed15b8f3279467f288954aa572cd18d4ea71:internal/auth/jwt/rotator_test.go:generic-api-key:12
+6224ed15b8f3279467f288954aa572cd18d4ea71:internal/auth/jwt/rotator_test.go:generic-api-key:13
+
+# internal/adapter/payment/wechat_adapter.go:52
+# Field name "APIKeyV3" appears generic; value is sourced from cfg env at runtime
+2ef5121fa6d5537ca85f571f3a3d5d66cc210d16:internal/adapter/payment/wechat_adapter.go:generic-api-key:52
+
+# internal/evomap/sink.go:401-402, 324-325
+# "MaxTikTokAPIP95Ms" / "TikTokAPIP95Ms" are Go struct field names, not secrets
+612ab950fadbbdd74122abf5699a5c278ad14464:internal/evomap/sink.go:generic-api-key:401
+612ab950fadbbdd74122abf5699a5c278ad14464:internal/evomap/sink.go:generic-api-key:402
+9163544a18b756d4bfd5f0221103feb09877f1cb:internal/evomap/sink.go:generic-api-key:324
+9163544a18b756d4bfd5f0221103feb09877f1cb:internal/evomap/sink.go:generic-api-key:325
+
+# bench / fuzz test fixtures — synthetic strings of the form
+# "bench-secret-at-least-32-bytes-long-yes" / "fuzz-secret-at-least-32-bytes-long-yes"
+7af4d4b9b6f55c2b22dea8a82d879efd5c7a86cd:internal/domain/digital/bench_test.go:generic-api-key:12
+7af4d4b9b6f55c2b22dea8a82d879efd5c7a86cd:internal/billing/fuzz_test.go:generic-api-key:19
+7af4d4b9b6f55c2b22dea8a82d879efd5c7a86cd:internal/security/bench_test.go:generic-api-key:17
+7af4d4b9b6f55c2b22dea8a82d879efd5c7a86cd:internal/security/fuzz_test.go:generic-api-key:19
+7af4d4b9b6f55c2b22dea8a82d879efd5c7a86cd:internal/adapter/signedurl/fuzz_test.go:generic-api-key:18
+7af4d4b9b6f55c2b22dea8a82d879efd5c7a86cd:internal/domain/digital/fuzz_test.go:generic-api-key:14
