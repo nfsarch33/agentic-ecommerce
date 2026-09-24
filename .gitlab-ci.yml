@@ -10,11 +10,12 @@ stages:
 variables:
   GIT_STRATEGY: fetch
   GIT_SUBMODULE_STRATEGY: none
-  EC_FRONTEND_REPO_PATH: "/home/jason/Code/agentic-ecommerce-web"
+  EC_FRONTEND_REPO_PATH: "$HOME/Code/agentic-ecommerce-web"
+  EC_CI_RUNNER_TAG: "shell"
 
 default:
   tags:
-    - wsl1-shell-primary
+    - $EC_CI_RUNNER_TAG
   interruptible: true
   before_script:
     - mkdir -p .gitlab-artifacts

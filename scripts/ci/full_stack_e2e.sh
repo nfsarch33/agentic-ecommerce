@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-frontend_repo="${EC_FRONTEND_REPO_PATH:-/home/jason/Code/agentic-ecommerce-web}"
+frontend_repo="${EC_FRONTEND_REPO_PATH:-${HOME}/Code/agentic-ecommerce-web}"
 run_stamp="${CI_PIPELINE_ID:-manual}-$(date -u +%Y%m%dT%H%M%SZ)"
 artifact_dir="${repo_root}/.gitlab-artifacts/full-stack-e2e/${run_stamp}"
 host_log_dir="${HOME}/logs/runx/test-lanes/full-stack-e2e/${run_stamp}"

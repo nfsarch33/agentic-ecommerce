@@ -8,7 +8,7 @@
 ## Overview
 
 This runbook covers the steps from the merged v5025 pre-release HEAD to a cut
-`v9.0.0` semver tag. The primary-testing lane on `wsl1/win1` is the only
+`v9.0.0` semver tag. The primary-testing lane on `fleet-shell-host/fleet-desktop-host` is the only
 blocking gate. No rc tags are created; the tag is cut once all gates below pass.
 
 ## Prerequisites
@@ -55,8 +55,8 @@ runx make --repo ecommerce -- compose-config-prod
 runx sentrux gate --repo ecommerce
 
 # 10. Primary-pool canaries
-runx ssh exec --target wsl1-travel --cmd ssh-canary-wsl
-runx ssh exec --target win1-travel --cmd ssh-canary-win
+runx ssh exec --target host-shell-travel --cmd ssh-canary-wsl
+runx ssh exec --target host-desktop-travel --cmd ssh-canary-win
 
 # 11. Primary-lane integration gates
 runx test-lane run --lane backend-integration --pool primary-testing
@@ -69,7 +69,7 @@ runx test-lane run --lane cleanup-testing --pool primary-testing
 The frontend v5027 QA sprint captures this evidence. Required before stack tag:
 
 ```bash
-# On primary-testing (wsl1/win1)
+# On primary-testing (fleet-shell-host/fleet-desktop-host)
 runx test-lane run --lane frontend-playwright-stable --pool primary-testing
 runx test-lane run --lane frontend-uiauto-compare --pool primary-testing
 ```
@@ -92,7 +92,7 @@ harvest sprint. Tags are immutable evidence once published.
 
 ## Non-Blocking Carry-Forwards
 
-- `wsl2`, `win2`, `win2-travel` timeout from the controller -- non-blocking.
+- `fleet-shell-host-2`, `fleet-desktop-host-2`, `fleet-desktop-host-2-travel` timeout from the controller -- non-blocking.
 - Cloud-native deployment (`deploy/terraform`, `deploy/helm`) -- reference only.
 - Live marketplace, payment, and external API execution -- operator-gated.
 - Post-v9 defect harvest and v10.0.0 programme -- separate sprint series.

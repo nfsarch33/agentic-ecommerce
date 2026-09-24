@@ -16,7 +16,7 @@ semver tag is cut.
 Test file: `internal/qa/v5027_frontend_publication_path_test.go`
 
 ```
-GOENV=off GOROOT= go -C /Users/jason.lian/agentic-ecommerce test -race ./internal/qa/... -run TestV5027
+GOENV=off GOROOT= go -C $HOME/agentic-ecommerce test -race ./internal/qa/... -run TestV5027
 ```
 
 | Test | Result |
@@ -51,7 +51,7 @@ All tests PASS, race detector clean, `go vet` clean.
 
 - Backend v5026 gate PASSED: all backend publication path tests GREEN.
 - Backend VERSION: `9.0.0` (commit `c334951`).
-- Backend primary-testing: `wsl1-travel` PASS, `win1-travel` PASS (v5026 evidence).
+- Backend primary-testing: `host-shell-travel` PASS, `host-desktop-travel` PASS (v5026 evidence).
 - Backend QA package: all tests PASS with race detector.
 
 ## Carry-Forwards (deferred, not blocking)

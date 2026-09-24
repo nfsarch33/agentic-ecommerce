@@ -10,8 +10,8 @@ The post-v8 program promotes Agentic Ecommerce from a feature-heavy v8 release
 into a platform-baseline release path. The backend owns the current-release
 metadata guard, OpenAPI version policy, release checklist, release-final
 evidence chain, and the release-facing API, Temporal, and webhook contract
-docs. The broader program also standardizes `win1/wsl1` as `primary-testing`,
-keeps `win2/wsl2` as `secondary-testing` evidence, and treats only the primary
+docs. The broader program also standardizes `fleet-desktop-host/fleet-shell-host` as `primary-testing`,
+keeps `fleet-desktop-host-2/fleet-shell-host-2` as `secondary-testing` evidence, and treats only the primary
 pool as release-blocking while cloud deployment material stays reference-only.
 
 ## Decisions
@@ -21,7 +21,7 @@ pool as release-blocking while cloud deployment material stays reference-only.
    `TestV900ReleaseMetadataAligned`.
 2. Keep OpenAPI v1 endpoints stable through host v9.x; v2 preview endpoints
    remain opt-in and explicitly unstable.
-3. Treat `win1/wsl1` as the only blocking self-hosted release environment for
+3. Treat `fleet-desktop-host/fleet-shell-host` as the only blocking self-hosted release environment for
    backend integration, full-stack E2E, cleanup, and cross-repo
    frontend/UIAuto evidence. The semver tag `v9.0.0` remains uncut until `primary-testing`
    satisfies the controller SSH, trust, cleanup, and resource-health gates.

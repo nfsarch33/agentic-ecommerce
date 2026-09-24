@@ -9,8 +9,8 @@ Sprint: v3.7.1 QA (PR pending) | follows v3.7.0 Epic 10 hardening MVP (PR #92, S
 ## Context
 
 > Operational note (2026-05-14): pre-v10 EC QA keeps merge-blocking Playwright
-> on `primary-testing` (`win1/wsl1`). UIAuto and live-AI remain advisory and
-> may spill to `secondary-testing` (`win2/wsl2`) only after the controller
+> on `primary-testing` (`fleet-desktop-host/fleet-shell-host`). UIAuto and live-AI remain advisory and
+> may spill to `secondary-testing` (`fleet-desktop-host-2/fleet-shell-host-2`) only after the controller
 > activation gates pass.
 
 The v4.0.0 roadmap (ADR-028, PR #159) flagged a long-standing decision
@@ -22,7 +22,7 @@ required CI gate?
 ### Tier 1 (current production)
 
 - `omniparser-bridge` HTTPS POST offload to the primary EC testing pool
-  (`win1/wsl1`, with `win2/wsl2` as standby/overflow after activation) via
+  (`fleet-desktop-host/fleet-shell-host`, with `fleet-desktop-host-2/fleet-shell-host-2` as standby/overflow after activation) via
   signed HMAC
   request envelope per v3.3.0 EC-3-5 + v3.4.0 EC-4-1).
 - Backend client facade in `internal/uiauto/...` (the v3.7.0 EC-10
@@ -260,7 +260,7 @@ by this decision document).
 
 - 95%+ live agreement between Tier 1 and Tier 2 across all 22 specs
   in the canonical frontend checkout at
-  `/Users/jason.lian/Code/agentic-ecommerce-web/test/uiauto/scenarios` (per the existing
+  `$HOME/Code/agentic-ecommerce-web/test/uiauto/scenarios` (per the existing
   uiauto-comparison harness in `cmd/uiauto-compare`).
 - Zero CAPTCHA-pause backlog growth over a 7-day window of
   feature-flag-on traffic (per `ec_captcha_detections_total`

@@ -62,8 +62,8 @@ func TestV5026ReleaseChecklistHasAllGateTargets(t *testing.T) {
 		"backend-integration",
 		"full-stack-e2e",
 		"cleanup-testing",
-		"wsl1-travel",
-		"win1-travel",
+		"host-shell-travel",
+		"host-desktop-travel",
 	}
 	for _, term := range required {
 		if !strings.Contains(checklist, term) {
@@ -107,8 +107,8 @@ func TestV5026ADR036DocumentsPrimaryTestingContract(t *testing.T) {
 	assertFileContainsAll(t, "../../docs/adr/adr-036-v9-release-decisions.md",
 		"primary-testing",
 		"semver",
-		"win1",
-		"wsl1",
+		"fleet-desktop-host",
+		"fleet-shell-host",
 	)
 }
 

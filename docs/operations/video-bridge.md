@@ -31,7 +31,7 @@ directly. Specifically:
 All three classes of work belong on the EC testing pool behind a small HTTP
 bridge analogous to `image-bridge` (v3.2.0 EC-2-2 stub-with-doc) and
 `omniparser-bridge` (v3.3.0 EC-3-5 + v3.4.0 EC-4-1 RedNote facade).
-`win1/wsl1` is the active `primary-testing` pool; `win2/wsl2` is
+`fleet-host-1` is the active `primary-testing` pool; `fleet-host-2` is
 standby/overflow once controller activation gates pass. GPU-capable bridge
 workers can sit behind either pool, but the MacBook must stay control-plane
 only.

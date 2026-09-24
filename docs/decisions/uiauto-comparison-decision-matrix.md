@@ -8,8 +8,8 @@ Implements: ADR-030 v5 roadmap "Pair 14: uiauto vs Playwright comparison harness
 Depends on: `docs/decisions/uiauto-tier-2-promotion.md` (v3.7.1 Tier 2 GO decision)
 
 > Operational note (2026-05-14): Playwright remains the merge-blocking browser
-> gate on `primary-testing` (`win1/wsl1`). UIAuto stays advisory until parity
-> is proven and may overflow to `secondary-testing` (`win2/wsl2`) only after
+> gate on `primary-testing` (`fleet-host-1`). UIAuto stays advisory until parity
+> is proven and may overflow to `secondary-testing` (`fleet-host-2`) only after
 > controller activation gates pass.
 
 ## Purpose

@@ -19,9 +19,9 @@ v9.0.0 establishes the backend platform baseline for the post-v8 program:
   full-stack E2E, cleanup, frontend stable Playwright, and UIAuto evidence.
 - `secondary-testing` remains evidence and overflow capacity, but it is not the
   blocking release lane in the current EC programme.
-- Current fleet truth is release-relevant: `wsl1-travel`, `win1-travel`, and
-  `wsl2-travel` are green from the controller; `wsl2`, `win2`, and
-  `win2-travel` still time out and therefore keep the semver tag uncut.
+- Current fleet truth is release-relevant: `host-shell-travel`, `host-desktop-travel`, and
+  `fleet-shell-host-2-travel` are green from the controller; `fleet-shell-host-2`, `fleet-desktop-host-2`, and
+  `fleet-desktop-host-2-travel` still time out and therefore keep the semver tag uncut.
 - Cloud-native deployment material under `deploy/terraform`, `deploy/helm`, and
   `deploy/otel` remains reference-only for `v9.0.0`; it is maintained but no
   longer blocks the semver tag.
@@ -37,9 +37,9 @@ v9.0.0 establishes the backend platform baseline for the post-v8 program:
 
 ## Current Blocking Status
 
-- Latest controller-side canaries: `wsl1-travel` PASS, `win1-travel` PASS,
-  `wsl2-travel` PASS, `wsl2` FAIL (timeout), `win2` FAIL (timeout),
-  `win2-travel` FAIL (timeout).
+- Latest controller-side canaries: `host-shell-travel` PASS, `host-desktop-travel` PASS,
+  `fleet-shell-host-2-travel` PASS, `fleet-shell-host-2` FAIL (timeout), `fleet-desktop-host-2` FAIL (timeout),
+  `fleet-desktop-host-2-travel` FAIL (timeout).
 - The semver tag `v9.0.0` remains uncut until `primary-testing` closes its
   lane-level runtime gaps and the blocking release lanes pass on the primary
   pool.
@@ -50,7 +50,7 @@ v9.0.0 establishes the backend platform baseline for the post-v8 program:
 
 Current blockers (v5026 publication path update -- 2026-05-19T00:00+10:00):
 
-- `wsl2`, `win2`, and `win2-travel` remain non-primary and do not block the tag.
+- `fleet-shell-host-2`, `fleet-desktop-host-2`, and `fleet-desktop-host-2-travel` remain non-primary and do not block the tag.
 - `primary-testing` backend-integration and full-stack-e2e lanes must be re-run
   on the merged v5025 HEAD `ef15859bf46d73029fac404b83b05c7c0cf7b9de` before
   the semver tag is cut.
@@ -75,8 +75,8 @@ Required backend release gates for this branch:
 - `runx make --repo ecommerce -- monitoring-validate`
 - `runx make --repo ecommerce -- compose-config-prod`
 - `runx sentrux gate --repo ecommerce`
-- `runx ssh exec --target wsl1-travel --cmd ssh-canary-wsl`
-- `runx ssh exec --target win1-travel --cmd ssh-canary-win`
+- `runx ssh exec --target host-shell-travel --cmd ssh-canary-wsl`
+- `runx ssh exec --target host-desktop-travel --cmd ssh-canary-win`
 - `runx test-lane run --lane backend-integration --pool primary-testing`
 - `runx test-lane run --lane full-stack-e2e --pool primary-testing`
 - `runx test-lane run --lane cleanup-testing --pool primary-testing`

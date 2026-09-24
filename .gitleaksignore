@@ -3,11 +3,10 @@
 # NOTE: gitleaks does NOT support inline `# comment` syntax. Place each
 # fingerprint on its own line; put rationale in a separate `#`-prefixed
 # comment line above the fingerprint.
-# See: ~/.cursor/rules/00-p0-secrets-pre-push-hook.mdc
+# See the repository secrets SOP in the project documentation.
 #
-# All entries below were added during v18726-3 ("126-unignored cleanup")
-# which was cancelled; the agent resumed cleanup here under
-# v18733-1 ("workspace doctor GREEN") to unblock the repo push.
+# The entries below were added during the historical unignored-findings
+# cleanup passes to unblock the repo push.
 
 # tests/integration/v621/jwt_rotation_e2e_test.go:43-44
 # Synthetic JWT secrets for v6.21 rotation e2e fixture

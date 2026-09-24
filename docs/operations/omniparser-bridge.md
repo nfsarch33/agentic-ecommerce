@@ -17,8 +17,8 @@ This document captures the deploy contract on the **caller side**
 Blocking live-AI and visual-parsing lanes must run on the EC testing pool, not
 on the MacBook controller:
 
-- `primary-testing` = `win1/wsl1`
-- `secondary-testing` = `win2/wsl2` once activation gates pass
+- `primary-testing` = `fleet-desktop-host/fleet-shell-host`
+- `secondary-testing` = `fleet-desktop-host-2/fleet-shell-host-2` once activation gates pass
 
 The MacBook may still use the deterministic stub or a local tunnel for
 contract-level debugging, but sustained OmniParser traffic belongs on the

@@ -21,9 +21,9 @@ chain required before a semver-only `v9.0.0` tag is cut.
 
 ### Pair 2: Testing Pool Baseline
 
-- Documented `win1/wsl1` as the backend's merge-blocking `primary-testing`
+- Documented the fleet host as the backend's merge-blocking `primary-testing`
   environment for integration, smoke, and cleanup lanes.
-- Kept `win2/wsl2` as non-blocking evidence and overflow capacity while
+- Kept the standby host as non-blocking evidence and overflow capacity while
   `primary-testing` remains the only release blocker in the active EC
   programme.
 

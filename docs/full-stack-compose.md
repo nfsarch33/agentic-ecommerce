@@ -127,9 +127,9 @@ docker compose --env-file .env.compose -f docker-compose.yml down
 ## Frontend Image
 
 The default compose file references `ghcr.io/nfsarch33/agentic-ecommerce-web`.
-For the active self-hosted GitLab path on `wsl1`, use
+For the active self-hosted GitLab path on the primary shell runner, use
 `docker-compose.gitlab-local.yml` so the frontend is built directly from the
-canonical tester checkout at `EC_FRONTEND_REPO_PATH=/home/jason/Code/agentic-ecommerce-web`.
+canonical tester checkout at `EC_FRONTEND_REPO_PATH=$HOME/Code/agentic-ecommerce-web`.
 This keeps local CD loopback-bound without requiring GHCR image promotion.
 
 ## Security Boundaries
