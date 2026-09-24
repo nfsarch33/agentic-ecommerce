@@ -77,7 +77,7 @@ runx worktree run --repo ecommerce --branch qa/v8-p08-oom-observability -- /opt/
 The durable probe file is:
 
 ```text
-/Users/jason.lian/logs/runx/resource-probe.ndjson
+$HOME/logs/runx/resource-probe.ndjson
 ```
 
 Latest observed samples include the current `free_pct` shape:

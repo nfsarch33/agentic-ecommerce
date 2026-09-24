@@ -104,7 +104,7 @@ func TestApplyAgentraceKPIs_ExportsStoryMetrics(t *testing.T) {
 				StoryID:        "v5009r-2",
 				Repo:           "agentic-ecommerce",
 				Branch:         "feat/v5009r-agentrace-story-metrics",
-				RemoteTarget:   "wsl1-travel",
+				RemoteTarget:   "node-1-travel",
 				WallSeconds:    300,
 				ActiveSeconds:  120,
 				BlockedSeconds: 180,
@@ -131,7 +131,7 @@ func TestApplyAgentraceKPIs_ExportsStoryMetrics(t *testing.T) {
 		"ec_agentrace_story_blocked_seconds",
 		"ec_agentrace_story_outcomes_total",
 		"story_id=\"v5009r-2\"",
-		"remote_target=\"wsl1-travel\"",
+		"remote_target=\"node-1-travel\"",
 		"outcome=\"blocked\"",
 	}
 	for _, check := range checks {

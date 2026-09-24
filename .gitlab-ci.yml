@@ -10,11 +10,17 @@ stages:
 variables:
   GIT_STRATEGY: fetch
   GIT_SUBMODULE_STRATEGY: none
-  EC_FRONTEND_REPO_PATH: "/home/jason/Code/agentic-ecommerce-web"
+  # Runner tag: this yaml default is generic. The real tag of the self-hosted
+  # shell runner is a project-level CI/CD variable of the same name, which
+  # overrides this value. EC_FRONTEND_REPO_PATH is NOT set here on purpose:
+  # $HOME does not expand in this block, and scripts/ci/full_stack_e2e.sh and
+  # docker-compose.gitlab-local.yml already default to $HOME/Code/agentic-ecommerce-web
+  # for the runner user at shell time.
+  EC_CI_RUNNER_TAG: "shell"
 
 default:
   tags:
-    - wsl1-shell-primary
+    - $EC_CI_RUNNER_TAG
   interruptible: true
   before_script:
     - mkdir -p .gitlab-artifacts
@@ -22,12 +28,12 @@ default:
 status_pending:
   stage: status
   script:
-    - bash scripts/ci/github_status.sh pending "GitLab pipeline started on wsl1"
+    - bash scripts/ci/github_status.sh pending "GitLab pipeline started"
   allow_failure: true
 
 preflight:
   stage: preflight
-  resource_group: wsl1-primary
+  resource_group: primary
   script:
     - bash scripts/ci/preflight.sh
   artifacts:
@@ -37,7 +43,7 @@ preflight:
 
 contract_and_race:
   stage: contract
-  resource_group: wsl1-primary
+  resource_group: primary
   script:
     - GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go test -race ./...
     - make contract-test
@@ -49,7 +55,7 @@ contract_and_race:
 
 backend_integration:
   stage: integration
-  resource_group: wsl1-primary
+  resource_group: primary
   timeout: 30m
   script:
     - bash scripts/ci/backend_integration.sh
@@ -60,7 +66,7 @@ backend_integration:
 
 full_stack_e2e:
   stage: local_stack
-  resource_group: wsl1-primary
+  resource_group: primary
   timeout: 45m
   script:
     - bash scripts/ci/full_stack_e2e.sh
@@ -71,7 +77,7 @@ full_stack_e2e:
 
 cleanup_testing:
   stage: cleanup
-  resource_group: wsl1-primary
+  resource_group: primary
   script:
     - bash scripts/ci/cleanup.sh
   when: always
@@ -83,13 +89,13 @@ cleanup_testing:
 status_success:
   stage: notify
   script:
-    - bash scripts/ci/github_status.sh success "GitLab pipeline passed on wsl1"
+    - bash scripts/ci/github_status.sh success "GitLab pipeline passed"
   when: on_success
   allow_failure: true
 
 status_failure:
   stage: notify
   script:
-    - bash scripts/ci/github_status.sh failure "GitLab pipeline failed on wsl1"
+    - bash scripts/ci/github_status.sh failure "GitLab pipeline failed"
   when: on_failure
   allow_failure: true

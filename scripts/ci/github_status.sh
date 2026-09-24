@@ -15,7 +15,7 @@ if [[ -z "${GITHUB_TOKEN:-}" || -z "${GITHUB_REPOSITORY:-}" || -z "${GITHUB_SHA:
 fi
 
 target_url="${GITHUB_TARGET_URL:-${CI_PIPELINE_URL:-}}"
-context="${GITHUB_STATUS_CONTEXT:-gitlab/wsl1-primary}"
+context="${GITHUB_STATUS_CONTEXT:-gitlab/primary}"
 api_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
 
 payload="$(python3 - "${state}" "${description}" "${context}" "${target_url}" <<'PY'

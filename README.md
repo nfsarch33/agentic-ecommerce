@@ -12,10 +12,10 @@ Release gate note: the semver tag `v9.0.0` remains uncut until
 evidence is complete. `secondary-testing` remains useful evidence, but it is
 not the blocking release lane in the current EC programme.
 
-Active v9.x release-gate CI runs on self-hosted GitLab CE on `wsl1`, with
+Active v9.x release-gate CI runs on self-hosted GitLab CE on the primary shell runner, with
 GitHub retained as the canonical repo and PR host. The GitLab pipeline posts
 commit status back to GitHub and drives the blocking local-CD lane on
-`win1/wsl1`.
+`the fleet host`.
 
 ## Features
 
@@ -169,7 +169,7 @@ make build
 make coverage-check          # >= 83% backend coverage
 make monitoring-validate
 make release-perf-smoke
-make full-stack-e2e          # local-CD smoke against win1/wsl1 baseline
+make full-stack-e2e          # local-CD smoke against the fleet host baseline
 sentrux gate .               # complex_fn=4 hard gate
 ```
 

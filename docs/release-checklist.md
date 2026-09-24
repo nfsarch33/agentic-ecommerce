@@ -74,8 +74,8 @@ Expected result: the stack boots in under 90 seconds on a healthy local Docker r
 ## Primary Pool Gates
 
 ```bash
-runx ssh exec --target wsl1-travel --cmd ssh-canary-wsl
-runx ssh exec --target win1-travel --cmd ssh-canary-win
+runx ssh exec --target host-shell-travel --cmd ssh-canary-wsl
+runx ssh exec --target host-desktop-travel --cmd ssh-canary-win
 runx test-lane run --lane backend-integration --pool primary-testing
 runx test-lane run --lane full-stack-e2e --pool primary-testing
 runx test-lane run --lane cleanup-testing --pool primary-testing
@@ -90,10 +90,10 @@ the stack tag.
 Optional secondary-pool evidence:
 
 ```bash
-runx ssh exec --target wsl2-travel --cmd ssh-canary-wsl
-runx ssh exec --target wsl2 --cmd ssh-canary-wsl
-runx ssh exec --target win2 --cmd ssh-canary-win
-runx ssh exec --target win2-travel --cmd ssh-canary-win
+runx ssh exec --target fleet-shell-host-2-travel --cmd ssh-canary-wsl
+runx ssh exec --target fleet-shell-host-2 --cmd ssh-canary-wsl
+runx ssh exec --target fleet-desktop-host-2 --cmd ssh-canary-win
+runx ssh exec --target fleet-desktop-host-2-travel --cmd ssh-canary-win
 runx test-lane run --lane backend-integration --pool secondary-testing
 runx test-lane run --lane full-stack-e2e --pool secondary-testing
 runx test-lane run --lane cleanup-testing --pool secondary-testing

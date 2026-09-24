@@ -368,7 +368,7 @@ monitoring-validate:
 # docker-compose.dev.yml. Uses host paths from $(HOME) for the framework
 # checkout and the frontend scenarios so canonical (non-worktree) checkouts
 # work out of the box. The EC testing-pool contract expects the canonical
-# frontend checkout at /home/jason/Code/agentic-ecommerce-web on WSL hosts;
+# frontend checkout at $HOME/Code/agentic-ecommerce-web on WSL hosts;
 # override FRONTEND_REPO_PATH or EC_FRONTEND_REPO_PATH when a pool uses a
 # different layout.
 UIAUTO_FRAMEWORK_PATH ?= $(HOME)/Code/personal/uiauto-framework

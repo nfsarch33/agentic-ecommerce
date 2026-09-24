@@ -141,10 +141,10 @@ func TestAgentraceAdapter_JSONLFallback_DerivesStoryMetricsFromRawEvents(t *test
 	t.Parallel()
 	dir := t.TempDir()
 	jsonlPath := filepath.Join(dir, "events.jsonl")
-	raw := `{"type":"UserPromptSubmit","timestamp":1000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","payload":{"sprint_id":"v5009r","story_id":"v5009r-2","repo":"agentic-ecommerce","branch":"feat/v5009r-agentrace-story-metrics","remote_target":"wsl1-travel"}}
+	raw := `{"type":"UserPromptSubmit","timestamp":1000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","payload":{"sprint_id":"v5009r","story_id":"v5009r-2","repo":"agentic-ecommerce","branch":"feat/v5009r-agentrace-story-metrics","remote_target":"node-1-travel"}}
 {"type":"PreToolUse","timestamp":2000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","tool_call_id":"tc-1","tool_name":"Shell"}
 {"type":"PostToolUse","timestamp":5000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","tool_call_id":"tc-1","tool_name":"Shell"}
-{"type":"Stop","timestamp":10000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","payload":{"sprint_id":"v5009r","story_id":"v5009r-2","repo":"agentic-ecommerce","branch":"feat/v5009r-agentrace-story-metrics","remote_target":"wsl1-travel","blocked_reason":"ssh_timeout"}}`
+{"type":"Stop","timestamp":10000,"session_id":"agentic-ecommerce__v5009r-2","agent_id":"root","payload":{"sprint_id":"v5009r","story_id":"v5009r-2","repo":"agentic-ecommerce","branch":"feat/v5009r-agentrace-story-metrics","remote_target":"node-1-travel","blocked_reason":"ssh_timeout"}}`
 	if err := os.WriteFile(jsonlPath, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -179,8 +179,8 @@ func TestAgentraceAdapter_JSONLFallback_DerivesStoryMetricsFromRawEvents(t *test
 	if story.Outcome != "blocked" {
 		t.Fatalf("Outcome = %q, want blocked", story.Outcome)
 	}
-	if story.RemoteTarget != "wsl1-travel" {
-		t.Fatalf("RemoteTarget = %q, want wsl1-travel", story.RemoteTarget)
+	if story.RemoteTarget != "node-1-travel" {
+		t.Fatalf("RemoteTarget = %q, want node-1-travel", story.RemoteTarget)
 	}
 }
 

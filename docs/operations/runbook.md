@@ -18,9 +18,9 @@ For the bridge-specific deploy contract see
 - The backend-owned lane entrypoint is `go run ./cmd/testing-lane --lane=<name>`
   from the repo root. `make testing-lane` builds the equivalent
   `./bin/testing-lane` binary when a host wants a prebuilt runner.
-- `primary-testing` maps to `win1/wsl1` and remains the default for blocking
+- `primary-testing` maps to `fleet-desktop-host/fleet-shell-host` and remains the default for blocking
   backend integration and Playwright lanes.
-- `secondary-testing` maps to `win2/wsl2` and stays standby/overflow until
+- `secondary-testing` maps to `fleet-desktop-host-2/fleet-shell-host-2` and stays standby/overflow until
   onboarding, SSH canaries, cleanup proof, and resource probes are green from
   the controller.
 - `any-testing` may spill advisory or overflow work onto a healthy secondary

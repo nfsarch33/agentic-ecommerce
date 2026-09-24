@@ -23,10 +23,11 @@ var infrastructureHostnames = []string{
 	"localhost:8", "localhost:9",
 }
 
-// hardcodedPathPrefixes detects leaked local paths per no-shell-leak.
+// hardcodedPathPrefixes detects leaked local paths per no-shell-leak: any
+// absolute home-directory reference, whatever the username in it.
 var hardcodedPathPrefixes = []string{
-	"/Users/jason", "/home/jason",
-	"/Users/user", "/home/user",
+	"/Users/",
+	"/home/",
 	"C:\\Users\\",
 }
 

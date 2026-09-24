@@ -27,8 +27,8 @@ Specifically:
   call with retries.
 
 All three classes of work belong on the EC testing pool behind a small HTTP
-bridge analogous to `omniparser-bridge`. `win1/wsl1` is the active
-`primary-testing` pool; `win2/wsl2` is standby/overflow once controller
+bridge analogous to `omniparser-bridge`. `fleet-host-1` is the active
+`primary-testing` pool; `fleet-host-2` is standby/overflow once controller
 activation gates pass. GPU-capable bridge workers can sit behind either pool,
 but the MacBook must stay control-plane only.
 
