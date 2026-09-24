@@ -1,27 +1,30 @@
 # Custom Gitleaks ruleset (extends Gitleaks defaults).
 # Run: gitleaks detect --config .gitleaks.toml --source .
 # History scan: gitleaks detect --config .gitleaks.toml --source . --log-opts="--all"
+# Working tree only: gitleaks dir . --config .gitleaks.toml
 #
-# Custom rules (added after the historical gateway/runner/PAT leaks):
-#   - zdai-bearer     : ZD AI gateway bearer (cutover 2026-05-28 EOD; still hunted)
+# Custom rules:
+#   - zdai-bearer     : gateway bearer token (zdai_ prefix)
 #   - glrt-runner     : GitLab CE runner auth token
 #   - aws-access-key  : AKIA / ASIA prefix
 #   - ops-ey-jwt      : 1Password service-account JWT
 #   - gh-pat          : github_pat_*/gh[pour]_*_... variants
 #   - openai-anthropic: sk- prefixed keys (OpenAI/Anthropic/MiniMax)
 #
-# All rules are allowlistable via .gitleaksignore using the *fingerprint* hash,
-# never the rule ID. Never blanket-suppress entire files unless they are
-# genuine test fixtures with synthetic secrets.
+# All rules are allowlistable via .gitleaksignore using the *fingerprint*,
+# never the rule ID. History-scan fingerprints are commit:path:rule:line;
+# working-tree (dir / --no-git) fingerprints are path:rule:line. Never
+# blanket-suppress whole files: a path allowlist would also hide a real key
+# pasted into that file later.
 
 [extend]
 useDefault = true
 
 [[rules]]
 id = "zdai-bearer"
-description = "Zendesk AI gateway bearer token (ZDGatewayOpenAI)"
+description = "Gateway bearer token (zdai_ prefix)"
 regex = '''zdai_[A-Za-z0-9_-]{40,80}'''
-tags = ["secret", "zd-gateway"]
+tags = ["secret", "gateway"]
 
 [[rules]]
 id = "glrt-runner"
@@ -52,17 +55,12 @@ id = "openai-anthropic"
 description = "OpenAI / Anthropic / MiniMax-style API key"
 regex = '''sk-(live-|test-)?[A-Za-z0-9]{20,}'''
 tags = ["secret", "llm"]
-# Working-tree scan (--no-git) allowlist: .gitleaksignore fingerprints are
-# commit-based and do not apply there. Everything below was verified by hand:
-# synthetic fixtures and Go field references, never credentials.
+
+# generic-api-key fires on two Go field REFERENCES (the secret side of the
+# match is the field name, not a value); the regex allowlist targets that
+# secret text. Synthetic fixture values are listed per line in .gitleaksignore.
 [allowlist]
-description = "Synthetic test fixtures and field-reference false positives."
-paths = [
-  '''tests/integration/v621/jwt_rotation_e2e_test\.go''',
-  '''internal/auth/jwt/rotator_test\.go''',
-  '''internal/(billing|security|domain/digital|adapter/signedurl)/(fuzz|bench)_test\.go''',
-]
-# generic-api-key matches on Go field references, not values.
+description = "Go field references the generic-api-key rule mistakes for values."
 regexes = [
   '''APIKeyV3''',
   '''TikTokAPIP95Ms''',

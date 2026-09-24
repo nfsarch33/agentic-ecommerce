@@ -63,3 +63,22 @@ b11e44a28b21b3a71c485b95b2a57f2c2ab31567:internal/auth/jwt/rotator_test.go:gener
 b11e44a28b21b3a71c485b95b2a57f2c2ab31567:internal/auth/jwt/rotator_test.go:generic-api-key:13
 f71ca7cfe1f1fe58513a75d3af7b907ca6a45ff8:internal/auth/jwt/rotator_test.go:generic-api-key:12
 f71ca7cfe1f1fe58513a75d3af7b907ca6a45ff8:internal/auth/jwt/rotator_test.go:generic-api-key:13
+
+# Working-tree scan (gitleaks dir / detect --no-git) fingerprints: path:rule:line,
+# no commit. The same synthetic fixture values and Go field references as the
+# history fingerprints above; regenerate with
+#   gitleaks dir . --config .gitleaks.toml --report-format json --report-path /tmp/gl.json
+# and copy the Fingerprint field of each hand-verified finding.
+internal/adapter/signedurl/fuzz_test.go:generic-api-key:18
+internal/adapter/payment/wechat_adapter.go:generic-api-key:52
+internal/auth/jwt/rotator_test.go:generic-api-key:12
+internal/auth/jwt/rotator_test.go:generic-api-key:13
+internal/billing/fuzz_test.go:generic-api-key:19
+internal/domain/digital/bench_test.go:generic-api-key:12
+internal/domain/digital/fuzz_test.go:generic-api-key:14
+internal/security/fuzz_test.go:generic-api-key:19
+internal/security/bench_test.go:generic-api-key:17
+internal/evomap/sink.go:generic-api-key:621
+internal/evomap/sink.go:generic-api-key:622
+tests/integration/v621/jwt_rotation_e2e_test.go:generic-api-key:43
+tests/integration/v621/jwt_rotation_e2e_test.go:generic-api-key:44

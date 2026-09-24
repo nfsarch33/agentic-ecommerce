@@ -12,7 +12,7 @@ Release gate note: the semver tag `v9.0.0` remains uncut until
 evidence is complete. `secondary-testing` remains useful evidence, but it is
 not the blocking release lane in the current EC programme.
 
-Active v9.x release-gate CI runs on self-hosted GitLab CE on `wsl1`, with
+Active v9.x release-gate CI runs on self-hosted GitLab CE on the primary shell runner, with
 GitHub retained as the canonical repo and PR host. The GitLab pipeline posts
 commit status back to GitHub and drives the blocking local-CD lane on
 `the fleet host`.
