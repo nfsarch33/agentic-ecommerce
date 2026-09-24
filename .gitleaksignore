@@ -39,3 +39,27 @@ dd116a88feb4f46bec6ebb62a543ee1fcf4f842c:internal/auth/jwt/rotator_test.go:gener
 7af4d4b9b6f55c2b22dea8a82d879efd5c7a86cd:internal/security/fuzz_test.go:generic-api-key:19
 7af4d4b9b6f55c2b22dea8a82d879efd5c7a86cd:internal/adapter/signedurl/fuzz_test.go:generic-api-key:18
 7af4d4b9b6f55c2b22dea8a82d879efd5c7a86cd:internal/domain/digital/fuzz_test.go:generic-api-key:14
+
+# Full-history scan triage (synthetic fixtures and field references, not
+# credentials): JWT rotation test secrets ("v1/v2-secret-32-bytes-padding-*")
+# found at each commit they appeared in, fuzz/bench literals
+# ("fuzz-secret-at-least-32-bytes-long-yes", "bench-..."), and
+# generic-api-key false positives on Go field references (APIKeyV3,
+# MaxTikTokAPIP95Ms). Each verified by hand before ignoring.
+055694519870ada508ba4299bd410354928e757c:internal/adapter/payment/wechat_adapter.go:generic-api-key:52
+2dec74b2d820bba32110081790adebf11eaac5c4:internal/adapter/signedurl/fuzz_test.go:generic-api-key:18
+2dec74b2d820bba32110081790adebf11eaac5c4:internal/billing/fuzz_test.go:generic-api-key:19
+2dec74b2d820bba32110081790adebf11eaac5c4:internal/domain/digital/bench_test.go:generic-api-key:12
+2dec74b2d820bba32110081790adebf11eaac5c4:internal/domain/digital/fuzz_test.go:generic-api-key:14
+2dec74b2d820bba32110081790adebf11eaac5c4:internal/security/bench_test.go:generic-api-key:17
+2dec74b2d820bba32110081790adebf11eaac5c4:internal/security/fuzz_test.go:generic-api-key:19
+33c3af5e8c34dec44b3a944c80a3a16e88b3ea46:tests/integration/v621/jwt_rotation_e2e_test.go:generic-api-key:43
+33c3af5e8c34dec44b3a944c80a3a16e88b3ea46:tests/integration/v621/jwt_rotation_e2e_test.go:generic-api-key:44
+70bc394049460593ad41dbd81a7dd59a59e0d3be:internal/evomap/sink.go:generic-api-key:324
+70bc394049460593ad41dbd81a7dd59a59e0d3be:internal/evomap/sink.go:generic-api-key:325
+9a371f92f56fdcb1cace1fb5bcca0dad18fb368a:internal/evomap/sink.go:generic-api-key:401
+9a371f92f56fdcb1cace1fb5bcca0dad18fb368a:internal/evomap/sink.go:generic-api-key:402
+b11e44a28b21b3a71c485b95b2a57f2c2ab31567:internal/auth/jwt/rotator_test.go:generic-api-key:12
+b11e44a28b21b3a71c485b95b2a57f2c2ab31567:internal/auth/jwt/rotator_test.go:generic-api-key:13
+f71ca7cfe1f1fe58513a75d3af7b907ca6a45ff8:internal/auth/jwt/rotator_test.go:generic-api-key:12
+f71ca7cfe1f1fe58513a75d3af7b907ca6a45ff8:internal/auth/jwt/rotator_test.go:generic-api-key:13
