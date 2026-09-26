@@ -7,7 +7,9 @@ import (
 )
 
 var (
-	ErrFormat      = errors.New("auphone: invalid phone number format")
+	// ErrFormat is returned for empty input, non-digit characters or the wrong digit count.
+	ErrFormat = errors.New("auphone: invalid phone number format")
+	// ErrUnsupported is returned for a 9-digit number that is not mobile (4) or geographic (2, 3, 7, 8).
 	ErrUnsupported = errors.New("auphone: unsupported phone number")
 )
 
