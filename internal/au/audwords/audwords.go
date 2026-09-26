@@ -8,7 +8,9 @@ import (
 )
 
 var (
+	// ErrNegative is returned when cents < 0.
 	ErrNegative = errors.New("audwords: negative amount")
+	// ErrTooLarge is returned when the amount exceeds 999,999,999 dollars.
 	ErrTooLarge = errors.New("audwords: amount over 999999999 dollars")
 )
 
