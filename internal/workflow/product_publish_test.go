@@ -34,6 +34,12 @@ func TestProductPublishWorkflowWaitsForReviewSignalBeforePublishing(t *testing.T
 	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
 		return nil
 	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
 
 	input := ProductPublishInput{ProductID: "product-123", RequestedBy: "operator@example.com"}
 	env.OnActivity(CheckComplianceActivity, mock.Anything, ProductPublishActivityInput{ProductID: input.ProductID}).Return(
@@ -84,6 +90,12 @@ func TestProductPublishWorkflowStopsWhenHumanReviewRejects(t *testing.T) {
 	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
 		return nil
 	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
 
 	input := ProductPublishInput{ProductID: "product-456", RequestedBy: "operator@example.com"}
 	env.OnActivity(CheckComplianceActivity, mock.Anything, ProductPublishActivityInput{ProductID: input.ProductID}).Return(
@@ -122,6 +134,12 @@ func TestProductPublishWorkflowStopsWhenComplianceFails(t *testing.T) {
 	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
 		return nil
 	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
 
 	input := ProductPublishInput{ProductID: "product-789"}
 	env.OnActivity(CheckComplianceActivity, mock.Anything, ProductPublishActivityInput{ProductID: input.ProductID}).Return(
@@ -157,6 +175,12 @@ func TestProductPublishWorkflowStopsWhenMediaValidationFails(t *testing.T) {
 	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
 		return nil
 	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
 
 	input := ProductPublishInput{ProductID: "product-media-fail"}
 	env.OnActivity(CheckComplianceActivity, mock.Anything, ProductPublishActivityInput{ProductID: input.ProductID}).Return(
@@ -365,6 +389,7 @@ func TestProductPublishWorkflowE2EWithRealActivities(t *testing.T) {
 	env.RegisterActivityWithOptions(activities.ValidateMedia, activity.RegisterOptions{Name: ValidateMediaActivity})
 	env.RegisterActivityWithOptions(activities.PublishToWooCommerce, activity.RegisterOptions{Name: PublishToWooCommerceActivity})
 	env.RegisterActivityWithOptions(activities.RecordWorkflowEvent, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error { return nil }, activity.RegisterOptions{Name: RecordApprovalActivityName})
 	env.RegisterDelayedCallback(func() {
 		env.SignalWorkflow(ProductPublishReviewSignal, ReviewSignal{Approved: true, Reviewer: "qa@example.com", Note: "qa approved"})
 	}, time.Minute)
@@ -536,6 +561,12 @@ func registerNoopRecordActivity(env *testsuite.TestWorkflowEnvironment) {
 	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
 		return nil
 	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
 }
 
 type activityProductRepo struct {

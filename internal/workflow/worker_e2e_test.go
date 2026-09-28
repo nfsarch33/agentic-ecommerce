@@ -47,6 +47,8 @@ func TestWorkerRegistrationCoversAllProductionNames(t *testing.T) {
 	env.RegisterActivityWithOptions(noopMediaValidationActivity, activity.RegisterOptions{Name: ValidateMediaActivity})
 	env.RegisterActivityWithOptions(noopPublishActivity, activity.RegisterOptions{Name: PublishToWooCommerceActivity})
 	env.RegisterActivityWithOptions(noopWorkflowEventRecorder, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error { return nil }, activity.RegisterOptions{Name: RecordApprovalActivityName})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error { return nil }, activity.RegisterOptions{Name: RecordApprovalActivityName})
 	env.RegisterActivityWithOptions(noopGenerateContentActivity, activity.RegisterOptions{Name: ContentGenerateActivity})
 	env.RegisterActivityWithOptions(noopFactCheckActivity, activity.RegisterOptions{Name: ContentFactCheckActivity})
 	env.RegisterActivityWithOptions(noopEvaluateActivity, activity.RegisterOptions{Name: ContentEvaluateActivity})

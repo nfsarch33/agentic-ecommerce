@@ -151,6 +151,7 @@ func assertReleasePublishWorkflow(t *testing.T) {
 	env.RegisterActivityWithOptions(activities.ValidateMedia, activity.RegisterOptions{Name: ValidateMediaActivity})
 	env.RegisterActivityWithOptions(activities.PublishToWooCommerce, activity.RegisterOptions{Name: PublishToWooCommerceActivity})
 	env.RegisterActivityWithOptions(activities.RecordWorkflowEvent, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error { return nil }, activity.RegisterOptions{Name: RecordApprovalActivityName})
 	env.RegisterDelayedCallback(func() {
 		env.SignalWorkflow(ProductPublishReviewSignal, ReviewSignal{Approved: true, Reviewer: "release-demo"})
 	}, time.Minute)
