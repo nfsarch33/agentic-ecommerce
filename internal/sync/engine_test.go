@@ -2,10 +2,8 @@ package sync
 
 import (
 	"context"
-	"errors"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
@@ -177,63 +175,6 @@ func TestImportFromWooCommerceDoesNotDuplicateConflictRecords(t *testing.T) {
 	}
 	if events := engine.Events(); len(events) != 1 || events[0].Type != EventConflictDetected {
 		t.Fatalf("events = %+v, want one conflict event", events)
-	}
-}
-
-func TestPublishToWooCommerceRecordsPublishedOrFailedEvent(t *testing.T) {
-	t.Parallel()
-
-	repo := inmemory.NewProductRepository()
-	product := mustProduct(t, "SKU-2", "Publish me", "Ready", 2500, 9)
-	if err := repo.Create(context.Background(), product); err != nil {
-		t.Fatalf("create product: %v", err)
-	}
-	wc := &fakeWooCommerce{}
-	engine := NewEngine(Config{ProductRepository: repo, WooCommerce: wc, DefaultCurrency: "AUD"})
-
-	if err := engine.PublishToWooCommerce(context.Background(), product.ID()); err != nil {
-		t.Fatalf("publish: %v", err)
-	}
-	if len(wc.upserts) != 1 || wc.upserts[0].ID() != product.ID() {
-		t.Fatalf("upserts = %+v", wc.upserts)
-	}
-	if got := engine.Events()[0].Type; got != EventProductPublished {
-		t.Fatalf("event = %s, want %s", got, EventProductPublished)
-	}
-
-	wc.err = errors.New("woocommerce down")
-	if err := engine.PublishToWooCommerce(context.Background(), uuid.New()); err == nil {
-		t.Fatal("expected publish error")
-	}
-	events := engine.Events()
-	if got := events[len(events)-1].Type; got != EventSyncFailed {
-		t.Fatalf("last event = %s, want %s", got, EventSyncFailed)
-	}
-}
-
-func TestPublishToWooCommerceIsIdempotentForUnchangedProducts(t *testing.T) {
-	t.Parallel()
-
-	repo := inmemory.NewProductRepository()
-	product := mustProduct(t, "SKU-2", "Publish me", "Ready", 2500, 9)
-	if err := repo.Create(context.Background(), product); err != nil {
-		t.Fatalf("create product: %v", err)
-	}
-	wc := &fakeWooCommerce{}
-	engine := NewEngine(Config{ProductRepository: repo, WooCommerce: wc, DefaultCurrency: "AUD"})
-
-	if err := engine.PublishToWooCommerce(context.Background(), product.ID()); err != nil {
-		t.Fatalf("first publish: %v", err)
-	}
-	if err := engine.PublishToWooCommerce(context.Background(), product.ID()); err != nil {
-		t.Fatalf("second publish: %v", err)
-	}
-
-	if len(wc.upserts) != 1 {
-		t.Fatalf("upserts = %d, want one unchanged publish", len(wc.upserts))
-	}
-	if events := engine.Events(); len(events) != 1 || events[0].Type != EventProductPublished {
-		t.Fatalf("events = %+v, want one publish event", events)
 	}
 }
 

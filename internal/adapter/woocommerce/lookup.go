@@ -2,6 +2,8 @@ package woocommerce
 
 import (
 	"context"
+
+	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -71,4 +73,13 @@ func FieldsFor(sku, title, description, priceCents string, stock int, status str
 		"stock_quantity":    strconv.Itoa(stock),
 		"status":            status,
 	}
+}
+
+// WCStatus maps a domain product status onto the store's status vocabulary.
+func WCStatus(s catalog.ProductStatus) string { return wcStatus(s) }
+
+// Config returns a copy of the client's connection settings so a caller can
+// build another client against the same store.
+func (c Client) Config() Config {
+	return Config{BaseURL: c.baseURL, ConsumerKey: c.consumerKey, ConsumerSecret: c.consumerSecret}
 }
