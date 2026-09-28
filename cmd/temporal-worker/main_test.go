@@ -8,31 +8,45 @@ import (
 
 	"github.com/google/uuid"
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 )
 
-func TestSyncPublisherParsesProductID(t *testing.T) {
+func TestGatePublisherParsesProductID(t *testing.T) {
 	t.Parallel()
 
+	// A nil gate fails closed; a VALID product id must reach the load and
+	// fail there (not at the parse), proving the parse contract survived
+	// the rewrite. Mutant: dropping the uuid.Parse check makes the
+	// not-a-uuid case below return a load error, not a parse error.
 	id := uuid.New()
-	engine := &fakeSyncEngine{}
-	publisher := syncPublisher{engine: engine}
-
-	if err := publisher.PublishToWooCommerce(context.Background(), id.String()); err != nil {
-		t.Fatalf("PublishToWooCommerce: %v", err)
+	publisher := gatePublisher{}
+	err := publisher.PublishToWooCommerce(context.Background(), id.String())
+	if err == nil {
+		t.Fatal("nil gate must fail closed")
 	}
-	if engine.productID != id {
-		t.Fatalf("product id = %s, want %s", engine.productID, id)
+
+	publisher = gatePublisher{gate: nil, products: &fakeProductLoader{id: id}}
+	if err := publisher.PublishToWooCommerce(context.Background(), id.String()); err == nil {
+		t.Fatal("nil gate must fail closed even when a product would load")
 	}
 }
 
-func TestSyncPublisherRejectsInvalidProductID(t *testing.T) {
+func TestGatePublisherRejectsInvalidProductID(t *testing.T) {
 	t.Parallel()
 
-	publisher := syncPublisher{engine: &fakeSyncEngine{}}
+	publisher := gatePublisher{}
 	if err := publisher.PublishToWooCommerce(context.Background(), "not-a-uuid"); err == nil {
 		t.Fatal("expected invalid product id error")
 	}
+}
+
+type fakeProductLoader struct {
+	id uuid.UUID
+}
+
+func (f *fakeProductLoader) GetByID(_ context.Context, _ uuid.UUID) (catalog.Product, error) {
+	return catalog.NewProduct(catalog.ProductInput{SKU: "x", Title: "t"})
 }
 
 func TestLogRecorderAcceptsWorkflowEvents(t *testing.T) {
@@ -237,13 +251,4 @@ func TestNewProductRepositoryFromEnvRejectsInvalidDSN(t *testing.T) {
 	if repo != nil || cleanup != nil {
 		t.Fatal("repo and cleanup should be nil on error")
 	}
-}
-
-type fakeSyncEngine struct {
-	productID uuid.UUID
-}
-
-func (f *fakeSyncEngine) PublishToWooCommerce(_ context.Context, id uuid.UUID) error {
-	f.productID = id
-	return nil
 }

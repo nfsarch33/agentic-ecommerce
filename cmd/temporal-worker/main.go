@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -535,6 +536,9 @@ func liveFieldsOf(p *woocommerce.Product) map[string]string {
 }
 
 func (p gatePublisher) PublishToWooCommerce(ctx context.Context, productID string) error {
+	if p.gate == nil {
+		return errors.New("gate publisher: the publish gate is not configured; publishes fail closed")
+	}
 	id, err := uuid.Parse(productID)
 	if err != nil {
 		return fmt.Errorf("invalid product id: %w", err)
