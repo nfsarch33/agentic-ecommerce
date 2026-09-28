@@ -10,10 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nfsarch33/agentic-ecommerce/internal/publishgate"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -118,6 +121,55 @@ func (s *server) signalProductPublishReview(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
 		return
 	}
+
+	// The decision rides the Update path (exactly-once): the UpdateID is the
+	// caller's Idempotency-Key when present, minted otherwise. The deprecated
+	// signal remains as a fallback for workflows the Update cannot reach and
+	// records the approval row API-side so the publish gate still sees it.
+	updateID := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if updateID == "" {
+		updateID = fmt.Sprintf("review-%s-%d", workflowID, time.Now().UnixNano())
+	}
+	handle, err := s.workflowClient.UpdateWorkflow(r.Context(), client.UpdateWorkflowOptions{
+		WorkflowID:   workflowID,
+		UpdateName:   "product-publish-review",
+		UpdateID:     updateID,
+		Args:         []interface{}{ecworkflow.ReviewUpdateInput{Approved: signal.Approved, Reviewer: signal.Reviewer, Reason: signal.Note, UpdateID: updateID}},
+		WaitForStage: client.WorkflowUpdateStageCompleted,
+	})
+	if err == nil {
+		var res ecworkflow.ReviewUpdateResult
+		if gErr := handle.Get(r.Context(), &res); gErr == nil && res.Accepted {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"status":   "decided",
+				"decision": decisionString(res.Review.Approved),
+				"reviewer": res.Review.Reviewer,
+			})
+			return
+		} else if gErr != nil {
+			// Rejections surface at Get (the update ran and the validator or
+			// handler refused): map to the already-decided contract.
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":    "already_decided",
+				"decision": decisionStringFromErr(gErr.Error()),
+			})
+			return
+		}
+	}
+	// Temporal unreachable or update unsupported for this workflow: fall back
+	// to the deprecated signal, recording the approval row first (the gate
+	// fails closed without it).
+	if s.approvals != nil {
+		_, _, _ = s.approvals.RecordApproval(r.Context(), publishgate.Decision{
+			WorkflowID: workflowID,
+			TenantID:   s.tenantOf(r),
+			ProductID:  workflowIDProductID(workflowID),
+			Approved:   signal.Approved,
+			Actor:      signal.Reviewer,
+			Reason:     signal.Note,
+			UpdateID:   updateID,
+		})
+	}
 	if err := s.workflowClient.SignalWorkflow(r.Context(), workflowID, "", ecworkflow.ProductPublishReviewSignal, signal); err != nil {
 		s.log.Error("signal workflow review", "workflow_id", workflowID, "error", err)
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "workflow_signal_failed"})
@@ -129,6 +181,20 @@ func (s *server) signalProductPublishReview(w http.ResponseWriter, r *http.Reque
 		resp.Workflow = &detail
 	}
 	writeJSON(w, http.StatusAccepted, resp)
+}
+
+func decisionString(approved bool) string {
+	if approved {
+		return "approved"
+	}
+	return "rejected"
+}
+
+func decisionStringFromErr(msg string) string {
+	if strings.Contains(msg, "approved") {
+		return "approved"
+	}
+	return "rejected"
 }
 
 var errWorkflowNotFound = errors.New("workflow not found")
@@ -401,4 +467,23 @@ func failedLifecycleError(activities []workflowActivityResponse) (string, bool) 
 		return firstNonEmpty(activity.Error, activity.Message), true
 	}
 	return "", false
+}
+
+// tenantOf resolves the tenant for the fallback approval row (empty for the
+// platform tenant).
+func (s *server) tenantOf(r *http.Request) string { return "" }
+
+// workflowIDProductID extracts the product segment from a publish workflow
+// id (the workflow-id contract carries it); empty when unparseable.
+func workflowIDProductID(workflowID string) string {
+	// Publish workflow ids are product-publish-<productID>-<fingerprint>.
+	const prefix = "product-publish-"
+	if !strings.HasPrefix(workflowID, prefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(workflowID, prefix)
+	if i := strings.LastIndex(rest, "-"); i > 0 {
+		return rest[:i]
+	}
+	return rest
 }

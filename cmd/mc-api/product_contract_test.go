@@ -267,12 +267,14 @@ func TestSyncHandlersMatchOpenAPIContract(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/sync/products/"+product.ID().String()+"/publish", nil)
 		rec := httptest.NewRecorder()
 		srv.mux().ServeHTTP(rec, req)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		// The direct publish is refused (approval_required) and the response
+		// must match the documented 409 schema.
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("status = %d, want 409; body=%s", rec.Code, rec.Body.String())
 		}
 		var payload map[string]any
 		decodeJSONPayload(t, rec.Body.Bytes(), &payload)
-		assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/sync/products/{id}/publish", http.MethodPost, "200"), payload)
+		assertSchemaRequiredFields(t, spec, responseSchema(t, spec, "/api/v1/sync/products/{id}/publish", http.MethodPost, "409"), payload)
 	})
 
 	t.Run("resolve", func(t *testing.T) {

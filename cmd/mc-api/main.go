@@ -43,6 +43,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 	"github.com/nfsarch33/agentic-ecommerce/internal/observability/hooks"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/agentic-ecommerce/internal/publishgate"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
 	"github.com/nfsarch33/agentic-ecommerce/internal/security"
@@ -140,28 +141,31 @@ type serverConfig struct {
 }
 
 type server struct {
-	cfg                   serverConfig
-	repo                  port.ProductRepository
-	orderRepo             port.OrderRepository
-	cartRepo              port.CartRepository
-	membershipRepo        port.MembershipRepository
-	membershipGateway     port.MembershipPaymentGateway
-	membershipNotifier    port.MembershipNotificationSender
-	digitalProductRepo    port.DigitalProductRepository
-	licenseRepo           port.LicenseRepository
-	accessGrantRepo       port.AccessGrantRepository
-	digitalSvc            *digital.Service
-	eventBus              eventHistory
-	syncEngine            *enginesync.Engine
-	marketplaceSync       *marketplacesync.Router
-	contentAgent          contentGenerator
-	rag                   *rag.Service
-	factChecker           *contentagent.FactChecker
-	factChecksMu          sync.RWMutex
-	factChecks            map[string]storedFactCheckResult
-	mediaService          *intelligence.Service
-	agentActivityHandler  http.Handler
-	workflowClient        temporalWorkflowClient
+	cfg                  serverConfig
+	repo                 port.ProductRepository
+	orderRepo            port.OrderRepository
+	cartRepo             port.CartRepository
+	membershipRepo       port.MembershipRepository
+	membershipGateway    port.MembershipPaymentGateway
+	membershipNotifier   port.MembershipNotificationSender
+	digitalProductRepo   port.DigitalProductRepository
+	licenseRepo          port.LicenseRepository
+	accessGrantRepo      port.AccessGrantRepository
+	digitalSvc           *digital.Service
+	eventBus             eventHistory
+	syncEngine           *enginesync.Engine
+	marketplaceSync      *marketplacesync.Router
+	contentAgent         contentGenerator
+	rag                  *rag.Service
+	factChecker          *contentagent.FactChecker
+	factChecksMu         sync.RWMutex
+	factChecks           map[string]storedFactCheckResult
+	mediaService         *intelligence.Service
+	agentActivityHandler http.Handler
+	workflowClient       temporalWorkflowClient
+	// approvals records review decisions on the deprecated signal fallback
+	// path (the update path records in-workflow). Nil disables recording.
+	approvals             publishgate.Store
 	agentRegistry         *orchestrator.Registry
 	agentScheduler        *orchestrator.Scheduler
 	agentSchedules        *orchestrator.ScheduleManager

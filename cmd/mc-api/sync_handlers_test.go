@@ -102,11 +102,25 @@ func TestPublishProductEndpointPublishesToWooCommerce(t *testing.T) {
 
 	srv.mux().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	// D1: the direct publish is the forbidden second write path. It answers
+	// approval_required with the workflow that owns the decision, and the
+	// store is untouched (mutant: restoring the old handler body makes the
+	// status 200 and this fail).
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body=%s", rec.Code, rec.Body.String())
 	}
-	if len(wc.upserts) != 1 || wc.upserts[0].ID() != product.ID() {
-		t.Fatalf("upserts = %+v", wc.upserts)
+	var body struct {
+		Error      string `json:"error"`
+		WorkflowID string `json:"workflow_id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Error != "approval_required" || body.WorkflowID == "" {
+		t.Fatalf("body = %+v, want approval_required with a workflow id", body)
+	}
+	if len(wc.upserts) != 0 {
+		t.Fatalf("direct publish wrote to the store: %+v", wc.upserts)
 	}
 }
 

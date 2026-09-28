@@ -604,6 +604,10 @@ func (f *fakeTemporalWorkflowClient) DescribeWorkflowExecution(_ context.Context
 	return f.describe, nil
 }
 
+func (f *fakeTemporalWorkflowClient) UpdateWorkflow(ctx context.Context, options client.UpdateWorkflowOptions) (client.WorkflowUpdateHandle, error) {
+	return nil, errors.New("update not supported by the fake client")
+}
+
 func (f *fakeTemporalWorkflowClient) SignalWorkflow(_ context.Context, workflowID, runID, signalName string, arg any) error {
 	if f.signalErr != nil {
 		return f.signalErr
