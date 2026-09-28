@@ -20,8 +20,12 @@ func TestRunDryRun(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	if !bytes.Contains(buf.Bytes(), []byte("wc-sync.product_synced")) {
+	// Read-only since the gate: staging is logged, publishing is not.
+	if !bytes.Contains(buf.Bytes(), []byte("wc-sync.product_staged")) {
 		t.Fatalf("log output = %s", buf.String())
+	}
+	if bytes.Contains(buf.Bytes(), []byte("product_synced")) {
+		t.Fatalf("wc-sync still publishes: %s", buf.String())
 	}
 }
 
@@ -83,7 +87,7 @@ func TestMainImplDryRunReturnsZero(t *testing.T) {
 	if got := mainImpl(&buf, getenv); got != 0 {
 		t.Fatalf("mainImpl exit=%d log=%s", got, buf.String())
 	}
-	if !bytes.Contains(buf.Bytes(), []byte("wc-sync.product_synced")) {
+	if !bytes.Contains(buf.Bytes(), []byte("wc-sync.product_staged")) {
 		t.Fatalf("log output = %s", buf.String())
 	}
 }
@@ -105,9 +109,13 @@ func (failingChannel) ListProducts(context.Context, woocommerce.ListOptions) ([]
 func TestRunPropagatesPublishFailure(t *testing.T) {
 	t.Parallel()
 
-	logger := discardLogger()
-	if err := run(context.Background(), logger, failingChannel{}); err == nil {
-		t.Fatal("expected error when channel.UpsertProduct fails")
+	// Publishing no longer happens here (the workflow owns it), so a failing
+	// channel cannot fail the staging run. Mutant: restoring the publish call
+	// makes this test fail on the error it expects to be absent.
+	var buf bytes.Buffer
+	err := run(context.Background(), slog.New(slog.NewJSONHandler(&buf, nil)), failingChannel{})
+	if err != nil {
+		t.Fatalf("run must not publish (read-only since the gate): %v", err)
 	}
 }
 
@@ -118,6 +126,9 @@ func TestRunPropagatesPublishFailure(t *testing.T) {
 func TestMainImplReturnsOneOnRunError(t *testing.T) {
 	t.Parallel()
 
+	// The staging run is read-only since the gate; a refused store
+	// connection no longer fails it (there is no publish call to refuse).
+	// Mutant: restoring the publish call makes this exit 1 and fails.
 	getenv := func(key string) string {
 		switch key {
 		case "ECOMMERCE_WC_BASE_URL":
@@ -126,17 +137,12 @@ func TestMainImplReturnsOneOnRunError(t *testing.T) {
 			return "ck_test"
 		case "ECOMMERCE_WC_CONSUMER_SECRET":
 			return "cs_test"
-		case "ECOMMERCE_SYNC_DRY_RUN":
-			return ""
 		default:
 			return ""
 		}
 	}
 	var buf bytes.Buffer
-	if got := mainImpl(&buf, getenv); got != 1 {
+	if got := mainImpl(&buf, getenv); got != 0 {
 		t.Fatalf("mainImpl exit=%d log=%s", got, buf.String())
-	}
-	if !bytes.Contains(buf.Bytes(), []byte("wc-sync.failed")) {
-		t.Fatalf("expected wc-sync.failed log, got %s", buf.String())
 	}
 }

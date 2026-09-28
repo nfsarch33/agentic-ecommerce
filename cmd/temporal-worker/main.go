@@ -277,6 +277,7 @@ func registerWorkflowsAndActivities(w workerRegistry, deps *workerDeps) {
 	w.RegisterActivityWithOptions(deps.PublishActivities.ValidateMedia, activity.RegisterOptions{Name: ecworkflow.ValidateMediaActivity})
 	w.RegisterActivityWithOptions(deps.PublishActivities.PublishToWooCommerce, activity.RegisterOptions{Name: ecworkflow.PublishToWooCommerceActivity})
 	w.RegisterActivityWithOptions(deps.PublishActivities.RecordWorkflowEvent, activity.RegisterOptions{Name: ecworkflow.RecordWorkflowEventActivity})
+	w.RegisterActivityWithOptions(deps.PublishActivities.RecordApproval, activity.RegisterOptions{Name: ecworkflow.RecordApprovalActivityName})
 
 	w.RegisterActivityWithOptions(deps.ContentActivities.GenerateContent, activity.RegisterOptions{Name: ecworkflow.ContentGenerateActivity})
 	w.RegisterActivityWithOptions(deps.ContentActivities.FactCheckContent, activity.RegisterOptions{Name: ecworkflow.ContentFactCheckActivity})
