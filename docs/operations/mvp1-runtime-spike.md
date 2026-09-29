@@ -125,11 +125,14 @@ wrong secret; the key is written to a gitignored env file, never printed).
 `make fixture-init` runs the init. What the init does, one line each:
 installs the site if absent; sets the permalink structure and flushes
 rewrite rules; installs and activates the store plugin; writes a
-fixture-only must-use plugin that reports HTTPS for every request (the
-plain-HTTP loop equivalent of TLS termination - never ship this file);
-pins the database host in the shared config to the database container's
-address (one-shot tooling on the network does not resolve the service
-name); creates a read/write REST key owned by the admin user; seeds three
+fixture-only must-use plugin that reports HTTPS for /wp-json/ requests
+only (the plain-HTTP loop equivalent of TLS termination at the REST edge -
+never ship this file); never pins the database host: the shared config's
+env-driven template line is kept (and restored if an older init pinned a
+literal address), and the wc-db name is mapped to the database container's
+current address in the store container's /etc/hosts (rewritten in place)
+plus --add-host on the one-shot tooling; creates a read/write REST key
+owned by the admin user; seeds three
 published products unless any exist. The acceptance pair (200 valid /
 401 wrong) was proven twice from the script alone, including a second
 idempotent init run.

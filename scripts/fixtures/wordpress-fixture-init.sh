@@ -65,9 +65,12 @@ VOL="${WOO_VOL:-$(podman inspect ec-wordpress --format '{{range .Mounts}}{{if eq
 # cannot resolve the compose alias, so the name is mapped to the database
 # container's current address via --add-host on the one-shot only.
 DB_IP="${WOO_DB_IP:-$(podman inspect ec-wc-db --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')}"
-WPC=(podman run --rm --network "$NET" --add-host "ec-wc-db:$DB_IP"
+# ONE managed name everywhere: the one-shots and the store both resolve
+# wc-db (WORDPRESS_DB_HOST=wc-db:3306); the name maps to the database
+# container's current address per run.
+WPC=(podman run --rm --network "$NET" --add-host "wc-db:$DB_IP"
   -v "$VOL":/var/www/html --user 33:33
-  -e WORDPRESS_DB_HOST=ec-wc-db:3306 -e WORDPRESS_DB_NAME="$DB_NAME"
+  -e WORDPRESS_DB_HOST=wc-db:3306 -e WORDPRESS_DB_NAME="$DB_NAME"
   -e WORDPRESS_DB_USER="$DB_USER" -e WORDPRESS_DB_PASSWORD="$DB_PASS"
   "$WC_CLI_IMAGE" wp)
 
@@ -75,10 +78,12 @@ WPC=(podman run --rm --network "$NET" --add-host "ec-wc-db:$DB_IP"
 # podman network (no aardvark DNS; resolv.conf is the host's), and the
 # config template is env-driven: WORDPRESS_DB_HOST=wc-db:3306. Map the name
 # to the database container's CURRENT address in the STORE CONTAINER's
-# /etc/hosts - the container is recreated on every wc-up, so nothing stale
-# persists in the wpdata volume, and this run re-points the entry whenever
-# the address moved. One managed line, replaced not appended.
-podman exec ec-wordpress sh -c "sed -i '/wc-db\$/d' /etc/hosts 2>/dev/null; echo '$DB_IP wc-db' >> /etc/hosts"
+# /etc/hosts. The rewrite must keep the inode: /etc/hosts is a bind mount,
+# so sed -i (rename over) fails with "Resource busy". grep -v to a scratch
+# file + cat > back in place + one append = the managed line is replaced,
+# never accumulated. The container is recreated on every wc-up, and this
+# run re-points the entry whenever the database address moved.
+podman exec ec-wordpress sh -c "grep -v ' wc-db\$' /etc/hosts > /tmp/h; cat /tmp/h > /etc/hosts; echo '$DB_IP wc-db' >> /etc/hosts"
 
 # Undo any literal-IP DB_HOST a previous init wrote into the shared config:
 # the env-driven template line is restored (the store container's hosts
