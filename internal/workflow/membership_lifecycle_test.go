@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,6 +23,23 @@ type fixedClock struct{ now time.Time }
 
 func (f fixedClock) Now() time.Time { return f.now }
 
+// stepClock is deterministic AND monotonic: every Now() call advances the
+// clock one billing cycle (30 days). A fixed clock makes every renewal's
+// CurrentPeriodEnd the same past date, so the renewal timer fires
+// instantly and the loop never idles — the deterministic lifecycle hang.
+type stepClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func (c *stepClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	at := c.now
+	c.now = at.Add(30 * 24 * time.Hour)
+	return at
+}
+
 func newDeterministicGateway() *stripeadapter.PaymentGateway {
 	return stripeadapter.NewPaymentGateway(stripeadapter.Config{
 		Clock: fixedClock{now: time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)},
@@ -35,7 +53,11 @@ func TestMembershipLifecycleWorkflowTrialThenActivateThenCancel(t *testing.T) {
 	env := suite.NewTestWorkflowEnvironment()
 	env.SetStartTime(time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC))
 
-	gateway := newDeterministicGateway()
+	// Renewals advance the clock (stepClock): a fixed clock pins every
+	// renewal period end to one past date and hangs the loop.
+	gateway := stripeadapter.NewPaymentGateway(stripeadapter.Config{
+		Clock: &stepClock{now: time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)},
+	})
 	notifier := notification.NewMembershipNotificationRecorder()
 	activities := NewMembershipLifecycleActivities(MembershipLifecycleActivityDeps{
 		Gateway: gateway, Notifier: notifier,
@@ -380,3 +402,37 @@ func (r *recordingBillingLedger) RecordBillingEvent(_ context.Context, evt Billi
 
 var _ port.MembershipNotificationSender = (*notification.MembershipNotificationRecorder)(nil)
 var _ MembershipBillingLedger = (*recordingBillingLedger)(nil)
+
+// TestRenewalChargeDoesNotReEnterTrial pins the renewal half of the
+// lifecycle-hang fix: a renewal charge must never re-apply the trial
+// period. With the bug, every renewal's CurrentPeriodEnd was the trial
+// length (7d), a date already in the past for every cycle after the
+// first, so the renewal timer fired instantly and the loop never idled
+// (the deterministic hang). Mutant: passing req.TrialDays through on
+// renewal makes this test see a 7-day period end instead of a full cycle.
+func TestRenewalChargeDoesNotReEnterTrial(t *testing.T) {
+	t.Parallel()
+
+	gw := stripeadapter.NewPaymentGateway(stripeadapter.Config{
+		Clock: fixedClock{now: time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)},
+	})
+	activities := NewMembershipLifecycleActivities(MembershipLifecycleActivityDeps{Gateway: gw})
+
+	resp, err := activities.ChargeStripe(context.Background(), ChargeRequest{
+		TenantID:       "tenant-a",
+		SubscriptionID: uuid.New(),
+		MemberID:       uuid.New(),
+		MemberEmail:    "bob@example.com",
+		StripePriceID:  "price_dev_r",
+		BillingCycle:   membership.BillingCycleMonthly,
+		TrialDays:      7,
+		IsRenewal:      true,
+	})
+	if err != nil {
+		t.Fatalf("renewal charge: %v", err)
+	}
+	want := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC) // one full cycle, no trial
+	if !resp.CurrentPeriodEnd.Equal(want) {
+		t.Fatalf("renewal CurrentPeriodEnd = %s, want %s (a renewal must not re-enter the trial)", resp.CurrentPeriodEnd, want)
+	}
+}

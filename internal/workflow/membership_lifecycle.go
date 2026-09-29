@@ -504,6 +504,14 @@ func (a *MembershipLifecycleActivities) ChargeStripe(ctx context.Context, req Ch
 	if a.gateway == nil {
 		return ChargeResponse{}, errors.New("membership payment gateway is not configured")
 	}
+	// A renewal must never re-enter the trial period: re-passing
+	// TrialDays made every renewal's CurrentPeriodEnd the trial end, a
+	// date already in the past, so the renewal timer fired instantly and
+	// the loop never idled (the deterministic lifecycle hang).
+	trialDays := req.TrialDays
+	if req.IsRenewal {
+		trialDays = 0
+	}
 	gwResp, err := a.gateway.CreateSubscription(ctx, port.CreateSubscriptionRequest{
 		TenantID:       req.TenantID,
 		SubscriptionID: req.SubscriptionID,
@@ -511,7 +519,7 @@ func (a *MembershipLifecycleActivities) ChargeStripe(ctx context.Context, req Ch
 		MemberEmail:    req.MemberEmail,
 		StripePriceID:  req.StripePriceID,
 		BillingCycle:   req.BillingCycle,
-		TrialDays:      req.TrialDays,
+		TrialDays:      trialDays,
 	})
 	if err != nil {
 		return ChargeResponse{}, err
