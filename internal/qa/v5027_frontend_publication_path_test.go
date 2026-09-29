@@ -16,6 +16,16 @@ func webRepoPath(t *testing.T, rel string) string {
 	return filepath.Join(home, "Code", "personal", "agentic-ecommerce-web", rel)
 }
 
+// requireWebRepo skips when the sibling frontend checkout is absent (CI
+// checks out only this repo; the same skip TestV5027FrontendVersionIs9
+// established). A missing checkout is not a regression here.
+func requireWebRepo(t *testing.T) {
+	t.Helper()
+	if _, err := os.Stat(webRepoPath(t, ".")); err != nil {
+		t.Skipf("frontend repo not available at expected path: %v", err)
+	}
+}
+
 // TestV5027FrontendVersionIs9 verifies the canonical frontend package.json
 // version is exactly 9.0.0 before the v9.0.0 semver tag is cut.
 func TestV5027FrontendVersionIs9(t *testing.T) {
@@ -35,6 +45,7 @@ func TestV5027FrontendVersionIs9(t *testing.T) {
 // the v9.0.0 release entry.
 func TestV5027FrontendChangelogDocumentsV9(t *testing.T) {
 	t.Parallel()
+	requireWebRepo(t)
 
 	assertFileContainsAll(t, webRepoPath(t, "CHANGELOG.md"),
 		"[9.0.0]",
@@ -46,6 +57,7 @@ func TestV5027FrontendChangelogDocumentsV9(t *testing.T) {
 // checklist artefact is present and gates the semver tag.
 func TestV5027FrontendReleaseChecklistExists(t *testing.T) {
 	t.Parallel()
+	requireWebRepo(t)
 
 	assertFileContainsAll(t,
 		webRepoPath(t, "docs/v9-frontend-release-checklist.md"),
@@ -60,6 +72,7 @@ func TestV5027FrontendReleaseChecklistExists(t *testing.T) {
 // frontend release final evidence doc records cross-stack gate outcomes.
 func TestV5027FrontendReleaseFinalDocumentsCrossStackEvidence(t *testing.T) {
 	t.Parallel()
+	requireWebRepo(t)
 
 	assertFileContainsAll(t,
 		webRepoPath(t, "docs/v9-frontend-release-final.md"),
