@@ -70,7 +70,7 @@
     },
     {
       "command": "cursor-tools doctor identity --strict",
-      "evidence": "Pre-existing Zendesk GITHUB_TOKEN family env vars in this Cursor shell trip the identity gate. Mitigation per personal-repo-shell-hygiene skill is 'runx env personal-shell --exec' for any push/PR operation. Not blocking for v2.10.1 build evidence.",
+      "evidence": "Pre-existing employer GITHUB_TOKEN family env vars in this Cursor shell trip the identity gate. Mitigation per personal-repo-shell-hygiene skill is 'runx env personal-shell --exec' for any push/PR operation. Not blocking for v2.10.1 build evidence.",
       "name": "cursor-tools doctor identity --strict",
       "result": "EXPECTED_FAIL_GITHUB_TOKEN_FAMILY"
     }

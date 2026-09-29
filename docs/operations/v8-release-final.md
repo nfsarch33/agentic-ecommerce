@@ -59,5 +59,5 @@ Focused release metadata guard:
   until external operator credentials and sandbox approvals exist.
 - Live OmniParser/uiauto/VLM execution remains remote-resource gated; do not
   run those workloads locally on the MacBook.
-- Mem0 hot recall remains optional while endpoint reliability is degraded; Git
+- the retired memory service hot recall remains optional while endpoint reliability is degraded; Git
   KB remains durable truth.

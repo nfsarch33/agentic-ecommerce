@@ -88,10 +88,10 @@ Generated: 2026-05-11 | Sprint: v4.16.0 | Scope: Agent skill ecosystem health
 | llm-cluster-router | Go HTTP proxy for vLLM clusters | - | Infrastructure |
 | llm-model-evaluator | LLM evaluation and selection | - | ML |
 | media-downloader | Download media from web platforms | - | Media |
-| mem0-selfhost-ops | Mem0 self-hosted operations | - | Memory |
+| the retired memory service-selfhost-ops | the retired memory service self-hosted operations | - | Memory |
 | memory-and-kb | Hybrid memory routing and consolidation | - | Memory |
 | memory-hygiene | Audit and clean memory layers | - | Memory |
-| memory-system | Mem0-first hybrid memory system | - | Memory |
+| memory-system | the retired memory service-first hybrid memory system | - | Memory |
 | metrics-dashboard | Consolidate KPIs across agent stack | - | Monitoring |
 | microservices-go | Go-first microservices architecture | - | Go |
 | monitoring-observability | **EC-RELEVANT** Monitoring and alerting | - | Monitoring |
@@ -149,13 +149,13 @@ Generated: 2026-05-11 | Sprint: v4.16.0 | Scope: Agent skill ecosystem health
 | wsl-gpu-ops | NVIDIA GPU on WSL | - | Infrastructure |
 | wsl-onboarding | Bootstrap WSL machine | - | Operations |
 | youtube-downloader | Download YouTube videos | - | Media |
-| zbt-e2e-testing | **EC-RELEVANT** Zendesk Browser Tests | - | Testing |
+| zbt-e2e-testing | employer-relevant browser-test suite | - | Testing |
 
 ### ~/.claude/skills/ (4 skills -- all duplicated in ~/.cursor/skills/)
 
 | Skill | Size (bytes) | Modified |
 |-------|-------------|----------|
-| mem0-selfhost-ops | 7,091 | 2026-05-04 |
+| the retired memory service-selfhost-ops | 7,091 | 2026-05-04 |
 | oracle-cloud-recon | 6,841 | 2026-05-04 |
 | subagent-incident-review | 4,652 | 2026-05-04 |
 | workspace-hygiene-doctor | 1,167 | 2026-05-02 |
@@ -182,7 +182,7 @@ Generated: 2026-05-11 | Sprint: v4.16.0 | Scope: Agent skill ecosystem health
 
 | Skill | Locations | Action |
 |-------|-----------|--------|
-| mem0-selfhost-ops | .cursor/skills + .claude/skills | Remove from .claude/skills (Cursor is primary) |
+| the retired memory service-selfhost-ops | .cursor/skills + .claude/skills | Remove from .claude/skills (Cursor is primary) |
 | oracle-cloud-recon | .cursor/skills + .claude/skills | Remove from .claude/skills |
 | subagent-incident-review | .cursor/skills + .claude/skills | Remove from .claude/skills |
 | workspace-hygiene-doctor | .cursor/skills + .claude/skills | Remove from .claude/skills |
@@ -192,7 +192,7 @@ Generated: 2026-05-11 | Sprint: v4.16.0 | Scope: Agent skill ecosystem health
 | Group | Skills | Recommendation |
 |-------|--------|----------------|
 | IronClaw (8) | ironclaw-mission-control, ironclaw-orchestrator, ironclaw-evolver, ironclaw-deploy-ops, ironclaw-ceo-agent, ironclaw-multi-agent, ironclaw-external-ops, ironclaw-agent-dashboard | Keep separate (distinct operational domains) |
-| Memory (5) | memory-system, memory-and-kb, memory-hygiene, context-mode, mem0-selfhost-ops | Consolidate into 2: `memory-unified` (routing+hygiene+kb) + `mem0-ops` (self-host) |
+| Memory (5) | memory-system, memory-and-kb, memory-hygiene, context-mode, the retired memory service-selfhost-ops | Consolidate into 2: `memory-unified` (routing+hygiene+kb) + `the retired memory service-ops` (self-host) |
 | Research (5) | research-pipeline, research-automation, autonomous-research, aris-research-integration, ai-research-manager | Consolidate into 2: `research-unified` (pipeline+auto+aris) + `ai-research-manager` (installer) |
 | CI/CD (5) | ci-cd-pipelines, cicd-gitops-promotion, codefresh, argocd, github-ci | Keep separate (vendor-specific, well-scoped) |
 | Academic (4) | academic-assessment, academic-essay-writer, academic-humanizer, agent-self-evaluation | Consolidate into 1: `academic-pipeline` (assessment+writer+humanizer) |

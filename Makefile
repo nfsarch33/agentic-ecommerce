@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage coverage-check integration-pg lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker testing-lane full-stack-e2e release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate tf-plan-contract uiauto-smoke uiauto-compare compose-uiauto-config uiauto-down uiauto-up
+.PHONY: test build vet coverage coverage-check integration-pg lint lint-no-target-strings docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker testing-lane full-stack-e2e release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate tf-plan-contract uiauto-smoke uiauto-compare compose-uiauto-config uiauto-down uiauto-up
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -66,6 +66,21 @@ integration-pg:
 lint:
 	golangci-lint run ./...
 
+
+# Forbidden strings in a public repo (design v18900-1 purge): the retired
+# memory service term (ADR-063; Engram is the only memory plane) and the
+# employer/target-specific tokens. The character class keeps this Makefile
+# line itself out of the match set.
+lint-no-target-strings:
+	@echo "Scanning for forbidden strings..."
+	@MATCHES=$$(grep -ril -E 'zendesk|amazon[ -]connect|\bz3n\b|cc-nl|lastpass|\bccp\b|\bzaf\b|[mM]em0' \
+	    internal/ cmd/ pkg/ docs/ reports/ deploy/ scripts/ tests/ 2>/dev/null || true); \
+	if [ -n "$$MATCHES" ]; then \
+	    echo "ERROR: forbidden strings found:"; \
+	    echo "$$MATCHES"; \
+	    exit 1; \
+	fi; \
+	echo "OK: no forbidden strings."
 tf-fmt:
 	@if ! command -v terraform >/dev/null 2>&1; then \
 		echo "terraform not installed; install Terraform >=1.6 and run: terraform fmt -recursive $(TF_DIR)"; \

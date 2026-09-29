@@ -40,7 +40,7 @@ Each sprint pair (MVP + QA) follows this sequence:
 │ 7. CLEANUP (automatic on merge)                              │
 │    - Lock released: CoordLocker.Release(repo, branch, agent) │
 │    - Worktree pruned: git worktree prune                     │
-│    - Memory hygiene: stale Mem0 entries cleaned              │
+│    - Memory hygiene: stale the retired memory service entries cleaned              │
 │                                                              │
 │ 8. STALE CLEANUP (start of next pair or on-demand)           │
 │    - ScanStale scans ~/runs/worktrees/ for abandoned trees   │

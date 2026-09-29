@@ -29,7 +29,7 @@ These ADRs predate or run alongside the ecommerce project and reside in `nfsarch
 | ADR-001 | Observability Strategy + Temporal for Agent Orchestration | Accepted | 2026-04 |
 | ADR-002 | Python-to-Go Migration + Commerce Stack Selection | Accepted | 2026-04 |
 | ADR-003 | China VPN Staged Validation | Accepted | 2026-04 |
-| ADR-004 | Mem0 Async Projection Outbox | Accepted | 2026-04 |
+| ADR-004 | the retired memory service Async Projection Outbox | Accepted | 2026-04 |
 | ADR-005 | (Reserved) | — | — |
 | ADR-006 | Personal Repo Visibility Policy | Accepted | 2026-04 |
 | ADR-007 | LLM Cluster Router OSS Extraction | Accepted | 2026-04 |
@@ -46,7 +46,7 @@ These ADRs predate or run alongside the ecommerce project and reside in `nfsarch
 | ADR-018 | WSL2 DERP Gap Analysis | Accepted | 2026-05 |
 | ADR-019 | Hermes Sidecar | Accepted | 2026-05 |
 | ADR-020 | General OSS MCP Strategy + Claude Proxy Routing | Accepted | 2026-05 |
-| ADR-021 | Mem0 Self-Host Migration | Accepted | 2026-05 |
+| ADR-021 | the retired memory service Self-Host Migration | Accepted | 2026-05 |
 | ADR-022 | Workspace Cleanliness Doctor | Accepted | 2026-05 |
 | ADR-023 | Agentic Ecommerce Web + MiniMax Fleet Policy | Accepted | 2026-05 |
 

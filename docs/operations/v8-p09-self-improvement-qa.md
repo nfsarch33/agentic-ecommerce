@@ -12,7 +12,7 @@ new replay helper consumes sanitized NDJSON evidence, keeps valid rows, records
 malformed or invalid rows with line numbers, and emits promoted reward artifacts
 as streaming NDJSON for EvoLoop/DRL consumers.
 
-The QA path remains pure and deterministic: no live Agenttrace loopback, Mem0,
+The QA path remains pure and deterministic: no live Agenttrace loopback, the retired memory service,
 LLM, VLM, OmniParser, filesystem, or network dependency is required.
 
 ## Added QA Coverage
@@ -77,5 +77,5 @@ runx worktree run --repo ecommerce --branch qa/v8-p09-self-improvement -- \
 
 - Pair 10 final hardening should include the Pair 9 self-improvement report and
   reward artifact schema in the final v8 release checklist.
-- Mem0 remained degraded during Pair 9 MVP; do not depend on hot memory for
+- the retired memory service remained degraded during Pair 9 MVP; do not depend on hot memory for
   replay evidence until the endpoint is healthy again.

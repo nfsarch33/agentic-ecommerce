@@ -27,7 +27,7 @@ across GKE Autopilot, EKS, and OCI.
 | **Total (prod)** | **~$800-1,350** | **~$960-1,520** | **~$250-500** |
 
 > **Key finding**: OCI Always Free tier provides the most cost-effective dev/staging
-> environment, especially for mem0 + Qdrant workloads on ARM A1 instances.
+> environment, especially for the retired memory service + Qdrant workloads on ARM A1 instances.
 > GKE Autopilot offers the simplest operations model for production.
 > EKS provides the most mature ecosystem but highest baseline cost.
 
@@ -59,7 +59,7 @@ The OCI Always Free tier provides significant resources at zero cost:
 
 | Resource | Free Tier Allowance | EC Stack Usage |
 |----------|-------------------|----------------|
-| ARM A1 Compute | 4 OCPU, 24GB RAM | mem0 server + Qdrant |
+| ARM A1 Compute | 4 OCPU, 24GB RAM | the retired memory service server + Qdrant |
 | AMD Micro | 2 instances, 1GB each | Monitoring/bastion |
 | Block Storage | 200GB total | OS + data volumes |
 | Object Storage | 10GB Standard | Backups and archives |
@@ -235,5 +235,5 @@ resource "aws_budgets_budget" "ec_monthly" {
 | KEDA scale-to-zero (dev) | ~$1,200-1,800 | Medium |
 | Right-sizing | ~$1,000-2,000 | Medium |
 | CDN (Cloudflare) | ~$200-500 | Low |
-| OCI for dev/mem0 | ~$2,600-3,700 | Medium |
+| OCI for dev/the retired memory service | ~$2,600-3,700 | Medium |
 | **Total potential** | **~$9,500-15,200** | — |
