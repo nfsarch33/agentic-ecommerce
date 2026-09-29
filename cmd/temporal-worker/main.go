@@ -178,10 +178,12 @@ func buildWorkerDeps(ctx context.Context, logger *slog.Logger, scheduleCfg agent
 		ConsumerKey:    getenv("ECOMMERCE_WC_CONSUMER_KEY", ""),
 		ConsumerSecret: getenv("ECOMMERCE_WC_CONSUMER_SECRET", ""),
 	}, &http.Client{Timeout: 10 * time.Second})
+	publisher, approvalStore := newGatePublisherFromEnv(logger, repo, wcClient.Config())
 	publishActivities := ecworkflow.NewProductPublishActivities(ecworkflow.ProductPublishActivityDeps{
 		Products:  repo,
-		Publisher: newGatePublisherFromEnv(logger, repo, wcClient.Config()),
+		Publisher: publisher,
 		Recorder:  logRecorder{logger: logger},
+		Approvals: approvalStore,
 	})
 	contentActivities := newContentGenerationActivitiesFromEnv(logger)
 	mediaActivities := newMediaProcessingActivitiesFromEnv(logger, repo)
@@ -473,16 +475,19 @@ func newShopeeMarketplaceConnectorFromEnv() (marketplacesync.Connector, error) {
 // newGatePublisherFromEnv builds the gate-backed publisher: the Postgres
 // store for approvals/ledger, the WooCommerce adapter for lookups and
 // writes, and the dry-run flag. The lease owner identifies this worker.
-func newGatePublisherFromEnv(logger *slog.Logger, repo port.ProductRepository, wcCfg woocommerce.Config) ecworkflow.ProductPublisher {
+// The returned store is the SAME store the gate reads: the caller must wire
+// it into ProductPublishActivityDeps.Approvals so RecordApproval and the
+// gate agree on the approval rows.
+func newGatePublisherFromEnv(logger *slog.Logger, repo port.ProductRepository, wcCfg woocommerce.Config) (ecworkflow.ProductPublisher, publishgate.Store) {
 	dsn := getenv("ECOMMERCE_DB_URL", "")
 	if dsn == "" {
 		logger.Warn("ECOMMERCE_DB_URL unset: the publish gate is DISABLED and publishes fail closed")
-		return gatePublisher{}
+		return gatePublisher{}, nil
 	}
 	pool, err := pgxpool.New(context.Background(), dsn)
 	if err != nil {
 		logger.Error("publish gate pool failed", "error", err)
-		return gatePublisher{}
+		return gatePublisher{}, nil
 	}
 	store := publishgate.NewPGStore(pool)
 	wc := woocommerce.NewClient(wcCfg, nil)
@@ -494,7 +499,7 @@ func newGatePublisherFromEnv(logger *slog.Logger, repo port.ProductRepository, w
 		DryRun: strings.EqualFold(getenv("ECOMMERCE_PUBLISH_MODE", ""), "dry-run"),
 		Owner:  owner,
 	}
-	return gatePublisher{gate: g, products: repo}
+	return gatePublisher{gate: g, products: repo}, store
 }
 
 // wcAdapter adapts the store client to the gate's remote port.
@@ -535,7 +540,7 @@ func liveFieldsOf(p *woocommerce.Product) map[string]string {
 	return f
 }
 
-func (p gatePublisher) PublishToWooCommerce(ctx context.Context, productID string) error {
+func (p gatePublisher) PublishToWooCommerce(ctx context.Context, productID, workflowID string) error {
 	if p.gate == nil {
 		return errors.New("gate publisher: the publish gate is not configured; publishes fail closed")
 	}
@@ -550,7 +555,10 @@ func (p gatePublisher) PublishToWooCommerce(ctx context.Context, productID strin
 	fields := woocommerce.FieldsFor(product.SKU(), product.Title(), product.Description(),
 		fmt.Sprintf("%.2f", float64(product.Price().Amount())/100), product.Stock(), woocommerce.WCStatus(product.Status()))
 	res, err := p.gate.Publish(ctx, publishgate.PublishRequest{
-		WorkflowID: "product-publish-" + productID,
+		// The workflow id comes from the live execution (it may carry -auto
+		// or fingerprint suffixes); reconstructing it here would miss the
+		// approval row and fail closed.
+		WorkflowID: workflowID,
 		TenantID:   "",
 		ProductID:  productID,
 		SKU:        product.SKU(),

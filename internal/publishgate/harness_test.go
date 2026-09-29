@@ -5,24 +5,26 @@ import (
 	"errors"
 
 	"fmt"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	"net/http"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 )
 
-// TestHarnessS1: 100 pending drafts with NO decisions: the gate refuses
-// every publish (fail closed) and the store is untouched - zero remote calls.
+// TestHarnessS1: 100 REAL draft rows in the products table, no decisions:
+// the gate refuses every publish (fail closed) and the store is untouched -
+// zero remote calls, zero ledger rows. Mutant: removing the fail-closed
+// ApprovalFor check turns every draft into a write.
 func TestHarnessS1(t *testing.T) {
 	base, key, secret, ok := wcFixtureEnv()
 	if !ok {
 		t.Skip("fixture env not found; skipping S1")
 	}
 	store := pgStore(t)
-	_ = base
-	_ = key
-	_ = secret
 	ctx := context.Background()
 	var mu sync.Mutex
 	calls := 0
@@ -31,11 +33,16 @@ func TestHarnessS1(t *testing.T) {
 	_ = adapter
 	// wrap to count every remote call (gets, creates, updates)
 	counting := &allCountingAdapter{inner: adapter.inner, bump: func() { mu.Lock(); calls++; mu.Unlock() }}
-	for i := 0; i < 100; i++ {
-		wf := fmt.Sprintf("wf-h1-%02d", i)
+
+	// S1 starts REAL drafts: 100 rows in products, driven as the workflow
+	// would (real product ids and skus, execution-shaped workflow ids).
+	drafts := seedHarnessDrafts(t, 100)
+	t.Cleanup(func() { purgeHarnessDrafts(t) })
+	for i, d := range drafts {
+		wf := fmt.Sprintf("product-publish-%s-%04d", d.id, i)
 		// no RecordApproval: the decision is missing on purpose
 		g := &Gate{Store: store, Remote: counting, Owner: "h1", LeaseTTL: time.Minute}
-		if _, err := g.Publish(ctx, PublishRequest{WorkflowID: wf, TenantID: "t1", ProductID: fmt.Sprintf("00000000-0000-0000-0000-%012d", 2000+i), SKU: fmt.Sprintf("HARN-S1-%02d", i), Fields: map[string]string{"name": "S1"}}); !errors.Is(err, ErrNoApproval) {
+		if _, err := g.Publish(ctx, PublishRequest{WorkflowID: wf, TenantID: "t1", ProductID: d.id, SKU: d.sku, Fields: map[string]string{"name": "S1", "sku": d.sku}}); !errors.Is(err, ErrNoApproval) {
 			t.Fatalf("S1 key %d: err = %v, want ErrNoApproval (fail closed)", i, err)
 		}
 	}
@@ -46,7 +53,59 @@ func TestHarnessS1(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("S1: ledger rows = %d, want 0", n)
 	}
-	t.Logf("S1 OK: 100 drafts unapproved, 0 remote writes, 0 ledger rows")
+	t.Logf("S1 OK: %d real drafts unapproved, 0 remote writes, 0 ledger rows", len(drafts))
+}
+
+type harnessDraft struct{ id, sku string }
+
+// seedHarnessDrafts inserts n REAL draft product rows (status 'draft') and
+// reads them back.
+func seedHarnessDrafts(t *testing.T, n int) []harnessDraft {
+	t.Helper()
+	pool, err := pgxpool.New(context.Background(), pgDSN())
+	if err != nil {
+		t.Fatalf("draft pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	ctx := context.Background()
+	batch := &pgx.Batch{}
+	for i := 0; i < n; i++ {
+		batch.Queue(`INSERT INTO products (id, sku, title, slug, price_amount, stock, status)
+		             VALUES ($1, $2, $3, $4, 100, 0, 'draft')`,
+			fmt.Sprintf("00000000-0000-0000-0000-%012d", 3000+i),
+			fmt.Sprintf("HARN-S1-%03d", i), "Harness S1 draft", fmt.Sprintf("harn-s1-%03d", i))
+	}
+	if err := pool.SendBatch(ctx, batch).Close(); err != nil {
+		t.Fatalf("seed drafts: %v", err)
+	}
+	rows, err := pool.Query(ctx, `SELECT id::text, sku FROM products WHERE sku LIKE 'HARN-S1-%' ORDER BY sku`)
+	if err != nil {
+		t.Fatalf("read drafts: %v", err)
+	}
+	defer rows.Close()
+	var drafts []harnessDraft
+	for rows.Next() {
+		var d harnessDraft
+		if err := rows.Scan(&d.id, &d.sku); err != nil {
+			t.Fatalf("scan draft: %v", err)
+		}
+		drafts = append(drafts, d)
+	}
+	if len(drafts) != n {
+		t.Fatalf("seeded %d drafts, read back %d", n, len(drafts))
+	}
+	return drafts
+}
+
+// purgeHarnessDrafts removes the harness draft rows (idempotent).
+func purgeHarnessDrafts(t *testing.T) {
+	t.Helper()
+	pool, err := pgxpool.New(context.Background(), pgDSN())
+	if err != nil {
+		return
+	}
+	defer pool.Close()
+	_, _ = pool.Exec(context.Background(), `DELETE FROM products WHERE sku LIKE 'HARN-S1-%'`)
 }
 
 // allCountingAdapter counts every remote interaction.

@@ -18,6 +18,7 @@ import (
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/temporal"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
@@ -139,20 +140,35 @@ func (s *server) signalProductPublishReview(w http.ResponseWriter, r *http.Reque
 	})
 	if err == nil {
 		var res ecworkflow.ReviewUpdateResult
-		if gErr := handle.Get(r.Context(), &res); gErr == nil && res.Accepted {
+		gErr := handle.Get(r.Context(), &res)
+		switch {
+		case gErr == nil && res.Accepted:
 			writeJSON(w, http.StatusOK, map[string]any{
 				"status":   "decided",
 				"decision": decisionString(res.Review.Approved),
 				"reviewer": res.Review.Reviewer,
 			})
 			return
-		} else if gErr != nil {
-			// Rejections surface at Get (the update ran and the validator or
-			// handler refused): map to the already-decided contract.
-			writeJSON(w, http.StatusConflict, map[string]any{
-				"error":    "already_decided",
-				"decision": decisionStringFromErr(gErr.Error()),
-			})
+		case isReviewAlreadyDecided(gErr):
+			// The validator/handler refused a second decision (typed
+			// ReviewAlreadyDecided): 409 carrying the STORED decision,
+			// read from the result payload when it came through, else
+			// from the approval store. Never guessed from the message.
+			decision, reviewer, ok := storedDecision(res, s.approvals, r.Context(), workflowID)
+			body := map[string]any{"error": "already_decided"}
+			if ok {
+				body["decision"] = decision
+				if reviewer != "" {
+					body["reviewer"] = reviewer
+				}
+			}
+			writeJSON(w, http.StatusConflict, body)
+			return
+		case gErr != nil:
+			// Timeouts, cancelled contexts, worker failures: not a
+			// decision; report upstream trouble, do not claim 409.
+			s.log.Error("review update failed", "workflow_id", workflowID, "error", gErr)
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "workflow_update_failed"})
 			return
 		}
 	}
@@ -190,11 +206,35 @@ func decisionString(approved bool) string {
 	return "rejected"
 }
 
-func decisionStringFromErr(msg string) string {
-	if strings.Contains(msg, "approved") {
-		return "approved"
+// isReviewAlreadyDecided matches the typed refusal the workflow's update
+// validator/handler raises (temporal.NonRetryableApplicationError with type
+// ReviewAlreadyDecided). Anything else — timeout, cancelled context, worker
+// failure — is NOT a decision and must not map to 409.
+func isReviewAlreadyDecided(err error) bool {
+	if err == nil {
+		return false
 	}
-	return "rejected"
+	var appErr *temporal.ApplicationError
+	if !errors.As(err, &appErr) {
+		return false
+	}
+	return appErr.Type() == "ReviewAlreadyDecided"
+}
+
+// storedDecision reports the decision of record: from the update result
+// payload when the handler delivered one, else from the approval store.
+func storedDecision(res ecworkflow.ReviewUpdateResult, approvals publishgate.Store, ctx context.Context, workflowID string) (decision, reviewer string, ok bool) {
+	if res.Review.Reviewer != "" || res.Err != "" {
+		return decisionString(res.Review.Approved), res.Review.Reviewer, true
+	}
+	if approvals == nil {
+		return "", "", false
+	}
+	dec, err := approvals.ApprovalFor(ctx, workflowID)
+	if err != nil {
+		return "", "", false
+	}
+	return decisionString(dec.Approved), dec.Actor, true
 }
 
 var errWorkflowNotFound = errors.New("workflow not found")

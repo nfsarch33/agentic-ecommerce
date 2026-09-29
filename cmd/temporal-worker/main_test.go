@@ -21,13 +21,13 @@ func TestGatePublisherParsesProductID(t *testing.T) {
 	// not-a-uuid case below return a load error, not a parse error.
 	id := uuid.New()
 	publisher := gatePublisher{}
-	err := publisher.PublishToWooCommerce(context.Background(), id.String())
+	err := publisher.PublishToWooCommerce(context.Background(), id.String(), "wf-threaded")
 	if err == nil {
 		t.Fatal("nil gate must fail closed")
 	}
 
 	publisher = gatePublisher{gate: nil, products: &fakeProductLoader{id: id}}
-	if err := publisher.PublishToWooCommerce(context.Background(), id.String()); err == nil {
+	if err := publisher.PublishToWooCommerce(context.Background(), id.String(), "wf-threaded"); err == nil {
 		t.Fatal("nil gate must fail closed even when a product would load")
 	}
 }
@@ -36,7 +36,7 @@ func TestGatePublisherRejectsInvalidProductID(t *testing.T) {
 	t.Parallel()
 
 	publisher := gatePublisher{}
-	if err := publisher.PublishToWooCommerce(context.Background(), "not-a-uuid"); err == nil {
+	if err := publisher.PublishToWooCommerce(context.Background(), "not-a-uuid", "wf-threaded"); err == nil {
 		t.Fatal("expected invalid product id error")
 	}
 }

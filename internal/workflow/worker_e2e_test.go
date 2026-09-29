@@ -48,7 +48,6 @@ func TestWorkerRegistrationCoversAllProductionNames(t *testing.T) {
 	env.RegisterActivityWithOptions(noopPublishActivity, activity.RegisterOptions{Name: PublishToWooCommerceActivity})
 	env.RegisterActivityWithOptions(noopWorkflowEventRecorder, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
 	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error { return nil }, activity.RegisterOptions{Name: RecordApprovalActivityName})
-	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error { return nil }, activity.RegisterOptions{Name: RecordApprovalActivityName})
 	env.RegisterActivityWithOptions(noopGenerateContentActivity, activity.RegisterOptions{Name: ContentGenerateActivity})
 	env.RegisterActivityWithOptions(noopFactCheckActivity, activity.RegisterOptions{Name: ContentFactCheckActivity})
 	env.RegisterActivityWithOptions(noopEvaluateActivity, activity.RegisterOptions{Name: ContentEvaluateActivity})
@@ -65,14 +64,14 @@ func TestWorkerRegistrationCoversAllProductionNames(t *testing.T) {
 	env.RegisterActivityWithOptions(noopCheckSourcingMarginActivity, activity.RegisterOptions{Name: CheckSourcingMarginActivity})
 	env.RegisterActivityWithOptions(noopRecommendSourcingCandidateActivity, activity.RegisterOptions{Name: RecommendSourcingCandidateActivity})
 
-	env.OnActivity(CheckComplianceActivity, mock.Anything, ProductPublishActivityInput{ProductID: "registration-smoke"}).Return(
+	env.OnActivity(CheckComplianceActivity, mock.Anything, mock.Anything).Return(
 		ComplianceResult{Pass: true, Score: 95}, nil,
 	).Once()
-	env.OnActivity(ValidateMediaActivity, mock.Anything, ProductPublishActivityInput{ProductID: "registration-smoke"}).Return(
+	env.OnActivity(ValidateMediaActivity, mock.Anything, mock.Anything).Return(
 		MediaValidationResult{Pass: true, Score: 100}, nil,
 	).Once()
 	env.OnActivity(RecordWorkflowEventActivity, mock.Anything, mock.Anything).Return(nil).Times(5)
-	env.OnActivity(PublishToWooCommerceActivity, mock.Anything, ProductPublishActivityInput{ProductID: "registration-smoke"}).Return(
+	env.OnActivity(PublishToWooCommerceActivity, mock.Anything, mock.Anything).Return(
 		PublishResult{Published: true, RemoteID: "wc-smoke"}, nil,
 	).Once()
 	env.RegisterDelayedCallback(func() {

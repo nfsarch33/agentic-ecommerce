@@ -54,6 +54,9 @@ type ProductPublishInput struct {
 
 type ProductPublishActivityInput struct {
 	ProductID string `json:"product_id"`
+	// WorkflowID is the real execution id (never reconstructed): the gate
+	// looks approvals up under it.
+	WorkflowID string `json:"workflow_id,omitempty"`
 }
 
 type ProductPublishResult struct {
@@ -122,10 +125,18 @@ type ProductPublishActivityDeps struct {
 	Products  port.ProductRepository
 	Publisher ProductPublisher
 	Recorder  WorkflowEventRecorder
+	// Approvals backs the RecordApproval activity: the worker must pass the
+	// same PGStore the gate reads, or every Update-path decision errors
+	// ("approval recorder not configured") and the gate later fails closed.
+	Approvals publishgate.Store
 }
 
+// ProductPublisher publishes one product. The workflow id is threaded from
+// the live execution (workflowGetID): approvals are keyed on the REAL
+// execution id (with -auto and fingerprint suffixes), so reconstructing
+// "product-publish-"+productID here would miss every recorded decision.
 type ProductPublisher interface {
-	PublishToWooCommerce(context.Context, string) error
+	PublishToWooCommerce(ctx context.Context, productID, workflowID string) error
 }
 
 type WorkflowEventRecorder interface {
@@ -148,6 +159,7 @@ func NewProductPublishActivities(deps ProductPublishActivityDeps) *ProductPublis
 		products:   deps.Products,
 		publisher:  deps.Publisher,
 		recorder:   deps.Recorder,
+		Approvals:  deps.Approvals,
 		compliance: compliance.NewEngine(compliance.DefaultRules()),
 		media:      media.NewProcessor(media.DefaultConstraints()),
 	}
@@ -172,7 +184,7 @@ func ProductPublishWorkflow(ctx temporalworkflow.Context, input ProductPublishIn
 		return state, err
 	}
 
-	activityInput := ProductPublishActivityInput{ProductID: input.ProductID}
+	activityInput := ProductPublishActivityInput{ProductID: input.ProductID, WorkflowID: workflowGetID(ctx)}
 	if err := record(ctx, input, "product_publish.started", ProductPublishStatusDraft, "product publish workflow started", ""); err != nil {
 		return state, err
 	}
@@ -386,7 +398,7 @@ func (a *ProductPublishActivities) PublishToWooCommerce(ctx context.Context, inp
 	if a.publisher == nil {
 		return PublishResult{}, errors.New("woocommerce publisher is not configured")
 	}
-	if err := a.publisher.PublishToWooCommerce(ctx, input.ProductID); err != nil {
+	if err := a.publisher.PublishToWooCommerce(ctx, input.ProductID, input.WorkflowID); err != nil {
 		return PublishResult{}, err
 	}
 	return PublishResult{Published: true}, nil

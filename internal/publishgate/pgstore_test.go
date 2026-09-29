@@ -132,3 +132,29 @@ func TestPGClaimRaceExactlyOneAcquires(t *testing.T) {
 		t.Fatalf("acquired = %d, want exactly 1", got)
 	}
 }
+
+// TestPGGateDryRunRecordsDryRunKind pins migration 0041: the gate's dry-run
+// completion writes write_kind='dry_run', which the 0040 CHECK refused, so
+// every publish under ECOMMERCE_PUBLISH_MODE=dry-run errored on the
+// constraint. Mutant: restoring the 0040 CHECK (no 'dry_run' in write_kind)
+// fails this test at the Complete call.
+func TestPGGateDryRunRecordsDryRunKind(t *testing.T) {
+	s := pgStore(t)
+	ctx := context.Background()
+	const wf = "wf-dry-41"
+	pid := "00000000-0000-0000-0000-000000000041"
+	if _, _, err := s.RecordApproval(ctx, Decision{WorkflowID: wf, TenantID: "t1", ProductID: pid, Approved: true, Actor: "a", UpdateID: "k41"}); err != nil {
+		t.Fatal(err)
+	}
+	g := &Gate{Store: s, DryRun: true, Owner: "t-dry"}
+	res, err := g.Publish(ctx, PublishRequest{WorkflowID: wf, TenantID: "t1", ProductID: pid, SKU: "DRY-41", Fields: map[string]string{"name": "dry 41", "sku": "DRY-41"}})
+	if err != nil {
+		t.Fatalf("dry-run publish (0041 required): %v", err)
+	}
+	if res.WriteKind != "dry_run" || res.Status != "dry_run" {
+		t.Fatalf("res = %+v, want dry_run/dry_run", res)
+	}
+	if n := queryCount(t, s, "SELECT count(*) FROM publish_ledger WHERE status='dry_run' AND write_kind='dry_run'"); n != 1 {
+		t.Fatalf("dry_run ledger rows = %d, want 1", n)
+	}
+}

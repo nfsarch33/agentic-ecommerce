@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/minimax"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/notification"
@@ -370,6 +371,17 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	if workflowCleanup != nil {
 		cleanup = append(cleanup, workflowCleanup)
 	}
+	// The signal-fallback review path records approval rows API-side (D3):
+	// without a store it silently records nothing and the gate later fails
+	// closed on those workflows.
+	approvals := publishgate.Store(nil)
+	if dsn := getenv("ECOMMERCE_DB_URL", ""); dsn != "" {
+		if pool, err := pgxpool.New(context.Background(), dsn); err == nil {
+			approvals = publishgate.NewPGStore(pool)
+		} else {
+			logger.Warn("approval store disabled", "error", err)
+		}
+	}
 	mediaStore, err := objectstore.New(objectstore.Config{
 		Provider:      objectstore.Provider(getenv("ECOMMERCE_MEDIA_STORE_PROVIDER", "local")),
 		RootDir:       getenv("ECOMMERCE_MEDIA_STORE_ROOT", ".local/media-uploads"),
@@ -488,6 +500,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		mediaService:          intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
 		agentActivityHandler:  agentActivityHandler,
 		workflowClient:        workflowClient,
+		approvals:             approvals,
 		agentRegistry:         registry,
 		agentScheduler:        orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), eventbus.NewEventBusAdapter(bus, "mc-api.agent"), nil, schedulerOptions(2)),
 		agentSchedules:        defaultAgentScheduleManager(),
