@@ -148,6 +148,9 @@ redis-ping:
 redis-cli:
 	$(COMPOSE) exec redis redis-cli
 
+fixture-init:
+	@bash scripts/fixtures/wordpress-fixture-init.sh
+
 wc-up:
 	$(COMPOSE) $(WC_PROFILES) up -d wc-db wordpress
 

@@ -112,3 +112,44 @@ still runs: the workflow routes answer 503 `temporal_not_configured`
 (the start handlers check for a configured workflow client in
 `cmd/mc-api/workflow_handlers.go`), and the gate can be added later
 without touching the sync or agent loops.
+
+## Fixture loop: reproducible bring-up
+
+The two fixture-side root causes (REST authentication engaging Basic
+credentials only on SSL requests; an empty permalink structure that left
+the REST prefix unrouted) are now fixed reproducibly in the repository by
+`scripts/fixtures/wordpress-fixture-init.sh` (idempotent: safe on every
+bring-up) and checked by `scripts/fixtures/wordpress-fixture-verify.sh`
+(the product list must answer 200 with the generated key and 401 with a
+wrong secret; the key is written to a gitignored env file, never printed).
+`make fixture-init` runs the init. What the init does, one line each:
+installs the site if absent; sets the permalink structure and flushes
+rewrite rules; installs and activates the store plugin; writes a
+fixture-only must-use plugin that reports HTTPS for every request (the
+plain-HTTP loop equivalent of TLS termination - never ship this file);
+pins the database host in the shared config to the database container's
+address (one-shot tooling on the network does not resolve the service
+name); creates a read/write REST key owned by the admin user; seeds three
+published products unless any exist. The acceptance pair (200 valid /
+401 wrong) was proven twice from the script alone, including a second
+idempotent init run.
+
+Environment findings, recorded: under rootless podman without a systemd
+session, compose-declared healthchecks are never scheduled - a container
+shows "starting" forever while serving correctly, and a service whose
+`depends_on` waits on a health condition never starts through compose at
+all (the pair must be started directly). Direct probes are the ground
+truth. A full compose down/up cycle on this host can exceed four minutes
+before the storefront answers at all; the init script force-starts the
+pair and waits, but the outer cycle time is an environment property, not
+a gate the repository can own.
+
+Proven in the loop: storefront and REST serving; one sync cycle engaging
+the store end to end (the sync binary at this revision is a publish
+demo - the pull of products, orders and customers into Postgres, the
+idempotent second cycle, and refusing a plain-HTTP merchant URL with a
+named error belong to the connect-and-sync story); a media-processing
+workflow start and review-signal round trip over the workflow engine.
+Not exercised: the model path through the local router (the workflow did
+not reach a model call, and the bridge client sends no authorization
+header - a small follow-up adds it).
