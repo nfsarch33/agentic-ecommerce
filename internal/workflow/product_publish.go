@@ -12,6 +12,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/agentic-ecommerce/internal/publishgate"
 	"go.temporal.io/sdk/temporal"
 	temporalworkflow "go.temporal.io/sdk/workflow"
 )
@@ -26,6 +27,7 @@ const (
 	ValidateMediaActivity        = "product_publish.validate_media"
 	PublishToWooCommerceActivity = "product_publish.publish_to_woocommerce"
 	RecordWorkflowEventActivity  = "product_publish.record_workflow_event"
+	RecordApprovalActivityName   = "product_publish.record_approval"
 
 	ProductPublishStatusDraft            = "draft"
 	ProductPublishStatusComplianceFailed = "compliance_failed"
@@ -46,11 +48,15 @@ const (
 
 type ProductPublishInput struct {
 	ProductID   string `json:"product_id"`
+	TenantID    string `json:"tenant_id,omitempty"`
 	RequestedBy string `json:"requested_by,omitempty"`
 }
 
 type ProductPublishActivityInput struct {
 	ProductID string `json:"product_id"`
+	// WorkflowID is the real execution id (never reconstructed): the gate
+	// looks approvals up under it.
+	WorkflowID string `json:"workflow_id,omitempty"`
 }
 
 type ProductPublishResult struct {
@@ -119,10 +125,18 @@ type ProductPublishActivityDeps struct {
 	Products  port.ProductRepository
 	Publisher ProductPublisher
 	Recorder  WorkflowEventRecorder
+	// Approvals backs the RecordApproval activity: the worker must pass the
+	// same PGStore the gate reads, or every Update-path decision errors
+	// ("approval recorder not configured") and the gate later fails closed.
+	Approvals publishgate.Store
 }
 
+// ProductPublisher publishes one product. The workflow id is threaded from
+// the live execution (workflowGetID): approvals are keyed on the REAL
+// execution id (with -auto and fingerprint suffixes), so reconstructing
+// "product-publish-"+productID here would miss every recorded decision.
 type ProductPublisher interface {
-	PublishToWooCommerce(context.Context, string) error
+	PublishToWooCommerce(ctx context.Context, productID, workflowID string) error
 }
 
 type WorkflowEventRecorder interface {
@@ -135,6 +149,9 @@ type ProductPublishActivities struct {
 	recorder   WorkflowEventRecorder
 	compliance compliance.Engine
 	media      media.Processor
+	// Approvals records review decisions durably before any publish (the
+	// exactly-once gate's fail-closed precondition). Nil disables the gate.
+	Approvals publishgate.Store
 }
 
 func NewProductPublishActivities(deps ProductPublishActivityDeps) *ProductPublishActivities {
@@ -142,6 +159,7 @@ func NewProductPublishActivities(deps ProductPublishActivityDeps) *ProductPublis
 		products:   deps.Products,
 		publisher:  deps.Publisher,
 		recorder:   deps.Recorder,
+		Approvals:  deps.Approvals,
 		compliance: compliance.NewEngine(compliance.DefaultRules()),
 		media:      media.NewProcessor(media.DefaultConstraints()),
 	}
@@ -166,7 +184,7 @@ func ProductPublishWorkflow(ctx temporalworkflow.Context, input ProductPublishIn
 		return state, err
 	}
 
-	activityInput := ProductPublishActivityInput{ProductID: input.ProductID}
+	activityInput := ProductPublishActivityInput{ProductID: input.ProductID, WorkflowID: workflowGetID(ctx)}
 	if err := record(ctx, input, "product_publish.started", ProductPublishStatusDraft, "product publish workflow started", ""); err != nil {
 		return state, err
 	}
@@ -250,13 +268,40 @@ func runMediaGate(ctx temporalworkflow.Context, input ProductPublishInput, activ
 
 func runReviewGate(ctx temporalworkflow.Context, input ProductPublishInput, state *ProductPublishResult) (bool, error) {
 	state.Status = ProductPublishStatusAwaitingReview
-	review, err := receiveReviewSignal(ctx)
+	h := &reviewUpdateHandler{}
+	if err := installReviewUpdate(ctx, h); err != nil {
+		state.failActivity("human_review", temporalworkflow.Now(ctx), "Review update handler failed to install", err)
+		state.skipActivities(temporalworkflow.Now(ctx), "publish")
+		return false, err
+	}
+	review, err := waitReviewDecision(ctx, h)
 	if err != nil {
 		state.failActivity("human_review", temporalworkflow.Now(ctx), "Human review did not complete", err)
 		state.skipActivities(temporalworkflow.Now(ctx), "publish")
 		return false, err
 	}
 	state.Review = review
+
+	// D3: the decision is recorded durably BEFORE any publish attempt. A
+	// publish without this row fails closed in the gate. Deprecated signal
+	// deliveries keep the pre-gate event sequence (the API side records the
+	// row before signalling), so in-flight workflows replay unchanged.
+	if h.viaUpdate() {
+		if err := temporalworkflow.ExecuteActivity(
+			workflowWithActivityOpts(ctx, 10*time.Second), RecordApprovalActivityName, RecordApprovalInput{
+				WorkflowID: workflowGetID(ctx),
+				TenantID:   input.TenantID,
+				ProductID:  input.ProductID,
+				Approved:   review.Approved,
+				Reviewer:   review.Reviewer,
+				Reason:     review.Note,
+				UpdateID:   h.updateID,
+			}).Get(ctx, nil); err != nil {
+			state.failActivity("human_review", temporalworkflow.Now(ctx), "Recording the decision failed", err)
+			state.skipActivities(temporalworkflow.Now(ctx), "publish")
+			return false, err
+		}
+	}
 	if review.Approved {
 		state.completeActivity("human_review", temporalworkflow.Now(ctx), "Human review approved publish")
 		state.startActivity("publish", temporalworkflow.Now(ctx), "Publish to WooCommerce")
@@ -353,7 +398,7 @@ func (a *ProductPublishActivities) PublishToWooCommerce(ctx context.Context, inp
 	if a.publisher == nil {
 		return PublishResult{}, errors.New("woocommerce publisher is not configured")
 	}
-	if err := a.publisher.PublishToWooCommerce(ctx, input.ProductID); err != nil {
+	if err := a.publisher.PublishToWooCommerce(ctx, input.ProductID, input.WorkflowID); err != nil {
 		return PublishResult{}, err
 	}
 	return PublishResult{Published: true}, nil

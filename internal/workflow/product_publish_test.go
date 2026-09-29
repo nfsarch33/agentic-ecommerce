@@ -34,16 +34,19 @@ func TestProductPublishWorkflowWaitsForReviewSignalBeforePublishing(t *testing.T
 	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
 		return nil
 	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
 
 	input := ProductPublishInput{ProductID: "product-123", RequestedBy: "operator@example.com"}
-	env.OnActivity(CheckComplianceActivity, mock.Anything, ProductPublishActivityInput{ProductID: input.ProductID}).Return(
+	env.OnActivity(CheckComplianceActivity, mock.Anything, mock.Anything).Return(
 		ComplianceResult{Pass: true, Score: 94}, nil,
 	).Once()
-	env.OnActivity(ValidateMediaActivity, mock.Anything, ProductPublishActivityInput{ProductID: input.ProductID}).Return(
+	env.OnActivity(ValidateMediaActivity, mock.Anything, mock.Anything).Return(
 		MediaValidationResult{Pass: true, Score: 100}, nil,
 	).Once()
 	env.OnActivity(RecordWorkflowEventActivity, mock.Anything, mock.Anything).Return(nil).Times(5)
-	env.OnActivity(PublishToWooCommerceActivity, mock.Anything, ProductPublishActivityInput{ProductID: input.ProductID}).Return(
+	env.OnActivity(PublishToWooCommerceActivity, mock.Anything, mock.Anything).Return(
 		PublishResult{Published: true, RemoteID: "wc-123"}, nil,
 	).Once()
 	env.RegisterDelayedCallback(func() {
@@ -84,12 +87,15 @@ func TestProductPublishWorkflowStopsWhenHumanReviewRejects(t *testing.T) {
 	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
 		return nil
 	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
 
 	input := ProductPublishInput{ProductID: "product-456", RequestedBy: "operator@example.com"}
-	env.OnActivity(CheckComplianceActivity, mock.Anything, ProductPublishActivityInput{ProductID: input.ProductID}).Return(
+	env.OnActivity(CheckComplianceActivity, mock.Anything, mock.Anything).Return(
 		ComplianceResult{Pass: true, Score: 90}, nil,
 	).Once()
-	env.OnActivity(ValidateMediaActivity, mock.Anything, ProductPublishActivityInput{ProductID: input.ProductID}).Return(
+	env.OnActivity(ValidateMediaActivity, mock.Anything, mock.Anything).Return(
 		MediaValidationResult{Pass: true, Score: 100}, nil,
 	).Once()
 	env.OnActivity(RecordWorkflowEventActivity, mock.Anything, mock.Anything).Return(nil).Times(4)
@@ -122,9 +128,12 @@ func TestProductPublishWorkflowStopsWhenComplianceFails(t *testing.T) {
 	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
 		return nil
 	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
 
 	input := ProductPublishInput{ProductID: "product-789"}
-	env.OnActivity(CheckComplianceActivity, mock.Anything, ProductPublishActivityInput{ProductID: input.ProductID}).Return(
+	env.OnActivity(CheckComplianceActivity, mock.Anything, mock.Anything).Return(
 		ComplianceResult{Pass: false, Score: 30, Reasons: []string{"product description is too short"}}, nil,
 	).Once()
 	env.OnActivity(RecordWorkflowEventActivity, mock.Anything, mock.Anything).Return(nil).Twice()
@@ -157,12 +166,15 @@ func TestProductPublishWorkflowStopsWhenMediaValidationFails(t *testing.T) {
 	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
 		return nil
 	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
 
 	input := ProductPublishInput{ProductID: "product-media-fail"}
-	env.OnActivity(CheckComplianceActivity, mock.Anything, ProductPublishActivityInput{ProductID: input.ProductID}).Return(
+	env.OnActivity(CheckComplianceActivity, mock.Anything, mock.Anything).Return(
 		ComplianceResult{Pass: true, Score: 90}, nil,
 	).Once()
-	env.OnActivity(ValidateMediaActivity, mock.Anything, ProductPublishActivityInput{ProductID: input.ProductID}).Return(
+	env.OnActivity(ValidateMediaActivity, mock.Anything, mock.Anything).Return(
 		MediaValidationResult{Pass: false, Score: 20, Reasons: []string{"alt text is required"}}, nil,
 	).Once()
 	env.OnActivity(RecordWorkflowEventActivity, mock.Anything, mock.Anything).Return(nil).Times(3)
@@ -365,6 +377,7 @@ func TestProductPublishWorkflowE2EWithRealActivities(t *testing.T) {
 	env.RegisterActivityWithOptions(activities.ValidateMedia, activity.RegisterOptions{Name: ValidateMediaActivity})
 	env.RegisterActivityWithOptions(activities.PublishToWooCommerce, activity.RegisterOptions{Name: PublishToWooCommerceActivity})
 	env.RegisterActivityWithOptions(activities.RecordWorkflowEvent, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error { return nil }, activity.RegisterOptions{Name: RecordApprovalActivityName})
 	env.RegisterDelayedCallback(func() {
 		env.SignalWorkflow(ProductPublishReviewSignal, ReviewSignal{Approved: true, Reviewer: "qa@example.com", Note: "qa approved"})
 	}, time.Minute)
@@ -508,11 +521,12 @@ func TestProductPublishActivityRequiresConfiguredDependencies(t *testing.T) {
 }
 
 type fakeProductPublisher struct {
-	publishedID string
-	err         error
+	publishedID   string
+	publishedWFID string
+	err           error
 }
 
-func (f *fakeProductPublisher) PublishToWooCommerce(_ context.Context, productID string) error {
+func (f *fakeProductPublisher) PublishToWooCommerce(_ context.Context, productID, workflowID string) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -520,6 +534,7 @@ func (f *fakeProductPublisher) PublishToWooCommerce(_ context.Context, productID
 		return errors.New("missing product id")
 	}
 	f.publishedID = productID
+	f.publishedWFID = workflowID
 	return nil
 }
 
@@ -536,6 +551,9 @@ func registerNoopRecordActivity(env *testsuite.TestWorkflowEnvironment) {
 	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
 		return nil
 	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
 }
 
 type activityProductRepo struct {

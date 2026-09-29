@@ -569,6 +569,8 @@ func workflowAuthServerConfig() serverConfig {
 }
 
 type fakeTemporalWorkflowClient struct {
+	updateHandle      client.WorkflowUpdateHandle
+	updateErr         error
 	run               fakeWorkflowRun
 	describe          *workflowservicepb.DescribeWorkflowExecutionResponse
 	describeErr       error
@@ -602,6 +604,16 @@ func (f *fakeTemporalWorkflowClient) DescribeWorkflowExecution(_ context.Context
 		return nil, f.describeErr
 	}
 	return f.describe, nil
+}
+
+func (f *fakeTemporalWorkflowClient) UpdateWorkflow(ctx context.Context, options client.UpdateWorkflowOptions) (client.WorkflowUpdateHandle, error) {
+	if f.updateErr != nil {
+		return nil, f.updateErr
+	}
+	if f.updateHandle != nil {
+		return f.updateHandle, nil
+	}
+	return nil, errors.New("update not supported by the fake client")
 }
 
 func (f *fakeTemporalWorkflowClient) SignalWorkflow(_ context.Context, workflowID, runID, signalName string, arg any) error {

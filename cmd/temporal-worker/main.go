@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,25 +13,26 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/shopify"
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/shopee"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/minimax"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/objectstore"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/shopee"
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/shopify"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
 	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/agentic-ecommerce/internal/publishgate"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
 	"github.com/nfsarch33/agentic-ecommerce/internal/runtimeobs"
-	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 	"github.com/nfsarch33/agentic-ecommerce/internal/tenant"
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 	"go.temporal.io/sdk/activity"
@@ -176,11 +178,12 @@ func buildWorkerDeps(ctx context.Context, logger *slog.Logger, scheduleCfg agent
 		ConsumerKey:    getenv("ECOMMERCE_WC_CONSUMER_KEY", ""),
 		ConsumerSecret: getenv("ECOMMERCE_WC_CONSUMER_SECRET", ""),
 	}, &http.Client{Timeout: 10 * time.Second})
-	syncEngine := enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: wcClient, DefaultCurrency: "AUD"})
+	publisher, approvalStore := newGatePublisherFromEnv(logger, repo, wcClient.Config())
 	publishActivities := ecworkflow.NewProductPublishActivities(ecworkflow.ProductPublishActivityDeps{
 		Products:  repo,
-		Publisher: syncPublisher{engine: syncEngine},
+		Publisher: publisher,
 		Recorder:  logRecorder{logger: logger},
+		Approvals: approvalStore,
 	})
 	contentActivities := newContentGenerationActivitiesFromEnv(logger)
 	mediaActivities := newMediaProcessingActivitiesFromEnv(logger, repo)
@@ -277,6 +280,7 @@ func registerWorkflowsAndActivities(w workerRegistry, deps *workerDeps) {
 	w.RegisterActivityWithOptions(deps.PublishActivities.ValidateMedia, activity.RegisterOptions{Name: ecworkflow.ValidateMediaActivity})
 	w.RegisterActivityWithOptions(deps.PublishActivities.PublishToWooCommerce, activity.RegisterOptions{Name: ecworkflow.PublishToWooCommerceActivity})
 	w.RegisterActivityWithOptions(deps.PublishActivities.RecordWorkflowEvent, activity.RegisterOptions{Name: ecworkflow.RecordWorkflowEventActivity})
+	w.RegisterActivityWithOptions(deps.PublishActivities.RecordApproval, activity.RegisterOptions{Name: ecworkflow.RecordApprovalActivityName})
 
 	w.RegisterActivityWithOptions(deps.ContentActivities.GenerateContent, activity.RegisterOptions{Name: ecworkflow.ContentGenerateActivity})
 	w.RegisterActivityWithOptions(deps.ContentActivities.FactCheckContent, activity.RegisterOptions{Name: ecworkflow.ContentFactCheckActivity})
@@ -369,10 +373,18 @@ func newContentGenerationActivitiesFromEnv(logger *slog.Logger) *ecworkflow.Cont
 	})
 }
 
-type syncPublisher struct {
-	engine interface {
-		PublishToWooCommerce(context.Context, uuid.UUID) error
+// gatePublisher is the ONLY WooCommerce write path since the exactly-once
+// gate: it resolves the product's fields and drives the gate's decision
+// sequence (approval check, keyed ledger claim, GET-by-SKU write kind).
+type gatePublisher struct {
+	gate     gatePort
+	products interface {
+		GetByID(context.Context, uuid.UUID) (catalog.Product, error)
 	}
+}
+
+type gatePort interface {
+	Publish(ctx context.Context, req publishgate.PublishRequest) (publishgate.WriteResult, error)
 }
 
 func newMarketplaceSyncActivitiesFromEnv(logger *slog.Logger) *ecworkflow.MarketplaceSyncActivities {
@@ -460,12 +472,103 @@ func newShopeeMarketplaceConnectorFromEnv() (marketplacesync.Connector, error) {
 	}, &http.Client{Timeout: 15 * time.Second})
 }
 
-func (p syncPublisher) PublishToWooCommerce(ctx context.Context, productID string) error {
+// newGatePublisherFromEnv builds the gate-backed publisher: the Postgres
+// store for approvals/ledger, the WooCommerce adapter for lookups and
+// writes, and the dry-run flag. The lease owner identifies this worker.
+// The returned store is the SAME store the gate reads: the caller must wire
+// it into ProductPublishActivityDeps.Approvals so RecordApproval and the
+// gate agree on the approval rows.
+func newGatePublisherFromEnv(logger *slog.Logger, repo port.ProductRepository, wcCfg woocommerce.Config) (ecworkflow.ProductPublisher, publishgate.Store) {
+	dsn := getenv("ECOMMERCE_DB_URL", "")
+	if dsn == "" {
+		logger.Warn("ECOMMERCE_DB_URL unset: the publish gate is DISABLED and publishes fail closed")
+		return gatePublisher{}, nil
+	}
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		logger.Error("publish gate pool failed", "error", err)
+		return gatePublisher{}, nil
+	}
+	store := publishgate.NewPGStore(pool)
+	wc := woocommerce.NewClient(wcCfg, nil)
+	host, _ := os.Hostname()
+	owner := "worker-" + host
+	g := &publishgate.Gate{
+		Store:  store,
+		Remote: &wcAdapter{client: wc},
+		DryRun: strings.EqualFold(getenv("ECOMMERCE_PUBLISH_MODE", ""), "dry-run"),
+		Owner:  owner,
+	}
+	return gatePublisher{gate: g, products: repo}, store
+}
+
+// wcAdapter adapts the store client to the gate's remote port.
+type wcAdapter struct{ client woocommerce.Client }
+
+func (a *wcAdapter) FindBySKU(ctx context.Context, sku string) (*publishgate.RemoteProduct, error) {
+	p, err := a.client.FindProductBySKU(ctx, sku)
+	if err != nil || p == nil {
+		return nil, err
+	}
+	return &publishgate.RemoteProduct{ID: fmt.Sprintf("%d", p.ID), Fields: liveFieldsOf(p)}, nil
+}
+
+func (a *wcAdapter) Update(ctx context.Context, remoteID string, fields map[string]string) (*publishgate.RemoteProduct, error) {
+	p, err := a.client.UpdateProduct(ctx, remoteID, fields)
+	if err != nil {
+		return nil, err
+	}
+	return &publishgate.RemoteProduct{ID: fmt.Sprintf("%d", p.ID), Fields: liveFieldsOf(p)}, nil
+}
+
+func (a *wcAdapter) Create(ctx context.Context, fields map[string]string) (*publishgate.RemoteProduct, error) {
+	p, err := a.client.CreateProduct(ctx, fields)
+	if err != nil {
+		return nil, err
+	}
+	return &publishgate.RemoteProduct{ID: fmt.Sprintf("%d", p.ID), Fields: liveFieldsOf(p)}, nil
+}
+
+func liveFieldsOf(p *woocommerce.Product) map[string]string {
+	f := map[string]string{"name": p.Name, "sku": p.SKU}
+	if p.Regular != "" {
+		f["regular_price"] = p.Regular
+	}
+	if p.ShortDesc != "" {
+		f["short_description"] = p.ShortDesc
+	}
+	return f
+}
+
+func (p gatePublisher) PublishToWooCommerce(ctx context.Context, productID, workflowID string) error {
+	if p.gate == nil {
+		return errors.New("gate publisher: the publish gate is not configured; publishes fail closed")
+	}
 	id, err := uuid.Parse(productID)
 	if err != nil {
 		return fmt.Errorf("invalid product id: %w", err)
 	}
-	return p.engine.PublishToWooCommerce(ctx, id)
+	product, err := p.products.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("gate publisher: load product %s: %w", productID, err)
+	}
+	fields := woocommerce.FieldsFor(product.SKU(), product.Title(), product.Description(),
+		fmt.Sprintf("%.2f", float64(product.Price().Amount())/100), product.Stock(), woocommerce.WCStatus(product.Status()))
+	res, err := p.gate.Publish(ctx, publishgate.PublishRequest{
+		// The workflow id comes from the live execution (it may carry -auto
+		// or fingerprint suffixes); reconstructing it here would miss the
+		// approval row and fail closed.
+		WorkflowID: workflowID,
+		TenantID:   "",
+		ProductID:  productID,
+		SKU:        product.SKU(),
+		Fields:     fields,
+	})
+	if err != nil {
+		return err
+	}
+	_ = res // the write kind is recorded in the ledger; the activity reports success
+	return nil
 }
 
 type logRecorder struct {

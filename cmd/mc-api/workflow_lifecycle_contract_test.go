@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -425,6 +427,10 @@ func (f *workflowLifecycleClientStub) DescribeWorkflowExecution(context.Context,
 		return nil, f.describeErr
 	}
 	return f.describe, nil
+}
+
+func (f *workflowLifecycleClientStub) UpdateWorkflow(ctx context.Context, options sdkclient.UpdateWorkflowOptions) (sdkclient.WorkflowUpdateHandle, error) {
+	return nil, errors.New("update not supported by the stub")
 }
 
 func (f *workflowLifecycleClientStub) SignalWorkflow(context.Context, string, string, string, any) error {

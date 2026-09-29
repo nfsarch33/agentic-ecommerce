@@ -29,6 +29,8 @@ type temporalWorkflowClient interface {
 	ListWorkflow(context.Context, *workflowservicepb.ListWorkflowExecutionsRequest) (*workflowservicepb.ListWorkflowExecutionsResponse, error)
 	QueryWorkflow(context.Context, string, string, string, ...interface{}) (converter.EncodedValue, error)
 	SignalWorkflow(context.Context, string, string, string, any) error
+	// UpdateWorkflow drives the review Update (exactly-once decisions).
+	UpdateWorkflow(context.Context, client.UpdateWorkflowOptions) (client.WorkflowUpdateHandle, error)
 }
 
 type workflowRun interface {

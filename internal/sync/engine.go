@@ -54,7 +54,6 @@ type Engine struct {
 	conflicts []Conflict
 
 	conflictKeys           map[string]struct{}
-	publishedProductStates map[string]string
 }
 
 type ImportOptions struct {
@@ -119,7 +118,6 @@ func NewEngine(cfg Config) *Engine {
 		defaultCurrency:        currency,
 		now:                    now,
 		conflictKeys:           make(map[string]struct{}),
-		publishedProductStates: make(map[string]string),
 	}
 }
 
@@ -165,30 +163,6 @@ func (e *Engine) ImportFromWooCommerce(ctx context.Context, opts ImportOptions) 
 		e.record(Event{Type: EventProductImported, ProductID: product.ID().String(), RemoteID: remote.ID, Message: "imported WooCommerce product"})
 	}
 	return result, nil
-}
-
-func (e *Engine) PublishToWooCommerce(ctx context.Context, id uuid.UUID) error {
-	product, err := e.repo.GetByID(ctx, id)
-	if err != nil {
-		e.record(Event{Type: EventSyncFailed, ProductID: id.String(), Message: err.Error()})
-		return err
-	}
-	fingerprint := productFingerprint(product)
-	e.mu.RLock()
-	alreadyPublished := e.publishedProductStates[id.String()] == fingerprint
-	e.mu.RUnlock()
-	if alreadyPublished {
-		return nil
-	}
-	if err := e.wc.UpsertProduct(ctx, product); err != nil {
-		e.record(Event{Type: EventSyncFailed, ProductID: id.String(), Message: err.Error()})
-		return err
-	}
-	e.mu.Lock()
-	e.publishedProductStates[id.String()] = fingerprint
-	e.mu.Unlock()
-	e.record(Event{Type: EventProductPublished, ProductID: id.String(), Message: "published product to WooCommerce"})
-	return nil
 }
 
 func (e *Engine) ReconcileInventory(ctx context.Context) (ImportResult, error) {

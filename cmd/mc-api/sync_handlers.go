@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	enums "go.temporal.io/api/enums/v1"
 	"net/http"
 	"strings"
 	"time"
@@ -16,13 +17,13 @@ import (
 )
 
 type syncStatusResponse struct {
-	TotalEvents               int                                  `json:"total_events"`
-	PendingConflicts          int                                  `json:"pending_conflicts"`
-	LastEvent                 *enginesync.Event                    `json:"last_event,omitempty"`
-	LastError                 string                               `json:"last_error,omitempty"`
-	UpdatedAt                 time.Time                            `json:"updated_at"`
-	DLQDepth                  int                                  `json:"dlq_depth"`
-	MarketplaceReplay         marketplaceReplayStateResponse       `json:"marketplace_replay"`
+	TotalEvents               int                                    `json:"total_events"`
+	PendingConflicts          int                                    `json:"pending_conflicts"`
+	LastEvent                 *enginesync.Event                      `json:"last_event,omitempty"`
+	LastError                 string                                 `json:"last_error,omitempty"`
+	UpdatedAt                 time.Time                              `json:"updated_at"`
+	DLQDepth                  int                                    `json:"dlq_depth"`
+	MarketplaceReplay         marketplaceReplayStateResponse         `json:"marketplace_replay"`
 	MarketplaceReconciliation marketplaceReconciliationStateResponse `json:"marketplace_reconciliation"`
 }
 
@@ -197,16 +198,22 @@ func (s *server) publishProduct(w http.ResponseWriter, r *http.Request, path str
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_id"})
 		return
 	}
-	if err := s.syncEngine.PublishToWooCommerce(r.Context(), id); err != nil {
-		if isNotFound(err) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
-			return
+	// D1: there is exactly one write path - the product-publish workflow.
+	// The direct publish is refused with approval_required and the workflow
+	// that owns the decision (started if absent, so the caller has something
+	// to review).
+	workflowID := "product-publish-" + id.String() + "-auto"
+	if s.workflowClient != nil {
+		if _, err := s.workflowClient.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
+			ID:                       workflowID,
+			TaskQueue:                "ec-workflows",
+			WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+			WorkflowExecutionTimeout: 24 * time.Hour,
+		}, ecworkflow.ProductPublishWorkflow, ecworkflow.ProductPublishInput{ProductID: id.String(), TenantID: s.tenantOf(r)}); err != nil {
+			s.log.Error("start publish workflow for approval", "workflow_id", workflowID, "error", err)
 		}
-		s.log.Error("publish product", "error", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "publish_failed"})
-		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "published"})
+	writeJSON(w, http.StatusConflict, map[string]string{"error": "approval_required", "workflow_id": workflowID})
 }
 
 func (s *server) woocommerceOrderWebhookHandler(w http.ResponseWriter, r *http.Request) {

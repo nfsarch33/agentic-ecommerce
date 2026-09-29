@@ -27,6 +27,9 @@ func TestProductPublishWorkflowQueryIncludesLifecycleMetadata(t *testing.T) {
 	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
 		return nil
 	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
 	env.OnActivity(RecordWorkflowEventActivity, mock.Anything, mock.Anything).Return(nil).Times(5)
 
 	var queried map[string]any

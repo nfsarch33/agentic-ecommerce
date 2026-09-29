@@ -1748,8 +1748,14 @@ paths:
             type: string
             format: uuid
       responses:
+        '409':
+          description: Direct publish is refused; the product-publish workflow owns the decision (approval_required, with the workflow id)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishApprovalRequired' 
         '200':
-          description: Product published
+          description: Product published (deprecated; never returned by the gate)
           content:
             application/json:
               schema:
@@ -4043,6 +4049,16 @@ components:
       bearerFormat: JWT
       description: HMAC-signed JWT access token issued by `/api/v1/auth/login` or `/api/v1/auth/refresh`.
   schemas:
+    PublishApprovalRequired:
+      type: object
+      required: [error, workflow_id]
+      properties:
+        error:
+          type: string
+          enum: [approval_required]
+        workflow_id:
+          type: string
+          description: The product-publish workflow that must be reviewed.
     LoginRequest:
       type: object
       required: [password]

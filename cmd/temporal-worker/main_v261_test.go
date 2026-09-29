@@ -59,11 +59,12 @@ func TestRegisterWorkflowsAndActivities(t *testing.T) {
 
 	// v8 Pair 6 adds marketplace sync/replay and image edit approval
 	// workflows, plus five named activities. This bumps the contract
-	// from 6+25 to 9+30.
+	// from 6+25 to 9+30; the exactly-once publish gate adds
+	// product_publish.record_approval (31).
 	if got, want := len(reg.workflows), 9; got != want {
 		t.Fatalf("workflows registered = %d, want %d", got, want)
 	}
-	if got, want := len(reg.activities), 30; got != want {
+	if got, want := len(reg.activities), 31; got != want {
 		t.Fatalf("activities registered = %d, want %d", got, want)
 	}
 

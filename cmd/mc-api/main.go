@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/minimax"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/notification"
@@ -43,6 +44,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 	"github.com/nfsarch33/agentic-ecommerce/internal/observability/hooks"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/agentic-ecommerce/internal/publishgate"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
 	"github.com/nfsarch33/agentic-ecommerce/internal/registration"
 	"github.com/nfsarch33/agentic-ecommerce/internal/security"
@@ -140,28 +142,31 @@ type serverConfig struct {
 }
 
 type server struct {
-	cfg                   serverConfig
-	repo                  port.ProductRepository
-	orderRepo             port.OrderRepository
-	cartRepo              port.CartRepository
-	membershipRepo        port.MembershipRepository
-	membershipGateway     port.MembershipPaymentGateway
-	membershipNotifier    port.MembershipNotificationSender
-	digitalProductRepo    port.DigitalProductRepository
-	licenseRepo           port.LicenseRepository
-	accessGrantRepo       port.AccessGrantRepository
-	digitalSvc            *digital.Service
-	eventBus              eventHistory
-	syncEngine            *enginesync.Engine
-	marketplaceSync       *marketplacesync.Router
-	contentAgent          contentGenerator
-	rag                   *rag.Service
-	factChecker           *contentagent.FactChecker
-	factChecksMu          sync.RWMutex
-	factChecks            map[string]storedFactCheckResult
-	mediaService          *intelligence.Service
-	agentActivityHandler  http.Handler
-	workflowClient        temporalWorkflowClient
+	cfg                  serverConfig
+	repo                 port.ProductRepository
+	orderRepo            port.OrderRepository
+	cartRepo             port.CartRepository
+	membershipRepo       port.MembershipRepository
+	membershipGateway    port.MembershipPaymentGateway
+	membershipNotifier   port.MembershipNotificationSender
+	digitalProductRepo   port.DigitalProductRepository
+	licenseRepo          port.LicenseRepository
+	accessGrantRepo      port.AccessGrantRepository
+	digitalSvc           *digital.Service
+	eventBus             eventHistory
+	syncEngine           *enginesync.Engine
+	marketplaceSync      *marketplacesync.Router
+	contentAgent         contentGenerator
+	rag                  *rag.Service
+	factChecker          *contentagent.FactChecker
+	factChecksMu         sync.RWMutex
+	factChecks           map[string]storedFactCheckResult
+	mediaService         *intelligence.Service
+	agentActivityHandler http.Handler
+	workflowClient       temporalWorkflowClient
+	// approvals records review decisions on the deprecated signal fallback
+	// path (the update path records in-workflow). Nil disables recording.
+	approvals             publishgate.Store
 	agentRegistry         *orchestrator.Registry
 	agentScheduler        *orchestrator.Scheduler
 	agentSchedules        *orchestrator.ScheduleManager
@@ -366,6 +371,17 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	if workflowCleanup != nil {
 		cleanup = append(cleanup, workflowCleanup)
 	}
+	// The signal-fallback review path records approval rows API-side (D3):
+	// without a store it silently records nothing and the gate later fails
+	// closed on those workflows.
+	approvals := publishgate.Store(nil)
+	if dsn := getenv("ECOMMERCE_DB_URL", ""); dsn != "" {
+		if pool, err := pgxpool.New(context.Background(), dsn); err == nil {
+			approvals = publishgate.NewPGStore(pool)
+		} else {
+			logger.Warn("approval store disabled", "error", err)
+		}
+	}
 	mediaStore, err := objectstore.New(objectstore.Config{
 		Provider:      objectstore.Provider(getenv("ECOMMERCE_MEDIA_STORE_PROVIDER", "local")),
 		RootDir:       getenv("ECOMMERCE_MEDIA_STORE_ROOT", ".local/media-uploads"),
@@ -484,6 +500,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 		mediaService:          intelligence.NewService(intelligence.ServiceConfig{HTTPClient: &http.Client{Timeout: 15 * time.Second}, Store: mediaStore}),
 		agentActivityHandler:  agentActivityHandler,
 		workflowClient:        workflowClient,
+		approvals:             approvals,
 		agentRegistry:         registry,
 		agentScheduler:        orchestrator.NewScheduler(registry, orchestrator.NewInMemoryStore(), eventbus.NewEventBusAdapter(bus, "mc-api.agent"), nil, schedulerOptions(2)),
 		agentSchedules:        defaultAgentScheduleManager(),

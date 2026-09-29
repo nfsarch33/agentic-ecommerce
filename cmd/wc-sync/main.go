@@ -59,12 +59,10 @@ func run(ctx context.Context, logger *slog.Logger, channel enginesync.WooCommerc
 		return err
 	}
 
-	engine := enginesync.NewEngine(enginesync.Config{ProductRepository: repo, WooCommerce: channel, DefaultCurrency: "AUD"})
-	if err := engine.PublishToWooCommerce(ctx, product.ID()); err != nil {
-		return err
-	}
-
-	logger.Info("wc-sync.product_synced", "sku", product.SKU())
+	// Read-only since the exactly-once gate: publishing belongs to the
+	// product-publish workflow alone, behind an approval. The demo publish
+	// is gone; the pull sync lands with the connect-and-sync story.
+	logger.Info("wc-sync.product_staged", "sku", product.SKU(), "note", "publishing requires the product-publish workflow")
 	return nil
 }
 
