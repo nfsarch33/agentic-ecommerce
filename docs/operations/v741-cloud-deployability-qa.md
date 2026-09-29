@@ -23,7 +23,7 @@ provider roots explicitly operator-gated.
 | Helm chart | `helm lint deploy/helm/agentic-ecommerce` | Static chart lint only. | Chart lints. |
 
 live provider roots stay operator-gated: `deploy/terraform/gke`,
-`deploy/terraform/eks`, `deploy/terraform/oci`, and `deploy/terraform/dr`
+`deploy/terraform/eks` and `deploy/terraform/dr` (`deploy/terraform/oci` removed with the retired memory service)
 require explicit account, backend, IAM, and state-owner decisions before
 `terraform plan` or `terraform apply`.
 

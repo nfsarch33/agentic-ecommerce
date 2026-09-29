@@ -67,13 +67,20 @@ lint:
 	golangci-lint run ./...
 
 
-# Forbidden strings in a public repo (design v18900-1 purge): the retired
-# memory service term (ADR-063; Engram is the only memory plane) and the
-# employer/target-specific tokens. The character class keeps this Makefile
-# line itself out of the match set.
+# Forbidden strings in a public repo. Only the neutral retired-memory-
+# service term (ADR-063) is spelled inline, as a character class so this
+# Makefile line itself does not contain the literal. The employer and
+# internal product tokens are read at RUN TIME from FORBIDDEN_STRINGS_FILE
+# (one ERE per line, comments with #) when set — a forbidden-strings list
+# must not itself publish the strings it forbids.
 lint-no-target-strings:
 	@echo "Scanning for forbidden strings..."
-	@MATCHES=$$(grep -ril -E 'zendesk|amazon[ -]connect|\bz3n\b|cc-nl|lastpass|\bccp\b|\bzaf\b|[mM]em0' \
+	@EXTRA=""; \
+	if [ -n "$${FORBIDDEN_STRINGS_FILE:-}" ] && [ -f "$$FORBIDDEN_STRINGS_FILE" ]; then \
+	    EXTRA=$$(grep -vE '^[[:space:]]*(#|$$)' "$$FORBIDDEN_STRINGS_FILE" | paste -sd'|' -); \
+	else 	    echo "note: FORBIDDEN_STRINGS_FILE unset — scanning the inline neutral term only"; \
+	fi; \
+	MATCHES=$$(grep -ril -E "[mM]em0$${EXTRA:+|$$EXTRA}" \
 	    internal/ cmd/ pkg/ docs/ reports/ deploy/ scripts/ tests/ 2>/dev/null || true); \
 	if [ -n "$$MATCHES" ]; then \
 	    echo "ERROR: forbidden strings found:"; \

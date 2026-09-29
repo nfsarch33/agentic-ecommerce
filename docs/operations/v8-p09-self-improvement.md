@@ -13,7 +13,7 @@ into existing `coord.RewardSignal` artifacts and adds additive EvoMap and
 Prometheus fields for self-improvement and Agenttrace evidence counts.
 
 The implementation intentionally does not run live LLM/VLM/OmniParser work and
-does not depend on the retired memory service availability. the retired memory service remained degraded during the sprint
+does not depend on the retired memory service availability. The retired memory service remained degraded during the sprint
 with socket hang-up responses, so Git KB and repo artifacts are the durable
 evidence source.
 

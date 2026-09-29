@@ -79,7 +79,7 @@
 
 - Live LLM reviewer execution.
 - Local OmniParser or VLM workloads.
-- the retired memory service writes while the MCP endpoint is degraded.
+- The retired memory service writes while the MCP endpoint is degraded.
 - Automatic promotion into production policy. Pair 9 MVP only creates
   replayable evidence and reward artifacts; QA validates replay and promotion
   rules.

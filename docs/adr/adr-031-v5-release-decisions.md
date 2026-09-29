@@ -23,7 +23,7 @@ The v5.0.0 release closes a 20 sprint-pair cycle (v4.1.0 through v4.19.1) that b
 - **uiauto vs Playwright comparison** (Pair 14): Side-by-side test runner + accuracy/speed metrics + decision matrix for promotion
 - **Worktree hardening** (Pair 15): Race detection + multi-agent coordination locks + handoff protocol formalisation
 - **Skill consolidation** (Pair 16): Agent skill inventory audit + quality gate CLI + Codex-compatible generator + dedup recommendations
-- **the retired memory service + OCI hardening** (Pair 17): the retired memory service WSL1 hardening + Oracle Cloud Terraform bootstrap + Qdrant integration + cross-cloud DR
+- **Memory service + OCI hardening** (Pair 17): host hardening for the retired memory service + Oracle Cloud Terraform bootstrap + Qdrant integration + cross-cloud DR
 - **Cloud deployment readiness** (Pair 18): AWS/GCP deploy scripts + multi-cloud Terraform modules + CI/CD pipelines + cost optimisation runbook
 - **Release preparation** (Pair 19): README updates + ADR-031 + validation matrix + demo script + CHANGELOG + VERSION bump
 

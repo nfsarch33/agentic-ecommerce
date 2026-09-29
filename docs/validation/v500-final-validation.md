@@ -69,7 +69,7 @@ Checklist of all quality gates run during the v4.1.0 through v4.19.1 sprint cycl
 |--------|--------------------|--------------------------|
 | `deploy/terraform/gke/` | PASS | PASS (no credentials) |
 | `deploy/terraform/eks/` | PASS | PASS (no credentials) |
-| `deploy/terraform/oci/` | PASS | PASS (no credentials) |
+| `deploy/terraform/oci/` (removed with the retired memory service) | n/a | n/a |
 | `deploy/terraform/dr/` | PASS | PASS (no credentials) |
 | `deploy/terraform/modules/` (7 shared) | PASS | N/A (consumed by above) |
 | `deploy/helm/agentic-ecommerce/` | Helm lint PASS | N/A |

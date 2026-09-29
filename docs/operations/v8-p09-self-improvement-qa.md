@@ -77,5 +77,5 @@ runx worktree run --repo ecommerce --branch qa/v8-p09-self-improvement -- \
 
 - Pair 10 final hardening should include the Pair 9 self-improvement report and
   reward artifact schema in the final v8 release checklist.
-- the retired memory service remained degraded during Pair 9 MVP; do not depend on hot memory for
+- The retired memory service remained degraded during Pair 9 MVP; do not depend on hot memory for
   replay evidence until the endpoint is healthy again.
