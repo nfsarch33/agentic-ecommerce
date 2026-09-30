@@ -126,15 +126,24 @@ func ReconstructProduct(rec ProductRecord) Product {
 	}
 }
 
-func (p Product) ID() uuid.UUID          { return p.id }
-func (p Product) SKU() string            { return p.sku }
-func (p Product) Title() string          { return p.title }
-func (p Product) Slug() string           { return p.slug }
-func (p Product) Description() string    { return p.description }
-func (p Product) Price() Money           { return p.price }
-func (p Product) Stock() int             { return p.stock }
-func (p Product) Status() ProductStatus  { return p.status }
-func (p Product) Images() []Image        { return p.images }
+func (p Product) ID() uuid.UUID         { return p.id }
+func (p Product) SKU() string           { return p.sku }
+func (p Product) Title() string         { return p.title }
+func (p Product) Slug() string          { return p.slug }
+func (p Product) Description() string   { return p.description }
+func (p Product) Price() Money          { return p.price }
+func (p Product) Stock() int            { return p.stock }
+func (p Product) Status() ProductStatus { return p.status }
+func (p Product) Images() []Image       { return p.images }
+
+// WithImages returns a copy of the product carrying the given images.
+// Repositories that load media in a second query use it to rehydrate the
+// aggregate; it is the only way to attach images to a reconstructed
+// product.
+func (p Product) WithImages(images []Image) Product {
+	p.images = images
+	return p
+}
 func (p Product) Categories() []Category { return p.categories }
 func (p Product) CreatedAt() time.Time   { return p.createdAt }
 func (p Product) UpdatedAt() time.Time   { return p.updatedAt }

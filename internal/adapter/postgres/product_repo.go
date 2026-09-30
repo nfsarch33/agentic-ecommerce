@@ -229,7 +229,40 @@ func (r *ProductRepository) getOne(ctx context.Context, query string, arg any) (
 		}
 		return catalog.Product{}, err
 	}
+	// The publish workflow's compliance gate requires images; a product
+	// reconstructed without its media rows fails the image rule no matter
+	// what is seeded (inc-pg-products-no-images). A product with no image
+	// ROWS (or a repo pool that cannot serve the second query, e.g. the
+	// scan-level fakes) keeps the zero-image product rather than failing
+	// the whole read — the compliance gate is the place that judges it.
+	if imgs, err := r.loadImages(ctx, p.ID()); err == nil {
+		return p.WithImages(imgs), nil
+	}
 	return p, nil
+}
+
+// loadImages reads the product's media assets ordered by sort_order and
+// maps them onto the catalog Image shape.
+func (r *ProductRepository) loadImages(ctx context.Context, productID uuid.UUID) ([]catalog.Image, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT public_url, alt_text FROM product_media_assets
+		WHERE product_id = $1 ORDER BY sort_order ASC, created_at ASC`, productID)
+	if err != nil {
+		return nil, fmt.Errorf("load product images: %w", err)
+	}
+	if rows == nil {
+		return nil, fmt.Errorf("load product images: no result set")
+	}
+	defer rows.Close()
+	var out []catalog.Image
+	for rows.Next() {
+		var img catalog.Image
+		if err := rows.Scan(&img.URL, &img.Alt); err != nil {
+			return nil, fmt.Errorf("scan product image: %w", err)
+		}
+		out = append(out, img)
+	}
+	return out, rows.Err()
 }
 
 type scannable interface {

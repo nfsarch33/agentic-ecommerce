@@ -3,6 +3,9 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"os"
 	"testing"
 	"time"
 
@@ -269,5 +272,58 @@ func assignScanValue(dest, value any) {
 		*d = b
 	default:
 		panic("unsupported scan destination")
+	}
+}
+
+// TestGetByIDHydratesImages pins inc-pg-products-no-images: a product with
+// a media-asset row must come back carrying its images, or the publish
+// workflow's compliance gate fails it no matter what was seeded.
+// Mutant: dropping the loadImages call in getOne fails this test.
+func TestGetByIDHydratesImages(t *testing.T) {
+	ctx := context.Background()
+	dsn := os.Getenv("ECOMMERCE_TEST_PG_DSN")
+	if dsn == "" {
+		dsn = "postgres://postgres:postgres@127.0.0.1:5432/ecommerce?sslmode=disable"
+	}
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Skipf("pg dsn unusable: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("pg not reachable: %v", err)
+	}
+	repo := NewProductRepository(pool)
+	pid := uuid.MustParse("00000000-0000-0000-0000-00000000beef")
+	sku := "IMG-HYD-" + fmt.Sprint(time.Now().UnixNano()%100000)
+	_, perr := pool.Exec(ctx, `INSERT INTO products (id, sku, title, slug, description, price_amount, stock, status)
+		VALUES ($1,$2,'Hydration probe','hydration-probe','desc',100,1,'draft') ON CONFLICT (id) DO NOTHING`, pid, sku)
+	if perr != nil {
+		t.Fatalf("seed product: %v", perr)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM product_media_assets WHERE product_id=$1; DELETE FROM products WHERE id=$1`, pid)
+	})
+	pool.Exec(ctx, `DELETE FROM product_media_assets WHERE product_id=$1`, pid)
+	_, aerr := pool.Exec(ctx, `INSERT INTO product_media_assets
+		(product_id, storage_key, source_url, public_url, original_filename, mime_type, size_bytes, width_px, height_px, alt_text, sort_order)
+		VALUES ($1,'imgprobe/'||$2||'-1.jpg','https://example.com/1.jpg','https://example.com/1.jpg','1.jpg','image/jpeg',4200,600,400,'Probe image one',0),
+		       ($1,'imgprobe/'||$2||'-2.jpg','https://example.com/2.jpg','https://example.com/2.jpg','2.jpg','image/jpeg',4200,600,400,'Probe image two',1)`, pid, sku)
+	if aerr != nil {
+		t.Fatalf("seed asset: %v", aerr)
+	}
+	p, err := repo.GetByID(ctx, pid)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	got := p.Images()
+	if len(got) != 2 {
+		t.Fatalf("images = %d, want 2 (the publish gate requires them)", len(got))
+	}
+	if got[0].URL != "https://example.com/1.jpg" || got[0].Alt != "Probe image one" {
+		t.Fatalf("first image = %+v", got[0])
+	}
+	if got[1].SortOrder != 1 && got[1].Alt != "Probe image two" {
+		t.Fatalf("second image = %+v", got[1])
 	}
 }
