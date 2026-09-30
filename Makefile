@@ -78,16 +78,17 @@ lint-no-target-strings:
 	@EXTRA=""; \
 	if [ -n "$${FORBIDDEN_STRINGS_FILE:-}" ] && [ -f "$$FORBIDDEN_STRINGS_FILE" ]; then \
 	    EXTRA=$$(grep -vE '^[[:space:]]*(#|$$)' "$$FORBIDDEN_STRINGS_FILE" | paste -sd'|' -); \
-	else 	    echo "note: FORBIDDEN_STRINGS_FILE unset — scanning the inline neutral term only"; \
+	else \
+	    echo "note: FORBIDDEN_STRINGS_FILE unset — scanning the inline neutral term only"; \
 	fi; \
-	MATCHES=$$(grep -ril -E "[mM]em0$${EXTRA:+|$$EXTRA}" \
-	    internal/ cmd/ pkg/ docs/ reports/ deploy/ scripts/ tests/ 2>/dev/null || true); \
+	MATCHES=$$(git ls-files | grep -v '^Makefile$$' | xargs grep -ril -E "[mM]em0$${EXTRA:+|$$EXTRA}" 2>/dev/null || true); \
 	if [ -n "$$MATCHES" ]; then \
 	    echo "ERROR: forbidden strings found:"; \
 	    echo "$$MATCHES"; \
 	    exit 1; \
 	fi; \
 	echo "OK: no forbidden strings."
+
 tf-fmt:
 	@if ! command -v terraform >/dev/null 2>&1; then \
 		echo "terraform not installed; install Terraform >=1.6 and run: terraform fmt -recursive $(TF_DIR)"; \

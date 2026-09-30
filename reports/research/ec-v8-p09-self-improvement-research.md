@@ -24,7 +24,7 @@
   - `runx history audit`: `Sensitive: 0`
   - `rtk verify`: hook integrity PASS
   - `runx cursor-tools resource-probe-once`: `free_pct=38`
-  - the retired memory service MCP: degraded with socket hang-up; Git KB remains durable truth
+  - the memory service MCP endpoint: degraded with socket hang-up; Git KB remains durable truth
   - Context Mode MCP resources/templates: not exposed in this Codex surface
 
 ## Current System Facts

@@ -29,7 +29,7 @@ Rationale:
 - TDD first: RED tests for idempotency, DLQ retry, replay dedupe, and reconciliation mismatch must fail before implementation.
 - No live marketplace calls.
 - No secrets, partner IDs, hostnames, or credential paths in docs or tests.
-- the retired memory service hot recall is degraded in this session: `the retired memory service` search returned socket hang-up. Git KB and local repo docs are source of truth for this sprint.
+- the retired memory service hot recall is degraded in this session: the memory service's search returned socket hang-up. Git KB and local repo docs are source of truth for this sprint.
 
 ## Expected Core Shape
 

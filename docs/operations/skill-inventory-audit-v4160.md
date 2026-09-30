@@ -88,10 +88,10 @@ Generated: 2026-05-11 | Sprint: v4.16.0 | Scope: Agent skill ecosystem health
 | llm-cluster-router | Go HTTP proxy for vLLM clusters | - | Infrastructure |
 | llm-model-evaluator | LLM evaluation and selection | - | ML |
 | media-downloader | Download media from web platforms | - | Media |
-| memory-selfhost-ops | the retired memory service self-hosted operations | - | Memory |
+| memory-selfhost-ops | a self-hosted memory service operations skill | - | Memory |
 | memory-and-kb | Hybrid memory routing and consolidation | - | Memory |
 | memory-hygiene | Audit and clean memory layers | - | Memory |
-| memory-system | the retired memory service-first hybrid memory system | - | Memory |
+| memory-system | a memory-service-first hybrid memory system | - | Memory |
 | metrics-dashboard | Consolidate KPIs across agent stack | - | Monitoring |
 | microservices-go | Go-first microservices architecture | - | Go |
 | monitoring-observability | **EC-RELEVANT** Monitoring and alerting | - | Monitoring |
@@ -210,7 +210,7 @@ Generated: 2026-05-11 | Sprint: v4.16.0 | Scope: Agent skill ecosystem health
 | monitoring-observability | Prometheus, Grafana, alerting |
 | react-best-practices | Frontend components |
 | project-management | Sprint workflow |
-| browser-e2e-suite | Contact Center E2E tests |
+| browser-e2e-suite | browser end-to-end tests |
 
 ## Superseded Skills (Retire Candidates)
 

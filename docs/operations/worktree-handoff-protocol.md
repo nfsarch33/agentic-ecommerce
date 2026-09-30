@@ -110,4 +110,4 @@ The handoff protocol requires coordination locks (see `coord_lock.go`):
 
 ## History
 
-This protocol formalises the informal pattern used during the v3.x-v4.x sprint cycle where agents communicated worktree state through ad-hoc session handoff documents and the retired memory service entries.
+This protocol formalises the informal pattern used during the v3.x-v4.x sprint cycle where agents communicated worktree state through ad-hoc session handoff documents and memory-service entries.
