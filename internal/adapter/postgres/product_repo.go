@@ -231,14 +231,15 @@ func (r *ProductRepository) getOne(ctx context.Context, query string, arg any) (
 	}
 	// The publish workflow's compliance gate requires images; a product
 	// reconstructed without its media rows fails the image rule no matter
-	// what is seeded (inc-pg-products-no-images). A product with no image
-	// ROWS (or a repo pool that cannot serve the second query, e.g. the
-	// scan-level fakes) keeps the zero-image product rather than failing
-	// the whole read — the compliance gate is the place that judges it.
-	if imgs, err := r.loadImages(ctx, p.ID()); err == nil {
-		return p.WithImages(imgs), nil
+	// what is seeded (inc-pg-products-no-images). Load errors surface: a
+	// read that cannot see the media table must not silently answer with
+	// a zero-image product (the scan-level fakes return an EMPTY result
+	// set, which is a legitimate no-images answer, not an error).
+	imgs, err := r.loadImages(ctx, p.ID())
+	if err != nil {
+		return catalog.Product{}, err
 	}
-	return p, nil
+	return p.WithImages(imgs), nil
 }
 
 // loadImages reads the product's media assets ordered by sort_order and

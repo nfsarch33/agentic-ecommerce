@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -128,6 +129,11 @@ func (p *fakePool) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
 
 func (p *fakePool) Query(_ context.Context, sql string, _ ...any) (pgx.Rows, error) {
 	p.querySQL = append(p.querySQL, sql)
+	if p.rows == nil && p.queryErr == nil {
+		// an empty media result set: a product with no image rows is a
+		// legitimate answer, distinct from a pool that errors
+		return &fakeRows{}, nil
+	}
 	return p.rows, p.queryErr
 }
 
@@ -283,7 +289,7 @@ func TestGetByIDHydratesImages(t *testing.T) {
 	ctx := context.Background()
 	dsn := os.Getenv("ECOMMERCE_TEST_PG_DSN")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@127.0.0.1:5432/ecommerce?sslmode=disable"
+		t.Skip("ECOMMERCE_TEST_PG_DSN unset — the hydration pin needs a live schema (CI supplies one; a hardcoded local fallback hides its absence)")
 	}
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
@@ -325,5 +331,20 @@ func TestGetByIDHydratesImages(t *testing.T) {
 	}
 	if got[1].SortOrder != 1 && got[1].Alt != "Probe image two" {
 		t.Fatalf("second image = %+v", got[1])
+	}
+}
+
+// TestGetByIDSurfacesImageLoadError pins review round 2 of #219: a pool that
+// errors on the media query must fail the read, not answer with a silent
+// zero-image product. Mutant: swallowing the loadImages error again makes
+// this test fail (the product comes back with nil error).
+func TestGetByIDSurfacesImageLoadError(t *testing.T) {
+	product := postgresTestProduct(t)
+	pool := &fakePool{row: fakeProductRow(product), queryErr: errors.New("media table unavailable")}
+	repo := &ProductRepository{pool: pool}
+	if _, err := repo.GetByID(context.Background(), product.ID()); err == nil {
+		t.Fatal("GetByID must surface the image-load error; got nil (the swallow is back)")
+	} else if !strings.Contains(err.Error(), "media table unavailable") {
+		t.Fatalf("err = %v; want the loadImages error to propagate", err)
 	}
 }
