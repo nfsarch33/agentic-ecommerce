@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/nfsarch33/agentic-ecommerce/internal/approvalid"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 )
 
@@ -178,5 +179,66 @@ func TestWcStatus_MapsCorrectly(t *testing.T) {
 		if got := wcStatus(tc.status); got != tc.want {
 			t.Errorf("wcStatus(%q) = %q, want %q", tc.status, got, tc.want)
 		}
+	}
+}
+
+// TestDirectCallWithoutCredentialsIsUnauthorized (v18900-5 acceptance 1):
+// the worker holds NO store key under the proxy — a direct call (bypassing
+// the proxy) carries no consumer_key/secret and the store refuses it.
+//
+// MUTANT: add a fallback credential in NewClient (or endpoint) and the store
+// sees a key on this request; this test goes red.
+func TestDirectCallWithoutCredentialsIsUnauthorized(t *testing.T) {
+	var sawKey, sawSecret string
+	store := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawKey = r.URL.Query().Get("consumer_key")
+		sawSecret = r.URL.Query().Get("consumer_secret")
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer store.Close()
+
+	c := NewClient(Config{BaseURL: store.URL}, nil) // no credentials: the proxy arrangement
+	_, err := c.FindProductBySKU(context.Background(), "SKU-1")
+	if err == nil {
+		t.Fatal("the store must refuse an unauthenticated direct call")
+	}
+	if sawKey != "" || sawSecret != "" {
+		t.Fatalf("the worker leaked credentials on a direct call: key=%q secret=%q", sawKey, sawSecret)
+	}
+}
+
+// TestWriteCarriesApprovalHeaderFromContext (v18900-5): writes reach the
+// counting proxy attributable to the approval row via X-Approval-Id.
+//
+// MUTANT: drop the header set in doJSON/UpsertProduct and the proxy refuses
+// the write (403 unauditable); this test goes red first.
+func TestWriteCarriesApprovalHeaderFromContext(t *testing.T) {
+	var headerOnGet, headerOnWrite string
+	store := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			headerOnGet = r.Header.Get(approvalid.Header)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		headerOnWrite = r.Header.Get(approvalid.Header)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":1}`))
+	}))
+	defer store.Close()
+
+	c := NewClient(Config{BaseURL: store.URL}, nil)
+	ctx := approvalid.With(context.Background(), "wf-approval-42")
+	if _, err := c.CreateProduct(ctx, map[string]string{"sku": "S1"}); err != nil {
+		t.Fatalf("CreateProduct: %v", err)
+	}
+	if headerOnWrite != "wf-approval-42" {
+		t.Fatalf("write carried approval header %q, want wf-approval-42", headerOnWrite)
+	}
+	if _, err := c.ListProducts(context.Background(), ListOptions{PerPage: 1}); err != nil {
+		t.Fatalf("ListProducts: %v", err)
+	}
+	if headerOnGet != "" {
+		t.Fatalf("a read without approval context carried %q — reads are not gated", headerOnGet)
 	}
 }

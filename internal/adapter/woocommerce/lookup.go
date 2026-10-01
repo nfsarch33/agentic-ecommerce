@@ -3,8 +3,8 @@ package woocommerce
 import (
 	"context"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"fmt"
+	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"net/http"
 	"net/url"
 	"strconv"

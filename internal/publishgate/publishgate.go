@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/nfsarch33/agentic-ecommerce/internal/approvalid"
 )
 
 // Sentinel errors. ErrLeaseHeld is retryable; the others are terminal.
@@ -196,10 +198,13 @@ func (g *Gate) Publish(ctx context.Context, req PublishRequest) (WriteResult, er
 		return WriteResult{WriteKind: "dry_run", Status: "dry_run"}, nil
 	}
 
+	// The approval row id rides the context so the adapter's writes reach
+	// the counting proxy attributable to this approval (v18900-5).
+	ctx = approvalid.With(ctx, req.WorkflowID)
 	live, err := g.Remote.FindBySKU(ctx, req.SKU)
 	if err != nil {
 		_ = g.Store.Fail(ctx, key) // release the lease so a retry can proceed
-		return WriteResult{}, fmt.Errorf("publish lookup by sku: %w", err)
+		return WriteResult{}, fmt.Errorf("publish lookup by sku: %w", classifyRemoteErr(err))
 	}
 	switch {
 	case live != nil && Matches(live.Fields, req.Fields):
@@ -211,7 +216,7 @@ func (g *Gate) Publish(ctx context.Context, req PublishRequest) (WriteResult, er
 		updated, err := g.Remote.Update(ctx, live.ID, req.Fields)
 		if err != nil {
 			_ = g.Store.Fail(ctx, key)
-			return WriteResult{}, fmt.Errorf("publish update: %w", err)
+			return WriteResult{}, fmt.Errorf("publish update: %w", classifyRemoteErr(err))
 		}
 		if err := g.Store.Complete(ctx, key, "completed", "update", updated.ID); err != nil {
 			return WriteResult{}, fmt.Errorf("publish complete(update): %w", err)
@@ -228,7 +233,7 @@ func (g *Gate) Publish(ctx context.Context, req PublishRequest) (WriteResult, er
 		created, err := g.Remote.Create(ctx, createFields)
 		if err != nil {
 			_ = g.Store.Fail(ctx, key)
-			return WriteResult{}, fmt.Errorf("publish create: %w", err)
+			return WriteResult{}, fmt.Errorf("publish create: %w", classifyRemoteErr(err))
 		}
 		if err := g.Store.Complete(ctx, key, "completed", "create", created.ID); err != nil {
 			return WriteResult{}, fmt.Errorf("publish complete(create): %w", err)
