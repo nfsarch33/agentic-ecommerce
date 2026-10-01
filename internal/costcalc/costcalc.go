@@ -16,6 +16,16 @@ type Price struct {
 	OutputCentsPerMTok int64
 }
 
+// DefaultTable is the fleet's working price table (AUD cents per million
+// tokens; MiniMax list prices at the 2026-09 review). Models absent from
+// the table cost 0 and surface as ErrUnknownModel — visible, not silent.
+func DefaultTable() Table {
+	return Table{
+		"MiniMax-M3":       {InputCentsPerMTok: 165, OutputCentsPerMTok: 660},
+		"qwen3.8-27b-local": {InputCentsPerMTok: 0, OutputCentsPerMTok: 0},
+	}
+}
+
 // Table maps a model name to its Price. A zero Price is a valid entry that
 // prices a local tier at zero.
 type Table map[string]Price
