@@ -21,6 +21,8 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/shopee"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/shopify"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
+	"github.com/nfsarch33/agentic-ecommerce/internal/costcalc"
+	"github.com/nfsarch33/agentic-ecommerce/internal/costledger"
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
@@ -363,7 +365,20 @@ func newContentGenerationActivitiesFromEnv(logger *slog.Logger) *ecworkflow.Cont
 				logger.Warn("temporal_worker.content_agent_disabled", "error", err)
 			}
 		} else {
-			generator = contentagent.NewAgent(bridge)
+			// v18870-2: every model call lands in the cost ledger
+			// (job/tenant/action from the activity context, AUD cents
+			// via costcalc). Recording is best-effort observability.
+			var recorder costledger.Recorder = costledger.DiscardRecorder{}
+			if dsn := getenv("ECOMMERCE_DB_URL", ""); dsn != "" {
+				if pool, err := pgxpool.New(context.Background(), dsn); err == nil {
+					recorder = costledger.NewPGRecorder(pool)
+				}
+			}
+			generator = contentagent.NewAgent(&costledger.RecordingGenerator{
+				Inner:    bridge,
+				Recorder: recorder,
+				Prices:   costcalc.DefaultTable(),
+			})
 		}
 	}
 	return ecworkflow.NewContentGenerationActivities(ecworkflow.ContentGenerationActivityDeps{

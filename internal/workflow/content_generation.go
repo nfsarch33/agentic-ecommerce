@@ -6,6 +6,8 @@ import (
 	"time"
 
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	"github.com/nfsarch33/agentic-ecommerce/internal/costledger"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	temporalworkflow "go.temporal.io/sdk/workflow"
 )
@@ -24,6 +26,7 @@ type ContentGenerationInput struct {
 	Product     contentagent.ProductInfo     `json:"product"`
 	Request     contentagent.GenerateRequest `json:"request"`
 	RequestedBy string                       `json:"requested_by,omitempty"`
+	TenantID    string                       `json:"tenant_id,omitempty"`
 }
 
 type ContentFactCheckActivityInput struct {
@@ -125,6 +128,15 @@ func (a *ContentGenerationActivities) GenerateContent(ctx context.Context, input
 	if a.generator == nil {
 		return contentagent.GenerateResult{}, errors.New("content generator is not configured")
 	}
+	// v18870-2: the ledger attributes every model call to the workflow
+	// (job) and requester behind it.
+	if jobID := workflowIDFromActivity(ctx); jobID != "" {
+		ctx = costledger.WithAttrs(ctx, costledger.Attrs{
+			JobID:    jobID,
+			TenantID: input.TenantID,
+			Action:   "content.generate",
+		})
+	}
 	req := input.Request
 	if req.Product.Title == "" {
 		req.Product = input.Product
@@ -160,4 +172,16 @@ func (a *ContentGenerationActivities) RecordContentFactCheck(ctx context.Context
 		return nil
 	}
 	return a.recorder.RecordContentFactCheck(ctx, result)
+}
+
+// workflowIDFromActivity returns the running workflow id, or "" outside an
+// activity context (unit tests call activities on a plain context; the SDK
+// panics there, so the ledger simply records unattributed rows).
+func workflowIDFromActivity(ctx context.Context) (id string) {
+	defer func() {
+		if recover() != nil {
+			id = ""
+		}
+	}()
+	return activity.GetInfo(ctx).WorkflowExecution.ID
 }
