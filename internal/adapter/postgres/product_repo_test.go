@@ -3,12 +3,16 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 )
 
@@ -125,6 +129,11 @@ func (p *fakePool) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
 
 func (p *fakePool) Query(_ context.Context, sql string, _ ...any) (pgx.Rows, error) {
 	p.querySQL = append(p.querySQL, sql)
+	if p.rows == nil && p.queryErr == nil {
+		// an empty media result set: a product with no image rows is a
+		// legitimate answer, distinct from a pool that errors
+		return &fakeRows{}, nil
+	}
 	return p.rows, p.queryErr
 }
 
@@ -269,5 +278,113 @@ func assignScanValue(dest, value any) {
 		*d = b
 	default:
 		panic("unsupported scan destination")
+	}
+}
+
+// TestGetByIDHydratesImages is the live-PG integration pin: a product with
+// media-asset rows must come back carrying its images (with sort order),
+// or the publish workflow's compliance gate fails it no matter what was
+// seeded. The always-running shape test lives in
+// TestGetByIDHydratesImagesFromFake below.
+// Mutant: dropping the loadImages call in getOne fails this test.
+func TestGetByIDHydratesImages(t *testing.T) {
+	ctx := context.Background()
+	dsn := os.Getenv("ECOMMERCE_TEST_PG_DSN")
+	if dsn == "" {
+		t.Skip("ECOMMERCE_TEST_PG_DSN unset — the hydration pin needs a live schema (CI supplies one; a hardcoded local fallback hides its absence)")
+	}
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Skipf("pg dsn unusable: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("pg not reachable: %v", err)
+	}
+	repo := NewProductRepository(pool)
+	pid := uuid.MustParse("00000000-0000-0000-0000-00000000beef")
+	sku := "IMG-HYD-" + fmt.Sprint(time.Now().UnixNano()%100000)
+	_, perr := pool.Exec(ctx, `INSERT INTO products (id, sku, title, slug, description, price_amount, stock, status)
+		VALUES ($1,$2,'Hydration probe','hydration-probe','desc',100,1,'draft') ON CONFLICT (id) DO NOTHING`, pid, sku)
+	if perr != nil {
+		t.Fatalf("seed product: %v", perr)
+	}
+	t.Cleanup(func() {
+		if _, err := pool.Exec(ctx, `DELETE FROM product_media_assets WHERE product_id=$1`, pid); err != nil {
+			t.Logf("cleanup media rows: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `DELETE FROM products WHERE id=$1`, pid); err != nil {
+			t.Logf("cleanup product row: %v", err)
+		}
+	})
+	pool.Exec(ctx, `DELETE FROM product_media_assets WHERE product_id=$1`, pid)
+	_, aerr := pool.Exec(ctx, `INSERT INTO product_media_assets
+		(product_id, storage_key, source_url, public_url, original_filename, mime_type, size_bytes, width_px, height_px, alt_text, sort_order)
+		VALUES ($1,'imgprobe/'||$2||'-1.jpg','https://example.com/1.jpg','https://example.com/1.jpg','1.jpg','image/jpeg',4200,600,400,'Probe image one',0),
+		       ($1,'imgprobe/'||$2||'-2.jpg','https://example.com/2.jpg','https://example.com/2.jpg','2.jpg','image/jpeg',4200,600,400,'Probe image two',1)`, pid, sku)
+	if aerr != nil {
+		t.Fatalf("seed asset: %v", aerr)
+	}
+	p, err := repo.GetByID(ctx, pid)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	got := p.Images()
+	if len(got) != 2 {
+		t.Fatalf("images = %d, want 2 (the publish gate requires them)", len(got))
+	}
+	if got[0].URL != "https://example.com/1.jpg" || got[0].Alt != "Probe image one" {
+		t.Fatalf("first image = %+v", got[0])
+	}
+	if got[1].SortOrder != 1 || got[1].Alt != "Probe image two" {
+		t.Fatalf("second image = %+v (want SortOrder 1 and the alt text)", got[1])
+	}
+}
+
+// TestGetByIDSurfacesImageLoadError pins review round 2 of #219: a pool that
+// errors on the media query must fail the read, not answer with a silent
+// zero-image product. Mutant: swallowing the loadImages error again makes
+// this test fail (the product comes back with nil error).
+func TestGetByIDSurfacesImageLoadError(t *testing.T) {
+	product := postgresTestProduct(t)
+	pool := &fakePool{row: fakeProductRow(product), queryErr: errors.New("media table unavailable")}
+	repo := &ProductRepository{pool: pool}
+	if _, err := repo.GetByID(context.Background(), product.ID()); err == nil {
+		t.Fatal("GetByID must surface the image-load error; got nil (the swallow is back)")
+	} else if !strings.Contains(err.Error(), "media table unavailable") {
+		t.Fatalf("err = %v; want the loadImages error to propagate", err)
+	}
+}
+
+// TestGetByIDHydratesImagesFromFake runs EVERYWHERE (no DSN, no skip): the
+// fake pool serves a product row plus a two-row media result set, and
+// GetByID must return both images with URL, alt text and sort order —
+// the shape the compliance gate's image rule reads. Mutant: keeping the
+// loadImages call but returning the un-hydrated product fails here with
+// images = 0 even though every live gate stays green.
+func TestGetByIDHydratesImagesFromFake(t *testing.T) {
+	t.Parallel()
+	product := postgresTestProduct(t)
+	pool := &fakePool{
+		row: fakeProductRow(product),
+		rows: &fakeRows{rows: [][]any{
+			{"https://example.com/one.jpg", "First image", 0},
+			{"https://example.com/two.jpg", "Second image", 1},
+		}},
+	}
+	repo := &ProductRepository{pool: pool}
+	got, err := repo.GetByID(context.Background(), product.ID())
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	imgs := got.Images()
+	if len(imgs) != 2 {
+		t.Fatalf("images = %d, want 2 (the compliance image rule reads this)", len(imgs))
+	}
+	if imgs[0].URL != "https://example.com/one.jpg" || imgs[0].Alt != "First image" || imgs[0].SortOrder != 0 {
+		t.Fatalf("first image = %+v", imgs[0])
+	}
+	if imgs[1].URL != "https://example.com/two.jpg" || imgs[1].Alt != "Second image" || imgs[1].SortOrder != 1 {
+		t.Fatalf("second image = %+v (want URL/alt/sort order)", imgs[1])
 	}
 }

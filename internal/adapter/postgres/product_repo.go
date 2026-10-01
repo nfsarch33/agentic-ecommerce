@@ -229,7 +229,36 @@ func (r *ProductRepository) getOne(ctx context.Context, query string, arg any) (
 		}
 		return catalog.Product{}, err
 	}
-	return p, nil
+	// The publish workflow's compliance gate requires images; a product
+	// reconstructed without its media rows fails the image rule no matter
+	// what is seeded. Load errors surface: a read that cannot see the
+	// media table must not silently answer with a zero-image product.
+	imgs, err := r.loadImages(ctx, p.ID())
+	if err != nil {
+		return catalog.Product{}, err
+	}
+	return p.WithImages(imgs), nil
+}
+
+// loadImages reads the product's media assets ordered by sort_order and
+// maps them onto the catalog Image shape.
+func (r *ProductRepository) loadImages(ctx context.Context, productID uuid.UUID) ([]catalog.Image, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT public_url, alt_text, sort_order FROM product_media_assets
+		WHERE product_id = $1 ORDER BY sort_order ASC, created_at ASC`, productID)
+	if err != nil {
+		return nil, fmt.Errorf("load product images: %w", err)
+	}
+	defer rows.Close()
+	var out []catalog.Image
+	for rows.Next() {
+		var img catalog.Image
+		if err := rows.Scan(&img.URL, &img.Alt, &img.SortOrder); err != nil {
+			return nil, fmt.Errorf("scan product image: %w", err)
+		}
+		out = append(out, img)
+	}
+	return out, rows.Err()
 }
 
 type scannable interface {
