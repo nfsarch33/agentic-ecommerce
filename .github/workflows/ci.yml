@@ -28,6 +28,9 @@ jobs:
       - name: Run gitleaks secret scan
         run: docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/gitleaks/gitleaks:v8.30.1 dir . --redact --verbose
 
+      - name: Forbidden strings scan
+        run: make lint-no-target-strings
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:

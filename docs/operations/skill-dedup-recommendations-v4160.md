@@ -18,11 +18,11 @@ Generated: 2026-05-11 | Based on: skill-inventory-audit-v4160.md
 
 ## 1. Merge Recommendations
 
-### 1.1 Memory skills → `memory-unified` + `mem0-ops`
+### 1.1 Memory skills → `memory-unified` + `memory-ops`
 
-**Current state:** 5 separate skills (memory-system, memory-and-kb, memory-hygiene, context-mode, mem0-selfhost-ops)
+**Current state:** 5 separate skills (memory-system, memory-and-kb, memory-hygiene, context-mode, memory-selfhost-ops)
 
-**Proposed action:** Merge memory-system + memory-and-kb + memory-hygiene + context-mode into a single `memory-unified` skill. Keep `mem0-selfhost-ops` separate (infrastructure-specific).
+**Proposed action:** Merge memory-system + memory-and-kb + memory-hygiene + context-mode into a single `memory-unified` skill. Keep `memory-selfhost-ops` separate (infrastructure-specific).
 
 **Rationale:** These skills share 60%+ overlap in trigger phrases ("memory", "routing", "store", "retrieve"). Agents frequently activate the wrong one. A single skill with internal sections reduces token waste from duplicate preambles.
 
@@ -74,7 +74,7 @@ Generated: 2026-05-11 | Based on: skill-inventory-audit-v4160.md
 
 ### 2.3 Remove `.claude/skills/` duplicates (4 files)
 
-**Current state:** mem0-selfhost-ops, oracle-cloud-recon, subagent-incident-review, workspace-hygiene-doctor exist in both `.claude/skills/` and `.cursor/skills/`.
+**Current state:** memory-selfhost-ops, oracle-cloud-recon, subagent-incident-review, workspace-hygiene-doctor exist in both `.claude/skills/` and `.cursor/skills/`.
 
 **Proposed action:** Delete all 4 from `~/.claude/skills/`. The Cursor location is the canonical install path.
 
@@ -122,11 +122,11 @@ Per `agent-skills-optimization` skill guidance, these skills have descriptions t
 
 **Proposed:** "Generate academic essays with proper structure, citations, and academic voice. Use when: writing essays from scratch, structuring academic arguments, adding citations. Note: for full pipeline (draft → humanize → evaluate), use academic-pipeline."
 
-### 3.5 `mem0-selfhost-ops`
+### 3.5 `memory-selfhost-ops`
 
 **Current:** No description
 
-**Proposed:** "Deploy and operate self-hosted Mem0 instance: Docker setup, Qdrant vector store, API key management, backup/restore, health monitoring. Use when: deploying Mem0, maintaining the vector store, troubleshooting Mem0 API connectivity."
+**Proposed:** "Deploy and operate self-hosted the retired memory service instance: Docker setup, Qdrant vector store, API key management, backup/restore, health monitoring. Use when: deploying the retired memory service, maintaining the vector store, troubleshooting the retired memory service API connectivity."
 
 ---
 

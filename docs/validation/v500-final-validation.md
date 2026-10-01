@@ -49,7 +49,7 @@ Checklist of all quality gates run during the v4.1.0 through v4.19.1 sprint cycl
 | 14 | v4.14.0 | #114 | `866648b` | uiauto runner + metrics collector + decision matrix + dashboard |
 | 15 | v4.15.0 | #115 | `d9f03aa` | Race detection + coordination locks + handoff protocol + auto-cleanup |
 | 16 | v4.16.0 | #116 | `16b4efa` | Skill inventory audit + quality gate CLI + Codex generator + dedup recs |
-| 17 | v4.17.0 | #117 | `17b9b29` | mem0 hardening + OCI Terraform + Qdrant + cross-cloud DR docs |
+| 17 | v4.17.0 | #117 | `17b9b29` | the retired memory service hardening + OCI Terraform + Qdrant + cross-cloud DR docs |
 | 18 | v4.18.0 | #118 | `e765660` | Deploy scripts + Terraform modules + CI/CD pipelines + cost optimisation |
 | 19 | v4.19.0 | TBD | TBD | README + ADR-031 + validation matrix + demo script + CHANGELOG + VERSION |
 | 20 | v5.0.0 | TBD | TBD | Release tag + GitHub releases + cross-compiled binaries + SHA256SUMS |
@@ -69,7 +69,7 @@ Checklist of all quality gates run during the v4.1.0 through v4.19.1 sprint cycl
 |--------|--------------------|--------------------------|
 | `deploy/terraform/gke/` | PASS | PASS (no credentials) |
 | `deploy/terraform/eks/` | PASS | PASS (no credentials) |
-| `deploy/terraform/oci/` | PASS | PASS (no credentials) |
+| `deploy/terraform/oci/` (removed with the retired memory service) | n/a | n/a |
 | `deploy/terraform/dr/` | PASS | PASS (no credentials) |
 | `deploy/terraform/modules/` (7 shared) | PASS | N/A (consumed by above) |
 | `deploy/helm/agentic-ecommerce/` | Helm lint PASS | N/A |

@@ -130,7 +130,7 @@ fresh Lighthouse capture as v4.1.x ops items.
    `daily-startup-prompt` + a sprint retro entry as part of the
    sprint definition-of-done.
 3. **`runx env personal-shell` discipline.** The v3.x cycle ran
-   inside a Cursor session that inherited Zendesk
+   inside a Cursor session that inherited employer
    `GITHUB_TOKEN` family env vars. The
    `personal-repo-shell-hygiene` skill + `runx env personal-shell`
    exec wrapper kept every git push + gh CLI call on the personal

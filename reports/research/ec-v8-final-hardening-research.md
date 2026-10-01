@@ -43,7 +43,7 @@ The backend v8 release includes ten executed v8 pairs:
    checklist/ADR links fail in future release branches.
 3. Keep OpenAPI v1 stable through host v8.x; v2 preview remains opt-in.
 4. Publish frontend `v8.0.0` only after frontend metadata repair and QA pass.
-5. Keep Git KB as durable truth while Mem0 remains degraded.
+5. Keep Git KB as durable truth while the retired memory service remains degraded.
 
 ## RED Target
 

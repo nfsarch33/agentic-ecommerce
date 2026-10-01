@@ -24,7 +24,7 @@
   - `runx history audit`: `Sensitive: 0`
   - `rtk verify`: hook integrity PASS
   - `runx cursor-tools resource-probe-once`: `free_pct=38`
-  - Mem0 MCP: degraded with socket hang-up; Git KB remains durable truth
+  - the memory service MCP endpoint: degraded with socket hang-up; Git KB remains durable truth
   - Context Mode MCP resources/templates: not exposed in this Codex surface
 
 ## Current System Facts
@@ -79,7 +79,7 @@
 
 - Live LLM reviewer execution.
 - Local OmniParser or VLM workloads.
-- Mem0 writes while the MCP endpoint is degraded.
+- The retired memory service writes while the MCP endpoint is degraded.
 - Automatic promotion into production policy. Pair 9 MVP only creates
   replayable evidence and reward artifacts; QA validates replay and promotion
   rules.

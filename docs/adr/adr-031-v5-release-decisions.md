@@ -23,7 +23,7 @@ The v5.0.0 release closes a 20 sprint-pair cycle (v4.1.0 through v4.19.1) that b
 - **uiauto vs Playwright comparison** (Pair 14): Side-by-side test runner + accuracy/speed metrics + decision matrix for promotion
 - **Worktree hardening** (Pair 15): Race detection + multi-agent coordination locks + handoff protocol formalisation
 - **Skill consolidation** (Pair 16): Agent skill inventory audit + quality gate CLI + Codex-compatible generator + dedup recommendations
-- **mem0 + OCI hardening** (Pair 17): mem0 WSL1 hardening + Oracle Cloud Terraform bootstrap + Qdrant integration + cross-cloud DR
+- **Memory service + OCI hardening** (Pair 17): host hardening for the retired memory service + Oracle Cloud Terraform bootstrap + Qdrant integration + cross-cloud DR
 - **Cloud deployment readiness** (Pair 18): AWS/GCP deploy scripts + multi-cloud Terraform modules + CI/CD pipelines + cost optimisation runbook
 - **Release preparation** (Pair 19): README updates + ADR-031 + validation matrix + demo script + CHANGELOG + VERSION bump
 
@@ -53,7 +53,7 @@ The v5.0.0 release ships from the current `main` branch after all 20 sprint pair
 | 14 | v4.14.0 | uiauto vs Playwright comparison harness | #114 | Merged |
 | 15 | v4.15.0 | Worktree hardening | #115 | Merged |
 | 16 | v4.16.0 | Skill consolidation | #116 | Merged |
-| 17 | v4.17.0 | mem0 + OCI hardening | #117 | Merged |
+| 17 | v4.17.0 | the retired memory service + OCI hardening | #117 | Merged |
 | 18 | v4.18.0 | Cloud deployment readiness | #118 | Merged |
 | 19 | v4.19.0 | Release preparation (this pair) | TBD | In progress |
 | 20 | v5.0.0 | Release tag + GitHub releases | TBD | Pending |

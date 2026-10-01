@@ -422,16 +422,6 @@ type Registry struct {
 	ComparisonScenarioDurationMs *Gauge
 	ComparisonScenarioPassRate   *Gauge
 
-	// v4.17.0 mem0 memory-layer client metrics.
-	// Cardinality budget:
-	//   ec_mem0_requests_total{op, status}
-	//     ~ ops(3: store/search/delete) * statuses(4: ok/error/
-	//       circuit_open/disabled) = 12 series.
-	//   ec_mem0_request_duration_seconds{op} ~ 3 series + buckets.
-	// Total ~ 20 additive series for v4.17.0.
-	Mem0Requests *Counter
-	Mem0Duration *Histogram
-
 	// v5.5.0 Postgres connection pool metrics. Cardinality budget:
 	//   ec_pg_pool_open_connections gauge ~ 1 series.
 	//   ec_pg_pool_idle_connections gauge ~ 1 series.
@@ -447,7 +437,7 @@ type Registry struct {
 	// Cardinality budget per series:
 	//   ec_workerpool_active{pool}            ~ pools(8) = 8 series.
 	//   ec_workerpool_rejected_total{pool}    ~ pools(8) = 8 series.
-	//   ec_breaker_open_total{name}           ~ breakers(8: mem0|minimax|stripe|
+	//   ec_breaker_open_total{name}           ~ breakers(8: minimax|stripe|
 	//                                          alipay|wechat|auspost|dhl|misc) = 8 series.
 	//   ec_breaker_half_open_total{name}      ~ breakers(8) = 8 series.
 	//   ec_coord_conflicts_total{tenant_id, agent_a, agent_b, resolution}
@@ -600,7 +590,6 @@ func NewRegistry(binary string, opts ...Option) *Registry {
 	RegisterAgentraceMetrics(r)
 	RegisterMinimaxMetrics(r)
 	RegisterComparisonMetrics(r)
-	registerMem0Metrics(r)
 	registerPGPoolMetrics(r)
 	registerV620ResilienceMetrics(r)
 	registerV8OOMObservabilityMetrics(r)
@@ -789,8 +778,6 @@ func (r *Registry) Handler() http.Handler {
 		r.ComparisonAgreementRate.write(&sb)
 		r.ComparisonScenarioDurationMs.write(&sb)
 		r.ComparisonScenarioPassRate.write(&sb)
-		r.Mem0Requests.write(&sb)
-		r.Mem0Duration.write(&sb)
 		r.PGPoolOpenConnections.write(&sb)
 		r.PGPoolIdleConnections.write(&sb)
 		r.PGPoolWaitTotal.write(&sb)

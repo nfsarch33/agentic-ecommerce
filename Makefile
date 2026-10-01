@@ -1,4 +1,4 @@
-.PHONY: test build vet coverage coverage-check integration-pg lint docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker testing-lane full-stack-e2e release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate tf-plan-contract uiauto-smoke uiauto-compare compose-uiauto-config uiauto-down uiauto-up
+.PHONY: test build vet coverage coverage-check integration-pg lint lint-no-target-strings docker-build docker-push docker-image-size compose-up compose-down compose-logs compose-config-prod dev dev-down dev-logs migrate-up migrate-down seed tenant-isolation-seed tenant-isolation-smoke tenant-isolation-test qa-v190-infra media-store-seed media-store-clean media-seed media-clean compose-media-config compose-config compose-wc-config compose-workers-config temporal-up temporal-down temporal-status compose-temporal-config compose-agent-schedules-config agent-schedules-list agent-schedules-smoke n8n-up n8n-down n8n-config n8n-workflows-validate monitoring-validate redis-ping redis-cli wc-up wc-down wc-logs sync-once sync-run agent-worker agent-run-once temporal-worker testing-lane full-stack-e2e release-perf-smoke contract-test load-test db-perf-audit govulncheck-scan gitleaks-scan trivy-fs-scan security-refresh sentrux-gate shell-leak qa-v180 tf-fmt tf-fmt-check tf-validate tf-plan-contract uiauto-smoke uiauto-compare compose-uiauto-config uiauto-down uiauto-up
 
 COMPOSE_FILE := docker-compose.dev.yml
 COMPOSE_PROD_FILE := docker-compose.yml
@@ -65,6 +65,29 @@ integration-pg:
 
 lint:
 	golangci-lint run ./...
+
+
+# Forbidden strings in a public repo. Only the neutral retired-memory-
+# service term (ADR-063) is spelled inline, as a character class so this
+# Makefile line itself does not contain the literal. The employer and
+# internal product tokens are read at RUN TIME from FORBIDDEN_STRINGS_FILE
+# (one ERE per line, comments with #) when set — a forbidden-strings list
+# must not itself publish the strings it forbids.
+lint-no-target-strings:
+	@echo "Scanning for forbidden strings..."
+	@EXTRA=""; \
+	if [ -n "$${FORBIDDEN_STRINGS_FILE:-}" ] && [ -f "$$FORBIDDEN_STRINGS_FILE" ]; then \
+	    EXTRA=$$(grep -vE '^[[:space:]]*(#|$$)' "$$FORBIDDEN_STRINGS_FILE" | paste -sd'|' -); \
+	else \
+	    echo "note: FORBIDDEN_STRINGS_FILE unset — scanning the inline neutral term only"; \
+	fi; \
+	MATCHES=$$(git ls-files | grep -v '^Makefile$$' | xargs grep -ril -E "[mM]em0$${EXTRA:+|$$EXTRA}" 2>/dev/null || true); \
+	if [ -n "$$MATCHES" ]; then \
+	    echo "ERROR: forbidden strings found:"; \
+	    echo "$$MATCHES"; \
+	    exit 1; \
+	fi; \
+	echo "OK: no forbidden strings."
 
 tf-fmt:
 	@if ! command -v terraform >/dev/null 2>&1; then \

@@ -22,7 +22,7 @@
 ## Decisions
 
 1. Replay should consume sanitized NDJSON, not live Agenttrace services.
-   - QA must not require local Agentrace loopback, Mem0, LLM, VLM, or
+   - QA must not require local Agentrace loopback, the retired memory service, LLM, VLM, or
      OmniParser availability.
 2. Replay should be tolerant of malformed lines but strict about promotion.
    - Bad JSON lines and invalid evidence are reported with line numbers.

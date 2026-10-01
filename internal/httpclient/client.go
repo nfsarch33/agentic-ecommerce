@@ -1,7 +1,7 @@
 // Package httpclient provides a shared HTTP client base with
 // configurable base URL, timeout, retry, circuit breaker delegation,
 // and request/response middleware hooks. Extracted in v5.3.0 to
-// deduplicate patterns across mem0, AusPost, DHL, and payment adapters.
+// deduplicate patterns across AusPost, DHL, and payment adapters.
 package httpclient
 
 import (
