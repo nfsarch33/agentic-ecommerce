@@ -11,8 +11,10 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
+	"github.com/nfsarch33/agentic-ecommerce/internal/publishgate"
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
 )
@@ -611,3 +613,64 @@ func (r *activityProductRepo) GetByID(ctx context.Context, id uuid.UUID) (catalo
 }
 
 var _ port.ProductRepository = (*activityProductRepo)(nil)
+
+// TestProductPublishWorkflowNeedsHumanWhenProxyUnreachable (v18900-5): the
+// counting proxy being down means the publish activity fails with
+// ErrStoreUnreachable — the job ENDS needs_human (not failed): 0 store
+// requests left the worker and a re-dispatch after the proxy returns is
+// safe (the ledger short-circuits completed keys).
+//
+// MUTANT: remove the needs_human branch in runPublish and the workflow fails
+// with an error instead — this test goes red on GetWorkflowError.
+func TestProductPublishWorkflowNeedsHumanWhenProxyUnreachable(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (ComplianceResult, error) {
+		return ComplianceResult{}, nil
+	}, activity.RegisterOptions{Name: CheckComplianceActivity})
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (MediaValidationResult, error) {
+		return MediaValidationResult{}, nil
+	}, activity.RegisterOptions{Name: ValidateMediaActivity})
+	env.RegisterActivityWithOptions(func(context.Context, RecordApprovalInput) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordApprovalActivityName})
+	env.RegisterActivityWithOptions(func(context.Context, WorkflowEvent) error {
+		return nil
+	}, activity.RegisterOptions{Name: RecordWorkflowEventActivity})
+	env.RegisterActivityWithOptions(func(context.Context, ProductPublishActivityInput) (PublishResult, error) {
+		return PublishResult{}, nil
+	}, activity.RegisterOptions{Name: PublishToWooCommerceActivity})
+
+	env.OnActivity(CheckComplianceActivity, mock.Anything, mock.Anything).Return(
+		ComplianceResult{Pass: true, Score: 94}, nil).Once()
+	env.OnActivity(ValidateMediaActivity, mock.Anything, mock.Anything).Return(
+		MediaValidationResult{Pass: true, Score: 100}, nil).Once()
+	// The publish activity reports the proxy down on every retry attempt;
+	// the policy exhausts (3) and the workflow then ends needs_human.
+	env.OnActivity(PublishToWooCommerceActivity, mock.Anything, mock.Anything).Return(
+		PublishResult{}, temporal.NewApplicationError(
+			"publish create: "+publishgate.ErrStoreUnreachable.Error()+": dial tcp 127.0.0.1:8090: connect: connection refused",
+			"ErrStoreUnreachable"),
+	).Times(3)
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(ProductPublishReviewSignal, ReviewSignal{Approved: true, Reviewer: "lead@example.com", Note: "ready"})
+	}, time.Minute)
+
+	env.ExecuteWorkflow(ProductPublishWorkflow, ProductPublishInput{ProductID: "product-9", RequestedBy: "operator@example.com"})
+
+	if !env.IsWorkflowCompleted() {
+		t.Fatal("workflow did not complete")
+	}
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("a needs_human job is not a workflow error: %v", err)
+	}
+	var result ProductPublishResult
+	if err := env.GetWorkflowResult(&result); err != nil {
+		t.Fatalf("workflow result: %v", err)
+	}
+	if result.Status != ProductPublishStatusNeedsHuman {
+		t.Fatalf("status = %q, want needs_human", result.Status)
+	}
+}

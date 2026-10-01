@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nfsarch33/agentic-ecommerce/internal/approvalid"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 )
 
@@ -64,6 +65,9 @@ func (c Client) UpsertProduct(ctx context.Context, product catalog.Product) erro
 		return fmt.Errorf("build product request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if id := approvalid.From(ctx); id != "" {
+		req.Header.Set(approvalid.Header, id)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -137,6 +141,9 @@ func (c Client) doJSON(ctx context.Context, method string, endpoint *url.URL, pa
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	if id := approvalid.From(ctx); id != "" {
+		req.Header.Set(approvalid.Header, id)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

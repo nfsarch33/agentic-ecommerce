@@ -58,9 +58,9 @@ type MediaProcessActivityInput struct {
 }
 
 type MediaReviewActivityInput struct {
-	MediaID   string `json:"media_id"`
-	Reviewer  string `json:"reviewer"`
-	Note      string `json:"note,omitempty"`
+	MediaID  string `json:"media_id"`
+	Reviewer string `json:"reviewer"`
+	Note     string `json:"note,omitempty"`
 }
 
 type MediaQualityActivityInput struct {

@@ -33,6 +33,7 @@ const (
 	ProductPublishStatusComplianceFailed = "compliance_failed"
 	ProductPublishStatusMediaFailed      = "media_failed"
 	ProductPublishStatusAwaitingReview   = "awaiting_review"
+	ProductPublishStatusNeedsHuman       = "needs_human"
 	ProductPublishStatusRejected         = "rejected"
 	ProductPublishStatusPublishing       = "publishing"
 	ProductPublishStatusFailed           = "failed"
@@ -317,6 +318,18 @@ func runReviewGate(ctx temporalworkflow.Context, input ProductPublishInput, stat
 func runPublish(ctx temporalworkflow.Context, input ProductPublishInput, activityInput ProductPublishActivityInput, state *ProductPublishResult) error {
 	state.Status = ProductPublishStatusPublishing
 	if err := temporalworkflow.ExecuteActivity(ctx, PublishToWooCommerceActivity, activityInput).Get(ctx, &state.Publish); err != nil {
+		// v18900-5: the store being unreachable means the counting proxy
+		// is DOWN — zero store requests left the worker. The job ends
+		// needs_human (not failed): no write happened, and once the proxy
+		// is back a re-dispatch is safe (the ledger short-circuits
+		// completed keys and reclaims expired leases).
+		var unreachable *temporal.ApplicationError
+		if errors.As(err, &unreachable) && strings.Contains(unreachable.Error(), publishgate.ErrStoreUnreachable.Error()) {
+			state.Status = ProductPublishStatusNeedsHuman
+			state.failActivity("publish", temporalworkflow.Now(ctx), "Counting proxy unreachable: 0 store requests, needs a human to restart it and re-dispatch", err)
+			state.CompletedAt = workflowTimestamp(temporalworkflow.Now(ctx))
+			return record(ctx, input, "product_publish.needs_human", state.Status, "counting proxy unreachable; no store write was attempted that succeeded", state.Review.Reviewer)
+		}
 		state.Status = ProductPublishStatusFailed
 		state.failActivity("publish", temporalworkflow.Now(ctx), "Publish to WooCommerce failed", err)
 		state.CompletedAt = workflowTimestamp(temporalworkflow.Now(ctx))
