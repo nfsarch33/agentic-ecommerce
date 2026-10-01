@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
 	"strings"
 	"testing"
@@ -13,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 )
 
@@ -281,9 +281,11 @@ func assignScanValue(dest, value any) {
 	}
 }
 
-// TestGetByIDHydratesImages pins inc-pg-products-no-images: a product with
-// a media-asset row must come back carrying its images, or the publish
-// workflow's compliance gate fails it no matter what was seeded.
+// TestGetByIDHydratesImages is the live-PG integration pin: a product with
+// media-asset rows must come back carrying its images (with sort order),
+// or the publish workflow's compliance gate fails it no matter what was
+// seeded. The always-running shape test lives in
+// TestGetByIDHydratesImagesFromFake below.
 // Mutant: dropping the loadImages call in getOne fails this test.
 func TestGetByIDHydratesImages(t *testing.T) {
 	ctx := context.Background()
@@ -308,7 +310,12 @@ func TestGetByIDHydratesImages(t *testing.T) {
 		t.Fatalf("seed product: %v", perr)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM product_media_assets WHERE product_id=$1; DELETE FROM products WHERE id=$1`, pid)
+		if _, err := pool.Exec(ctx, `DELETE FROM product_media_assets WHERE product_id=$1`, pid); err != nil {
+			t.Logf("cleanup media rows: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `DELETE FROM products WHERE id=$1`, pid); err != nil {
+			t.Logf("cleanup product row: %v", err)
+		}
 	})
 	pool.Exec(ctx, `DELETE FROM product_media_assets WHERE product_id=$1`, pid)
 	_, aerr := pool.Exec(ctx, `INSERT INTO product_media_assets
@@ -329,8 +336,8 @@ func TestGetByIDHydratesImages(t *testing.T) {
 	if got[0].URL != "https://example.com/1.jpg" || got[0].Alt != "Probe image one" {
 		t.Fatalf("first image = %+v", got[0])
 	}
-	if got[1].SortOrder != 1 && got[1].Alt != "Probe image two" {
-		t.Fatalf("second image = %+v", got[1])
+	if got[1].SortOrder != 1 || got[1].Alt != "Probe image two" {
+		t.Fatalf("second image = %+v (want SortOrder 1 and the alt text)", got[1])
 	}
 }
 
@@ -346,5 +353,38 @@ func TestGetByIDSurfacesImageLoadError(t *testing.T) {
 		t.Fatal("GetByID must surface the image-load error; got nil (the swallow is back)")
 	} else if !strings.Contains(err.Error(), "media table unavailable") {
 		t.Fatalf("err = %v; want the loadImages error to propagate", err)
+	}
+}
+
+// TestGetByIDHydratesImagesFromFake runs EVERYWHERE (no DSN, no skip): the
+// fake pool serves a product row plus a two-row media result set, and
+// GetByID must return both images with URL, alt text and sort order —
+// the shape the compliance gate's image rule reads. Mutant: keeping the
+// loadImages call but returning the un-hydrated product fails here with
+// images = 0 even though every live gate stays green.
+func TestGetByIDHydratesImagesFromFake(t *testing.T) {
+	t.Parallel()
+	product := postgresTestProduct(t)
+	pool := &fakePool{
+		row: fakeProductRow(product),
+		rows: &fakeRows{rows: [][]any{
+			{"https://example.com/one.jpg", "First image", 0},
+			{"https://example.com/two.jpg", "Second image", 1},
+		}},
+	}
+	repo := &ProductRepository{pool: pool}
+	got, err := repo.GetByID(context.Background(), product.ID())
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	imgs := got.Images()
+	if len(imgs) != 2 {
+		t.Fatalf("images = %d, want 2 (the compliance image rule reads this)", len(imgs))
+	}
+	if imgs[0].URL != "https://example.com/one.jpg" || imgs[0].Alt != "First image" || imgs[0].SortOrder != 0 {
+		t.Fatalf("first image = %+v", imgs[0])
+	}
+	if imgs[1].URL != "https://example.com/two.jpg" || imgs[1].Alt != "Second image" || imgs[1].SortOrder != 1 {
+		t.Fatalf("second image = %+v (want URL/alt/sort order)", imgs[1])
 	}
 }
