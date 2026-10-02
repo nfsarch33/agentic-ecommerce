@@ -1,4 +1,4 @@
-// Package costledger records one row per model call (v18870-2): job- and
+// Package costledger records one row per model call: job- and
 // tenant-attributed, with tokens and an AUD-cents estimate from
 // internal/costcalc. The RecordingGenerator decorates the AI port so every
 // call — success or failure — lands in the ledger; the same-day alert on a
