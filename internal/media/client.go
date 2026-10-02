@@ -24,7 +24,7 @@ type Client struct {
 // NewClient builds a client (empty baseURL is answered by the caller's
 // wiring decision, not defaulted here).
 func NewClient(baseURL string) *Client {
-	return &Client{BaseURL: baseURL, HTTP: &http.Client{Timeout: 120 * time.Second}}
+	return &Client{BaseURL: baseURL, HTTP: &http.Client{Timeout: 300 * time.Second}}
 }
 
 // JobID mints the idempotent job id for one (sku, op-set): the same
@@ -87,6 +87,9 @@ func (c *Client) Process(ctx context.Context, jobID string, image []byte, ops ..
 	})
 	if err != nil {
 		return ProcessResult{}, fmt.Errorf("media: marshal request: %w", err)
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/v1/process", bytes.NewReader(body))
 	if err != nil {
