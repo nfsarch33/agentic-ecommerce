@@ -301,7 +301,7 @@ func TestMethodOverrideBypassesAreRefused(t *testing.T) {
 		{"PURGE verb", "PURGE", "/wp-json/wc/v3/products/7", [2]string{}},
 		{"PROPFIND verb", "PROPFIND", "/wp-json/wc/v3/products/7", [2]string{}},
 		{"custom verb", "FROB", "/wp-json/wc/v3/products/7", [2]string{}},
-		{"double-encoded traversal", http.MethodGet, "/wp-json/wc/v3/%2e%2e/%2e%2e/wp/v2/users", [2]string{}},
+		{"double-encoded traversal", http.MethodGet, "/wp-json/wc/v3/%252e%252e/%252e%252e/wp/v2/users", [2]string{}},
 	}
 	var refused int
 	for _, pr := range probes {
@@ -359,7 +359,9 @@ func TestDoubleEncodedPathRefused(t *testing.T) {
 	defer store.Close()
 	p, _ := newTestProxy(t, store)
 	rr := httptest.NewRecorder()
-	p.ServeHTTP(rr, writeReq(http.MethodGet, "/wp-json/wc/v3/%2e%2e/%2e%2e/wp/v2/users", "", ""))
+	// %252e decodes ONCE to %2e — the decoded path carries no "..", so the
+	// string check alone passes it; only the unescaped-wire guard refuses.
+	p.ServeHTTP(rr, writeReq(http.MethodGet, "/wp-json/wc/v3/%252e%252e/%252e%252e/wp/v2/users", "", ""))
 	if rr.Code != http.StatusForbidden || forwarded != 0 {
 		t.Fatalf("double-encoded path = %d forwards=%d, want 403/0", rr.Code, forwarded)
 	}
