@@ -58,6 +58,11 @@ var scrubbedHeaders = []string{
 	"Trailer",
 	"Transfer-Encoding",
 	"Upgrade",
+	// Method-override headers: the store's REST layer honours them as
+	// global parameters, so an unapproved "read" becomes a write there.
+	"X-HTTP-Method-Override",
+	"X-HTTP-Method",
+	"X-Method-Override",
 }
 
 // AuditRow is one NDJSON line. The PATH ONLY never carries the query string:
@@ -140,13 +145,20 @@ func (p *Proxy) Close() error {
 	return err
 }
 
-func isWrite(method string) bool {
+// methodClass is an ALLOWLIST, not a denylist: a verb the proxy does not
+// know (PURGE, PROPFIND, anything custom) is refused, not treated as a
+// read — unknown verbs are how a write slips past a denylist.
+func methodClass(method string) string {
 	switch method {
+	case http.MethodGet, http.MethodHead:
+		return "read"
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-		return true
+		return "write"
 	}
-	return false
+	return "reject"
 }
+
+func isWrite(method string) bool { return methodClass(method) == "write" }
 
 func pathAllowed(path string) bool {
 	if strings.Contains(path, "..") {
@@ -158,6 +170,13 @@ func pathAllowed(path string) bool {
 		}
 	}
 	return false
+}
+
+// pathUnescaped reports whether the wire path carries any percent-encoding
+// the decoded check cannot see (%2e%2e passes the ".." test as a decoded
+// string while a front server may normalise it back to .. on the wire).
+func pathUnescaped(rawPath, decodedPath string) bool {
+	return rawPath != "" && rawPath != decodedPath || strings.Contains(decodedPath, "%")
 }
 
 func (p *Proxy) row(kind, method, path, approval string, status int) AuditRow {
@@ -180,15 +199,31 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	approval := strings.TrimSpace(r.Header.Get(ApprovalHeader))
 	path := r.URL.Path
 
-	if !pathAllowed(path) {
+	if !pathAllowed(path) || pathUnescaped(r.URL.RawPath, path) {
 		p.audit(p.row("refused", r.Method, path, approval, http.StatusForbidden))
 		http.Error(w, ErrPathNotAllowed.Error(), http.StatusForbidden)
 		return
 	}
-	if isWrite(r.Method) && approval == "" {
-		p.audit(p.row("refused", r.Method, path, "", http.StatusForbidden))
+	// The store's REST layer honours the _method query parameter and the
+	// override headers as GLOBAL parameters: an unapproved GET becomes a
+	// DELETE there while the proxy audits a read. Refuse them outright.
+	if r.URL.Query().Has("_method") || r.Header.Get("X-HTTP-Method-Override") != "" ||
+		r.Header.Get("X-HTTP-Method") != "" || r.Header.Get("X-Method-Override") != "" {
+		p.audit(p.row("refused", r.Method, path, approval, http.StatusForbidden))
 		http.Error(w, ErrWriteWithoutApproval.Error(), http.StatusForbidden)
 		return
+	}
+	switch methodClass(r.Method) {
+	case "reject":
+		p.audit(p.row("refused", r.Method, path, approval, http.StatusMethodNotAllowed))
+		http.Error(w, "storeproxy: method not allowed through the counting proxy", http.StatusMethodNotAllowed)
+		return
+	case "write":
+		if approval == "" {
+			p.audit(p.row("refused", r.Method, path, "", http.StatusForbidden))
+			http.Error(w, ErrWriteWithoutApproval.Error(), http.StatusForbidden)
+			return
+		}
 	}
 
 	body, err := io.ReadAll(r.Body)
@@ -207,11 +242,14 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	target, err := url.Parse(strings.TrimRight(p.cfg.StoreBaseURL, "/") + path)
+	base, err := url.Parse(strings.TrimRight(p.cfg.StoreBaseURL, "/"))
 	if err != nil {
-		http.Error(w, "storeproxy: bad target: "+err.Error(), http.StatusBadGateway)
+		http.Error(w, "storeproxy: bad store base: "+err.Error(), http.StatusBadGateway)
 		return
 	}
+	target := *base
+	target.Path = base.Path + path
+
 	q := r.URL.Query()
 	q.Del("consumer_key")
 	q.Del("consumer_secret")

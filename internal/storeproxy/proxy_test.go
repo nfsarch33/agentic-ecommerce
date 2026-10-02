@@ -274,3 +274,93 @@ func TestWriteWithoutApprovalRefused(t *testing.T) {
 		t.Fatalf("refused write must leave exactly one refused row: %+v", rows)
 	}
 }
+
+// The verdict's probe table, now COMMITTED (each probe reached the store
+// with the proxy key and no approval header on the reviewed head).
+//
+// MUTANT (any one guard removed): the corresponding probe forwards again.
+func TestMethodOverrideBypassesAreRefused(t *testing.T) {
+	forwarded := 0
+	store := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		forwarded++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer store.Close()
+	p, logPath := newTestProxy(t, store)
+
+	probes := []struct {
+		name   string
+		method string
+		path   string
+		hdr    [2]string
+	}{
+		{"_method query on a GET", http.MethodGet, "/wp-json/wc/v3/products/7?_method=DELETE&force=true", [2]string{}},
+		{"X-HTTP-Method-Override header", http.MethodGet, "/wp-json/wc/v3/products/7", [2]string{"X-HTTP-Method-Override", "DELETE"}},
+		{"X-HTTP-Method header", http.MethodGet, "/wp-json/wc/v3/products/7", [2]string{"X-HTTP-Method", "DELETE"}},
+		{"X-Method-Override header", http.MethodGet, "/wp-json/wc/v3/products/7", [2]string{"X-Method-Override", "DELETE"}},
+		{"PURGE verb", "PURGE", "/wp-json/wc/v3/products/7", [2]string{}},
+		{"PROPFIND verb", "PROPFIND", "/wp-json/wc/v3/products/7", [2]string{}},
+		{"custom verb", "FROB", "/wp-json/wc/v3/products/7", [2]string{}},
+		{"double-encoded traversal", http.MethodGet, "/wp-json/wc/v3/%2e%2e/%2e%2e/wp/v2/users", [2]string{}},
+	}
+	var refused int
+	for _, pr := range probes {
+		var req *http.Request
+		if pr.hdr[0] != "" {
+			req = writeReq(pr.method, pr.path, "", "", pr.hdr)
+		} else {
+			req = writeReq(pr.method, pr.path, "", "")
+		}
+		rr := httptest.NewRecorder()
+		p.ServeHTTP(rr, req)
+		if rr.Code != http.StatusForbidden && rr.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("%s: code=%d, want 403/405", pr.name, rr.Code)
+		}
+		if forwarded != 0 {
+			t.Fatalf("%s: reached the store (%d forwards)", pr.name, forwarded)
+		}
+		refused++
+	}
+	rows := readLog(t, logPath)
+	if len(rows) != refused {
+		t.Fatalf("refused rows = %d, want %d (one per probe)", len(rows), refused)
+	}
+	for _, r := range rows {
+		if r.Kind != "refused" {
+			t.Fatalf("non-refused row for a refused probe: %+v", r)
+		}
+	}
+}
+
+// MUTANT: revert methodClass to the denylist (unknown verbs = reads) and
+// this goes red — PURGE would forward as an unapproved read.
+func TestUnknownVerbIsRejectedNotRead(t *testing.T) {
+	forwarded := 0
+	store := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		forwarded++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer store.Close()
+	p, _ := newTestProxy(t, store)
+	rr := httptest.NewRecorder()
+	p.ServeHTTP(rr, writeReq("PURGE", "/wp-json/wc/v3/products/7", "", ""))
+	if rr.Code != http.StatusMethodNotAllowed || forwarded != 0 {
+		t.Fatalf("PURGE = %d forwards=%d, want 405/0", rr.Code, forwarded)
+	}
+}
+
+// MUTANT: drop the unescaped-path guard and %2e%2e traversal forwards.
+func TestDoubleEncodedPathRefused(t *testing.T) {
+	forwarded := 0
+	store := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		forwarded++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer store.Close()
+	p, _ := newTestProxy(t, store)
+	rr := httptest.NewRecorder()
+	p.ServeHTTP(rr, writeReq(http.MethodGet, "/wp-json/wc/v3/%2e%2e/%2e%2e/wp/v2/users", "", ""))
+	if rr.Code != http.StatusForbidden || forwarded != 0 {
+		t.Fatalf("double-encoded path = %d forwards=%d, want 403/0", rr.Code, forwarded)
+	}
+}
