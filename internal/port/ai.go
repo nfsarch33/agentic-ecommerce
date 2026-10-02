@@ -18,8 +18,12 @@ type AICompletionRequest struct {
 
 // AICompletionResponse is the normalized text generation result.
 type AICompletionResponse struct {
-	Content    string
+	Content string
+	// TokensUsed is the TOTAL the provider reported. Providers that report
+	// the split additionally fill TokensIn/TokensOut (then Used = In+Out).
 	TokensUsed int
+	TokensIn   int
+	TokensOut  int
 }
 
 // AITextGenerator is implemented by adapters that can generate copy.

@@ -21,7 +21,7 @@ type Price struct {
 // the table cost 0 and surface as ErrUnknownModel — visible, not silent.
 func DefaultTable() Table {
 	return Table{
-		"MiniMax-M3":       {InputCentsPerMTok: 165, OutputCentsPerMTok: 660},
+		"MiniMax-M3":        {InputCentsPerMTok: 165, OutputCentsPerMTok: 660},
 		"qwen3.8-27b-local": {InputCentsPerMTok: 0, OutputCentsPerMTok: 0},
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
+	"github.com/nfsarch33/agentic-ecommerce/internal/costledger"
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
@@ -276,4 +277,31 @@ type fakeContentFactCheckRecorder struct {
 func (f *fakeContentFactCheckRecorder) RecordContentFactCheck(_ context.Context, result ContentGenerationResult) error {
 	f.recorded = result
 	return nil
+}
+
+// MUTANT: drop the WithAttrs threading in GenerateContent and every ledger
+// row from the content path lands without tenant or action; the capture
+// goes red. The token split to the row is proven in the costledger package
+// (split + total-only fallback tests); the job id needs a real activity
+// context and is proven live at deploy.
+func TestGenerateContentThreadsTenantAndActionToTheModelCall(t *testing.T) {
+	var captured costledger.Attrs
+	gen := &attrCaptureGenerator{capture: &captured, result: contentagent.GenerateResult{}}
+	acts := NewContentGenerationActivities(ContentGenerationActivityDeps{Generator: gen})
+	if _, err := acts.GenerateContent(context.Background(), ContentGenerationInput{TenantID: "tenant-7"}); err != nil {
+		t.Fatalf("GenerateContent: %v", err)
+	}
+	if captured.TenantID != "tenant-7" || captured.Action != "content.generate" {
+		t.Fatalf("attribution lost on the content path: %+v", captured)
+	}
+}
+
+type attrCaptureGenerator struct {
+	capture *costledger.Attrs
+	result  contentagent.GenerateResult
+}
+
+func (g *attrCaptureGenerator) Generate(ctx context.Context, _ contentagent.GenerateRequest) (contentagent.GenerateResult, error) {
+	*g.capture = costledger.AttrFrom(ctx)
+	return g.result, nil
 }
