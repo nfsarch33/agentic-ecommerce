@@ -69,18 +69,32 @@ func Join(ctx context.Context, logPath string, approvals ApprovalsReader, since 
 			return Result{Status: StatusNotRun, Err: fmt.Errorf("bad audit line %q: %w", string(line), err)}
 		}
 		haveRow = true
+		if row.Kind == "intent" {
+			// Write-ahead: exactly one intent row per write ATTEMPT is the
+			// counted write; done/unknown outcome rows are not counted again.
+			res.Writes++
+			if row.ApprovalID == "" {
+				res.Unmatched = append(res.Unmatched, row.Method+" "+row.Path+" (no approval id)")
+				continue
+			}
+			if _, ok := approved[row.ApprovalID]; !ok {
+				res.Unmatched = append(res.Unmatched, row.Method+" "+row.Path+" approval="+row.ApprovalID)
+			}
+			continue
+		}
+		if row.Kind == "" && row.Method != "GET" && row.Method != "HEAD" {
+			// Legacy pre-intent rows (kind absent): still writes.
+			res.Writes++
+			if _, ok := approved[row.ApprovalID]; !ok {
+				res.Unmatched = append(res.Unmatched, row.Method+" "+row.Path+" approval="+row.ApprovalID)
+			}
+			continue
+		}
 		if row.Method == "GET" || row.Method == "HEAD" {
 			res.Reads++
-			continue
 		}
-		res.Writes++
-		if row.ApprovalID == "" {
-			res.Unmatched = append(res.Unmatched, row.Method+" "+row.Path+" (no approval id)")
-			continue
-		}
-		if _, ok := approved[row.ApprovalID]; !ok {
-			res.Unmatched = append(res.Unmatched, row.Method+" "+row.Path+" approval="+row.ApprovalID)
-		}
+		// Outcome rows (done/unknown) count as neither reads nor writes:
+		// the intent row already carried the attempt.
 	}
 	if err := sc.Err(); err != nil {
 		return Result{Status: StatusNotRun, Err: err}
@@ -99,6 +113,7 @@ func Join(ctx context.Context, logPath string, approvals ApprovalsReader, since 
 }
 
 type row struct {
+	Kind       string `json:"kind"`
 	Method     string `json:"method"`
 	Path       string `json:"path"`
 	ApprovalID string `json:"approval_id"`
