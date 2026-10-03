@@ -96,14 +96,8 @@ func runWith(ctx context.Context, logger *slog.Logger, channel enginesync.WooCom
 		return nil
 	}
 
-	eng := enginesync.NewEngine(enginesync.Config{
-		ProductRepository: repo,
-		WooCommerce:       channel,
-		DefaultCurrency:   "AUD",
-		Now:               time.Now,
-	})
 	cc := &countingChannel{WooCommerceClient: channel}
-	eng = enginesync.NewEngine(enginesync.Config{
+	eng := enginesync.NewEngine(enginesync.Config{
 		ProductRepository: repo,
 		WooCommerce:       cc,
 		DefaultCurrency:   "AUD",
