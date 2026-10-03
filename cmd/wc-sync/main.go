@@ -111,7 +111,7 @@ func runWith(ctx context.Context, logger *slog.Logger, channel enginesync.WooCom
 	})
 
 	const perPage = 100
-	var pages, imported, conflicts int
+	var pages, imported, conflicts, failed int
 	for page := 1; ; page++ {
 		res, err := eng.ImportFromWooCommerce(ctx, enginesync.ImportOptions{Page: page, PerPage: perPage})
 		if err != nil {
@@ -120,6 +120,7 @@ func runWith(ctx context.Context, logger *slog.Logger, channel enginesync.WooCom
 		pages++
 		imported += res.Imported
 		conflicts += res.Conflicts
+		failed += res.Failed
 		if cc.lastLen < perPage {
 			break
 		}
@@ -128,7 +129,11 @@ func runWith(ctx context.Context, logger *slog.Logger, channel enginesync.WooCom
 		"pages", pages,
 		"imported", imported,
 		"conflicts", conflicts,
+		"failed", failed,
 		"note", "existing SKUs are conflict-checked and skipped; an unchanged store imports nothing on a second run")
+	if failed > 0 {
+		return fmt.Errorf("wc-sync: %d rows failed to land (imported %d)", failed, imported)
+	}
 	return nil
 }
 
