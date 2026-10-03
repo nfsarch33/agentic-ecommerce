@@ -117,6 +117,11 @@ func (c *Client) Complete(ctx context.Context, req port.AICompletionRequest) (po
 	return port.AICompletionResponse{
 		Content:    out.Choices[0].Message.Content,
 		TokensUsed: out.Usage.TotalTokens,
+		// The split is filled when the bridge reports it; a total-only
+		// response falls back to total-in-TokensOut (priced at the output
+		// rate — an upper bound, stated rather than silently zero).
+		TokensIn:  out.Usage.PromptTokens,
+		TokensOut: completionOrTotal(out.Usage.CompletionTokens, out.Usage.TotalTokens),
 	}, nil
 }
 
@@ -243,7 +248,9 @@ type chatCompletionResponse struct {
 		Message bridgeMessage `json:"message"`
 	} `json:"choices"`
 	Usage struct {
-		TotalTokens int `json:"total_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
 	} `json:"usage"`
 }
 
@@ -257,4 +264,11 @@ type embeddingResponse struct {
 		Index     int       `json:"index"`
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`
+}
+
+func completionOrTotal(completion, total int) int {
+	if completion > 0 {
+		return completion
+	}
+	return total
 }

@@ -21,9 +21,9 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/shopee"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/shopify"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
+	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	"github.com/nfsarch33/agentic-ecommerce/internal/costcalc"
 	"github.com/nfsarch33/agentic-ecommerce/internal/costledger"
-	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 	"github.com/nfsarch33/agentic-ecommerce/internal/lifecycle"
 	"github.com/nfsarch33/agentic-ecommerce/internal/marketplacesync"
@@ -370,8 +370,11 @@ func newContentGenerationActivitiesFromEnv(logger *slog.Logger) *ecworkflow.Cont
 			// via costcalc). Recording is best-effort observability.
 			var recorder costledger.Recorder = costledger.DiscardRecorder{}
 			if dsn := getenv("ECOMMERCE_DB_URL", ""); dsn != "" {
-				if pool, err := pgxpool.New(context.Background(), dsn); err == nil {
+				pool, err := pgxpool.New(context.Background(), dsn)
+				if err == nil {
 					recorder = costledger.NewPGRecorder(pool)
+				} else {
+					logger.Warn("cost_ledger disabled: the pool failed to open (rows are dropped)", "error", err)
 				}
 			}
 			generator = contentagent.NewAgent(&costledger.RecordingGenerator{
