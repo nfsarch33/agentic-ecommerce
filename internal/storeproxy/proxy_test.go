@@ -355,9 +355,16 @@ func TestPHPMangledKeysAndRestRouteRefused(t *testing.T) {
 		body   string
 	}{
 		{"PHP mangles .method into _method", http.MethodGet, "/wp-json/wc/v3/products/7?.method=DELETE", "", ""},
-		{"PHP mangles %20method into _method", http.MethodGet, "/wp-json/wc/v3/products/7?%20method=DELETE", "", ""},
+		// "%20method" (a space IN FRONT of "method") is NOT _method under
+		// real PHP 8.3: the leading space is stripped and the key arrives as
+		// the harmless "method". It forwards, and is pinned on the positive
+		// side below — refusing it was the round-3 body's wrong claim.
 		{"rest_route reroutes off the audited path", http.MethodGet, "/wp-json/wc/v3/products?rest_route=/wp/v2/users", "", ""},
 		{"form body carries rest_route on a write", http.MethodPost, "/wp-json/wc/v3/products", "application/x-www-form-urlencoded", "rest_route=%2Fwp%2Fv2%2Fusers"},
+		{"PHP strips a LEADING space before mangling (%20_method)", http.MethodGet, "/wp-json/wc/v3/products/7?%20_method=DELETE", "", ""},
+		{"PHP strips a leading + (space) before mangling (+_method)", http.MethodGet, "/wp-json/wc/v3/products/7?+_method=DELETE", "", ""},
+		{"PHP delivers _method[] as the ARRAY _method", http.MethodGet, "/wp-json/wc/v3/products/7?_method[]=DELETE", "", ""},
+		{"_envelope[] wraps responses: statuses stop being readable", http.MethodGet, "/wp-json/wc/v3/products?_envelope[]=1", "", ""},
 	}
 	for _, pr := range probes {
 		var req *http.Request

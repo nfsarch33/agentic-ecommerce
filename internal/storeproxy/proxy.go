@@ -168,10 +168,12 @@ func methodClass(method string) string {
 func isWrite(method string) bool { return methodClass(method) == "write" }
 
 // phpKey mirrors how PHP mangles incoming parameter names before WordPress
-// reads them: every dot and space in the name becomes an underscore, so
-// ".method", "%20method" and a plain "_method" all arrive as the _method
-// global. Matching the raw key alone sees none of the first two.
+// reads them: LEADING spaces are stripped first, then every dot and space
+// in the name becomes an underscore — so " _method" (from %20_method or
+// +_method), ".method", "%20method" and a plain "_method" all arrive as the
+// _method global. Matching the raw key alone sees none of the first four.
 func phpKey(k string) string {
+	k = strings.TrimLeft(k, " ")
 	k = strings.ReplaceAll(k, ".", "_")
 	return strings.ReplaceAll(k, " ", "_")
 }
@@ -193,11 +195,20 @@ var queryKeyShape = regexp.MustCompile(`^[a-z0-9_]+(\[[a-z0-9_]*\])*$`)
 
 // queryGuard is the single admission check for query keys: normalised the
 // way PHP will normalise them, a key must be a plain store argument — not a
-// reserved global and not a foreign shape.
+// reserved global and not a foreign shape. The reserved check reads the
+// BASE name (before the first "["): PHP delivers _method[] as the ARRAY
+// _method, and _envelope[] wraps every response in 200s, so an array
+// suffix must not launder a reserved global past the gate. The shape check
+// stays on the full key so bracketed array arguments (include[]) keep
+// passing while mangled forms (a[b]c) keep refusing.
 func queryGuard(q url.Values) bool {
 	for k := range q {
 		nk := phpKey(k)
-		if reservedWPGlobals[nk] || !queryKeyShape.MatchString(nk) {
+		base := nk
+		if i := strings.Index(base, "["); i >= 0 {
+			base = base[:i]
+		}
+		if reservedWPGlobals[base] || !queryKeyShape.MatchString(nk) {
 			return false
 		}
 	}
