@@ -20,7 +20,7 @@ func TestPublishRefusedWithoutAuditedProxy(t *testing.T) {
 
 func TestParseJSONObjectStripsFences(t *testing.T) {
 	for in, want := range map[string]string{
-		`{"a":1}`:                `{"a":1}`,
+		`{"a":1}`:                 `{"a":1}`,
 		"```json\n{\"a\":1}\n```": `{"a":1}`,
 		"prose {\"a\":1} more":    `{"a":1}`,
 	} {

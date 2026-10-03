@@ -196,7 +196,7 @@ func main() {
 		*out = fmt.Sprintf("enrich-batch-%s.ndjson", time.Now().UTC().Format("20060102T150405Z"))
 	}
 
-		// The router's per-agent header routes fair-share queues; the caller
+	// The router's per-agent header routes fair-share queues; the caller
 	// names itself (ENRICH_AGENT env or --agent flag), defaulting to this
 	// tool's own name — never a fleet agent id.
 	agent := os.Getenv("ENRICH_AGENT")
