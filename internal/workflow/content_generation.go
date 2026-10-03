@@ -128,15 +128,18 @@ func (a *ContentGenerationActivities) GenerateContent(ctx context.Context, input
 	if a.generator == nil {
 		return contentagent.GenerateResult{}, errors.New("content generator is not configured")
 	}
-	// v18870-2: the ledger attributes every model call to the workflow
-	// (job) and requester behind it.
+	// The ledger attributes every model call to the workflow (job), the
+	// tenant and the action behind it. Tenant and action always ride the
+	// context; the job id needs a real activity context (unit tests call
+	// activities on a plain context and the SDK panics in GetInfo there,
+	// so the guard yields an unattributed job rather than a crash).
+	att := costledger.AttrFrom(ctx)
+	att.TenantID = input.TenantID
+	att.Action = "content.generate"
 	if jobID := workflowIDFromActivity(ctx); jobID != "" {
-		ctx = costledger.WithAttrs(ctx, costledger.Attrs{
-			JobID:    jobID,
-			TenantID: input.TenantID,
-			Action:   "content.generate",
-		})
+		att.JobID = jobID
 	}
+	ctx = costledger.WithAttrs(ctx, att)
 	req := input.Request
 	if req.Product.Title == "" {
 		req.Product = input.Product

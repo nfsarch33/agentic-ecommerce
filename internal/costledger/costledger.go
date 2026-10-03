@@ -1,4 +1,4 @@
-// Package costledger records one row per model call (v18870-2): job- and
+// Package costledger records one row per model call: job- and
 // tenant-attributed, with tokens and an AUD-cents estimate from
 // internal/costcalc. The RecordingGenerator decorates the AI port so every
 // call — success or failure — lands in the ledger; the same-day alert on a
@@ -60,42 +60,50 @@ type RecordingGenerator struct {
 	Inner    port.AITextGenerator
 	Recorder Recorder
 	Prices   costcalc.Table
-	Now      func() time.Time
 }
 
 // Complete runs the inner generator and records the row.
+//
+// Tokens: providers that report the split fill tokens_in/tokens_out; a
+// total-only response lands entirely in tokens_out and is priced at the
+// OUTPUT rate — an upper bound, stated here rather than silently zero.
+// The row is recorded on an uncancellable context with a short deadline:
+// the likeliest failing loop fails WITH a cancelled context, and that is
+// exactly the row the alert must see.
 func (g *RecordingGenerator) Complete(ctx context.Context, req port.AICompletionRequest) (port.AICompletionResponse, error) {
-	at := time.Now()
-	if g.Now != nil {
-		at = g.Now()
-	}
 	att := AttrFrom(ctx)
 	resp, err := g.Inner.Complete(ctx, req)
 	row := Row{
-		JobID:     att.JobID,
-		TenantID:  att.TenantID,
-		Action:    att.Action,
-		Model:     req.Model,
-		Status:    "ok",
+		JobID:    att.JobID,
+		TenantID: att.TenantID,
+		Action:   att.Action,
+		Model:    req.Model,
+		Status:   "ok",
 	}
 	if err != nil {
 		row.Status = "error"
 		row.ErrorText = err.Error()
 	} else {
-		row.TokensOut = int64(resp.TokensUsed)
-		if row.TokensOut < 0 {
-			row.TokensOut = 0
+		row.TokensIn = clamp64(resp.TokensIn)
+		row.TokensOut = clamp64(resp.TokensOut)
+		if row.TokensOut == 0 && resp.TokensUsed > 0 {
+			row.TokensOut = clamp64(resp.TokensUsed)
 		}
 		if cost, cerr := g.Prices.Cost(req.Model, row.TokensIn, row.TokensOut); cerr == nil {
 			row.CostCents = cost
 		}
 	}
-	_ = at // reserved for a future created_at override; PG defaults now()
-	if rerr := g.Recorder.Record(ctx, row); rerr != nil && err == nil {
-		// The call succeeded; a ledger hiccup must not poison the product.
-		return resp, nil
-	}
+	recCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	_ = g.Recorder.Record(recCtx, row) // best-effort: a ledger hiccup must not poison the product call
 	return resp, err
+}
+
+func clamp64(n int) int64 {
+	if n < 0 {
+		return 0
+	}
+	return int64(n)
 }
 
 // DiscardRecorder drops rows (used when no DSN is configured: the worker

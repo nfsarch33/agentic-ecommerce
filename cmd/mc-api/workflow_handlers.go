@@ -45,6 +45,7 @@ type startProductPublishWorkflowRequest struct {
 
 type startContentGenerationWorkflowRequest struct {
 	ProductID   string   `json:"product_id"`
+	TenantID    string   `json:"tenant_id,omitempty"`
 	RequestedBy string   `json:"requested_by,omitempty"`
 	Style       string   `json:"style,omitempty"`
 	Language    string   `json:"language,omitempty"`
@@ -290,7 +291,7 @@ func (s *server) startContentGenerationWorkflow(w http.ResponseWriter, r *http.R
 		r.Context(),
 		client.StartWorkflowOptions{ID: workflowID, TaskQueue: ecworkflow.TaskQueue},
 		ecworkflow.ContentGenerationWorkflow,
-		ecworkflow.ContentGenerationInput{Product: productInfo, Request: agentReq, RequestedBy: req.RequestedBy},
+		ecworkflow.ContentGenerationInput{Product: productInfo, Request: agentReq, RequestedBy: req.RequestedBy, TenantID: strings.TrimSpace(req.TenantID)},
 	)
 	if err != nil {
 		s.log.Error("start content generation workflow", "product_id", productID.String(), "error", err)
