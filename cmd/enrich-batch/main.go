@@ -181,6 +181,7 @@ func main() {
 		out        = flag.String("out", "", "report ndjson path (default enrich-batch-<ts>.ndjson in cwd)")
 		publish    = flag.Bool("publish", false, "publish approved drafts (requires --store-proxy AND approved decisions; refuses otherwise)")
 		proxy      = flag.String("store-proxy", os.Getenv("ENRICH_STORE_PROXY"), "audited store proxy URL for --publish")
+		agentFlag  = flag.String("agent", "enrich-batch", "agent name for the router header (or ENRICH_AGENT)")
 	)
 	flag.Parse()
 
@@ -195,7 +196,14 @@ func main() {
 		*out = fmt.Sprintf("enrich-batch-%s.ndjson", time.Now().UTC().Format("20060102T150405Z"))
 	}
 
-	rc := &routerClient{base: *router, bearer: bearer, agent: "zcode", hc: &http.Client{Timeout: 120 * time.Second}}
+		// The router's per-agent header routes fair-share queues; the caller
+	// names itself (ENRICH_AGENT env or --agent flag), defaulting to this
+	// tool's own name — never a fleet agent id.
+	agent := os.Getenv("ENRICH_AGENT")
+	if agent == "" {
+		agent = *agentFlag
+	}
+	rc := &routerClient{base: *router, bearer: bearer, agent: agent, hc: &http.Client{Timeout: 120 * time.Second}}
 	wc := woocommerce.NewClient(woocommerce.Config{
 		BaseURL:        *wooBase,
 		ConsumerKey:    os.Getenv("WOO_CONSUMER_KEY"),
