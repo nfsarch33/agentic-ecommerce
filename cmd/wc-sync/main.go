@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -9,19 +10,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	pgproduct "github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	enginesync "github.com/nfsarch33/agentic-ecommerce/internal/sync"
 )
 
 type noopChannel struct{}
 
-func (noopChannel) UpsertProduct(context.Context, catalog.Product) error {
+func (noopChannel) UpsertProduct(_ context.Context, _ catalog.Product) error {
 	return nil
 }
 
-func (noopChannel) ListProducts(context.Context, woocommerce.ListOptions) ([]woocommerce.Product, error) {
+func (noopChannel) ListProducts(_ context.Context, _ woocommerce.ListOptions) ([]woocommerce.Product, error) {
 	return nil, nil
 }
 
@@ -43,26 +47,88 @@ func mainImpl(stdout io.Writer, getenv func(string) string) int {
 	return 0
 }
 
+// run pulls the store's products into Postgres through the sync engine,
+// page by page, until a short page says the catalogue is exhausted. The
+// engine makes the loop idempotent: a SKU that already exists locally is
+// conflict-checked and skipped, never re-created, so a second run over an
+// unchanged store imports nothing and conflicts nothing.
 func run(ctx context.Context, logger *slog.Logger, channel enginesync.WooCommerceClient) error {
-	repo := inmemory.NewProductRepository()
-	product, err := catalog.NewProduct(catalog.ProductInput{
-		SKU:         "DEMO-001",
-		Title:       "Demo Product",
-		Description: "Demo WooCommerce sync payload; configure adapters before live use.",
-		Price:       catalog.ZeroAUD(),
-		Status:      catalog.StatusDraft,
-	})
+	return runWith(ctx, logger, channel, openRepoFromEnv)
+}
+
+// countingChannel remembers the size of the last page the engine fetched,
+// which is the driver's only signal that the catalogue is exhausted (the
+// engine returns imported/conflict counts, not page sizes).
+type countingChannel struct {
+	enginesync.WooCommerceClient
+	lastLen int
+}
+
+func (c *countingChannel) ListProducts(ctx context.Context, opts woocommerce.ListOptions) ([]woocommerce.Product, error) {
+	out, err := c.WooCommerceClient.ListProducts(ctx, opts)
+	c.lastLen = len(out)
+	return out, err
+}
+
+// openRepoFromEnv opens the Postgres product repository; without a DSN it
+// returns a nil repo and the run degrades to the dry-run log (a sync tool
+// must not silently sync into a throwaway store).
+func openRepoFromEnv(ctx context.Context) (port.ProductRepository, func(), error) {
+	dsn := strings.TrimSpace(os.Getenv("ECOMMERCE_DB_URL"))
+	if dsn == "" {
+		return nil, func() {}, nil
+	}
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create sync pool: %w", err)
+	}
+	return pgproduct.NewProductRepository(pool), pool.Close, nil
+}
+
+func runWith(ctx context.Context, logger *slog.Logger, channel enginesync.WooCommerceClient, openRepo func(context.Context) (port.ProductRepository, func(), error)) error {
+	repo, closeRepo, err := openRepo(ctx)
 	if err != nil {
 		return err
 	}
-	if err := repo.Create(ctx, product); err != nil {
-		return err
+	defer closeRepo()
+	if repo == nil {
+		logger.Info("wc-sync.dry_run", "reason", "ECOMMERCE_DB_URL not set; nothing synced")
+		return nil
 	}
 
-	// Read-only since the exactly-once gate: publishing belongs to the
-	// product-publish workflow alone, behind an approval. The demo publish
-	// is gone; the pull sync lands with the connect-and-sync story.
-	logger.Info("wc-sync.product_staged", "sku", product.SKU(), "note", "publishing requires the product-publish workflow")
+	eng := enginesync.NewEngine(enginesync.Config{
+		ProductRepository: repo,
+		WooCommerce:       channel,
+		DefaultCurrency:   "AUD",
+		Now:               time.Now,
+	})
+	cc := &countingChannel{WooCommerceClient: channel}
+	eng = enginesync.NewEngine(enginesync.Config{
+		ProductRepository: repo,
+		WooCommerce:       cc,
+		DefaultCurrency:   "AUD",
+		Now:               time.Now,
+	})
+
+	const perPage = 100
+	var pages, imported, conflicts int
+	for page := 1; ; page++ {
+		res, err := eng.ImportFromWooCommerce(ctx, enginesync.ImportOptions{Page: page, PerPage: perPage})
+		if err != nil {
+			return fmt.Errorf("page %d: %w", page, err)
+		}
+		pages++
+		imported += res.Imported
+		conflicts += res.Conflicts
+		if cc.lastLen < perPage {
+			break
+		}
+	}
+	logger.Info("wc-sync.synced",
+		"pages", pages,
+		"imported", imported,
+		"conflicts", conflicts,
+		"note", "existing SKUs are conflict-checked and skipped; an unchanged store imports nothing on a second run")
 	return nil
 }
 
