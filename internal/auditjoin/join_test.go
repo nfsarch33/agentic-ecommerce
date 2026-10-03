@@ -95,3 +95,19 @@ func TestCleanDayIsZeroUnmatched(t *testing.T) {
 		t.Fatalf("clean day: %+v", res)
 	}
 }
+
+// MUTANT: count outcome rows (done/unknown) as writes as well and every
+// attempt double-counts; this pins the intent-only counting of the new
+// write-ahead format.
+func TestIntentRowsAreTheCountedWritesNotOutcomes(t *testing.T) {
+	p := writeLog(t,
+		`{"ts":"2026-10-02T02:00:00Z","kind":"intent","method":"POST","path":"/wp-json/wc/v3/products","approval_id":"ap-1","status":0}`,
+		`{"ts":"2026-10-02T02:00:01Z","kind":"done","method":"POST","path":"/wp-json/wc/v3/products","approval_id":"ap-1","status":201}`,
+		`{"ts":"2026-10-02T02:00:02Z","kind":"intent","method":"PUT","path":"/wp-json/wc/v3/products/7","approval_id":"ap-2","status":0}`,
+		`{"ts":"2026-10-02T02:00:03Z","kind":"unknown","method":"PUT","path":"/wp-json/wc/v3/products/7","approval_id":"ap-2","status":0}`,
+	)
+	res := Join(context.Background(), p, stubApprovals{ids: map[string]struct{}{"ap-1": {}, "ap-2": {}}}, time.Time{})
+	if res.Status != StatusOK || res.Writes != 2 || res.Reads != 0 {
+		t.Fatalf("intent-only counting: %+v (want OK, writes=2 from 1 intent + 1 intent, reads=0)", res)
+	}
+}
