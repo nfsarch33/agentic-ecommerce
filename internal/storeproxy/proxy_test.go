@@ -332,6 +332,62 @@ func TestMethodOverrideBypassesAreRefused(t *testing.T) {
 	}
 }
 
+// The round-3 probes: the two query bypasses from the SECURITY verdict.
+//
+// MUTANT: drop the phpKey normalisation (match the raw key only) and the
+// ".method"/"%20method" probes forward — the store reads both as _method.
+// MUTANT: drop the writeBodyAllowed call and the form POST forwards — its
+// rest_route rides $_POST past the query guard.
+func TestPHPMangledKeysAndRestRouteRefused(t *testing.T) {
+	forwarded := 0
+	store := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		forwarded++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer store.Close()
+	p, logPath := newTestProxy(t, store)
+
+	probes := []struct {
+		name   string
+		method string
+		path   string
+		ct     string
+		body   string
+	}{
+		{"PHP mangles .method into _method", http.MethodGet, "/wp-json/wc/v3/products/7?.method=DELETE", "", ""},
+		{"PHP mangles %20method into _method", http.MethodGet, "/wp-json/wc/v3/products/7?%20method=DELETE", "", ""},
+		{"rest_route reroutes off the audited path", http.MethodGet, "/wp-json/wc/v3/products?rest_route=/wp/v2/users", "", ""},
+		{"form body carries rest_route on a write", http.MethodPost, "/wp-json/wc/v3/products", "application/x-www-form-urlencoded", "rest_route=%2Fwp%2Fv2%2Fusers"},
+	}
+	for _, pr := range probes {
+		var req *http.Request
+		if pr.ct != "" {
+			// The write probe carries an approval id: the form body must be
+			// the ONLY reason it is refused.
+			req = writeReq(pr.method, pr.path, pr.body, "appr-form-1", [2]string{"Content-Type", pr.ct})
+		} else {
+			req = writeReq(pr.method, pr.path, "", "")
+		}
+		rr := httptest.NewRecorder()
+		p.ServeHTTP(rr, req)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("%s: code=%d, want 403", pr.name, rr.Code)
+		}
+		if forwarded != 0 {
+			t.Fatalf("%s: reached the store (%d forwards)", pr.name, forwarded)
+		}
+	}
+	rows := readLog(t, logPath)
+	if len(rows) != len(probes) {
+		t.Fatalf("refused rows = %d, want %d (one per probe)", len(rows), len(probes))
+	}
+	for _, r := range rows {
+		if r.Kind != "refused" {
+			t.Fatalf("non-refused row for a refused probe: %+v", r)
+		}
+	}
+}
+
 // MUTANT: revert methodClass to the denylist (unknown verbs = reads) and
 // this goes red — PURGE would forward as an unapproved read.
 func TestUnknownVerbIsRejectedNotRead(t *testing.T) {

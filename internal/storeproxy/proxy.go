@@ -13,10 +13,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +39,11 @@ var ErrPathNotAllowed = errors.New("storeproxy: path outside the store REST allo
 // ErrAuditUnavailable is returned (HTTP 503) when a write's audit intent
 // cannot be recorded: the write is refused rather than unauditable.
 var ErrAuditUnavailable = errors.New("storeproxy: audit log unavailable, write refused (fail closed)")
+
+// ErrFormBodyOnWrite is returned (HTTP 403) when a write carries a form (or
+// undeclared) body: forms are the second carrier for the WordPress globals
+// the query guard refuses — $_POST is where rest_route wins on a write.
+var ErrFormBodyOnWrite = errors.New("storeproxy: write bodies must be JSON")
 
 // allowedPrefixes are the REST prefixes the worker's adapter uses (the
 // WooCommerce v3 REST API only). Anything else on the store origin — other
@@ -160,6 +167,59 @@ func methodClass(method string) string {
 
 func isWrite(method string) bool { return methodClass(method) == "write" }
 
+// phpKey mirrors how PHP mangles incoming parameter names before WordPress
+// reads them: every dot and space in the name becomes an underscore, so
+// ".method", "%20method" and a plain "_method" all arrive as the _method
+// global. Matching the raw key alone sees none of the first two.
+func phpKey(k string) string {
+	k = strings.ReplaceAll(k, ".", "_")
+	return strings.ReplaceAll(k, " ", "_")
+}
+
+// reservedWPGlobals are the WordPress/REST globals that re-verb or reroute a
+// request after the proxy has classified it (_method overrides the verb,
+// rest_route replaces the route, _envelope/_jsonp reshape the response).
+var reservedWPGlobals = map[string]bool{
+	"_method":    true,
+	"rest_route": true,
+	"_envelope":  true,
+	"_jsonp":     true,
+}
+
+// queryKeyShape is the strict WooCommerce argument shape: lowercase letters,
+// digits and underscores, with optional single-level array suffixes. Anything
+// else in a query key is not a store argument and gets refused.
+var queryKeyShape = regexp.MustCompile(`^[a-z0-9_]+(\[[a-z0-9_]*\])*$`)
+
+// queryGuard is the single admission check for query keys: normalised the
+// way PHP will normalise them, a key must be a plain store argument — not a
+// reserved global and not a foreign shape.
+func queryGuard(q url.Values) bool {
+	for k := range q {
+		nk := phpKey(k)
+		if reservedWPGlobals[nk] || !queryKeyShape.MatchString(nk) {
+			return false
+		}
+	}
+	return true
+}
+
+// writeBodyAllowed refuses the two body classes PHP parses into $_POST on
+// the store — form-urlencoded and multipart — because $_POST is where the
+// reserved globals the query guard refuses get a second chance on a write.
+// With no declared Content-Type the store leaves the body in php://input and
+// $_POST stays empty, so an undeclared body carries nothing.
+func writeBodyAllowed(contentType string) bool {
+	if contentType == "" {
+		return true
+	}
+	mt, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false // unparseable type: refuse rather than guess
+	}
+	return mt != "application/x-www-form-urlencoded" && !strings.HasPrefix(mt, "multipart/")
+}
+
 func pathAllowed(path string) bool {
 	if strings.Contains(path, "..") {
 		return false
@@ -206,8 +266,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// The store's REST layer honours the _method query parameter and the
 	// override headers as GLOBAL parameters: an unapproved GET becomes a
-	// DELETE there while the proxy audits a read. Refuse them outright.
-	if r.URL.Query().Has("_method") || r.Header.Get("X-HTTP-Method-Override") != "" ||
+	// DELETE there while the proxy audits a read. Keys are matched after
+	// PHP name-mangling (".method" and "%20method" are _method by the time
+	// WordPress reads them), and the rest_route-family globals are refused
+	// outright: they reroute the request off the audited path.
+	if !queryGuard(r.URL.Query()) || r.Header.Get("X-HTTP-Method-Override") != "" ||
 		r.Header.Get("X-HTTP-Method") != "" || r.Header.Get("X-Method-Override") != "" {
 		p.audit(p.row("refused", r.Method, path, approval, http.StatusForbidden))
 		http.Error(w, ErrWriteWithoutApproval.Error(), http.StatusForbidden)
@@ -222,6 +285,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if approval == "" {
 			p.audit(p.row("refused", r.Method, path, "", http.StatusForbidden))
 			http.Error(w, ErrWriteWithoutApproval.Error(), http.StatusForbidden)
+			return
+		}
+		if !writeBodyAllowed(r.Header.Get("Content-Type")) {
+			p.audit(p.row("refused", r.Method, path, approval, http.StatusForbidden))
+			http.Error(w, ErrFormBodyOnWrite.Error(), http.StatusForbidden)
 			return
 		}
 	}
