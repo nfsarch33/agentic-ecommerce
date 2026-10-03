@@ -64,6 +64,10 @@ type ImportOptions struct {
 type ImportResult struct {
 	Imported  int `json:"imported"`
 	Conflicts int `json:"conflicts"`
+	// Failed counts rows the import could not land (e.g. a repository
+	// refusal). The driver surfaces it: "imported 0" over a pile of
+	// failures is not a clean sync.
+	Failed int `json:"failed"`
 }
 
 type Status struct {
@@ -156,6 +160,7 @@ func (e *Engine) ImportFromWooCommerce(ctx context.Context, opts ImportOptions) 
 			continue
 		}
 		if err := e.repo.Create(ctx, product); err != nil {
+			result.Failed++
 			e.record(Event{Type: EventSyncFailed, ProductID: product.ID().String(), RemoteID: remote.ID, Message: err.Error()})
 			continue
 		}

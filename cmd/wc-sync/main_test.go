@@ -197,4 +197,7 @@ func TestSecondRunImportsNothing(t *testing.T) {
 	if !bytes.Contains(buf.Bytes(), []byte(`"imported":0`)) {
 		t.Fatalf("second run must import nothing (idempotent): %s", buf.String())
 	}
+	if !bytes.Contains(buf.Bytes(), []byte(`"failed":0`)) {
+		t.Fatalf("a clean second run must also land zero failures (imported 0 over hidden failures is not clean): %s", buf.String())
+	}
 }
