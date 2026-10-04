@@ -1,19 +1,28 @@
 package woocommerce
 
 type Product struct {
-	ID            int     `json:"id,omitempty"`
-	Name          string  `json:"name"`
-	Type          string  `json:"type,omitempty"`
-	Status        string  `json:"status,omitempty"`
-	Regular       string  `json:"regular_price,omitempty"`
-	Price         string  `json:"price,omitempty"`
-	Description   string  `json:"description,omitempty"`
-	ShortDesc     string  `json:"short_description,omitempty"`
-	SKU           string  `json:"sku,omitempty"`
-	ManageStock   *bool   `json:"manage_stock,omitempty"`
-	StockQuantity *int    `json:"stock_quantity,omitempty"`
-	Categories    []IDRef `json:"categories,omitempty"`
-	Images        []Image `json:"images,omitempty"`
+	ID            int                `json:"id,omitempty"`
+	Name          string             `json:"name"`
+	Type          string             `json:"type,omitempty"`
+	Status        string             `json:"status,omitempty"`
+	Regular       string             `json:"regular_price,omitempty"`
+	Price         string             `json:"price,omitempty"`
+	Description   string             `json:"description,omitempty"`
+	ShortDesc     string             `json:"short_description,omitempty"`
+	SKU           string             `json:"sku,omitempty"`
+	ManageStock   *bool              `json:"manage_stock,omitempty"`
+	StockQuantity *int               `json:"stock_quantity,omitempty"`
+	Categories    []IDRef            `json:"categories,omitempty"`
+	Tags          []IDRef            `json:"tags,omitempty"`
+	Attributes    []ProductAttribute `json:"attributes,omitempty"`
+	Images        []Image            `json:"images,omitempty"`
+}
+
+// ProductAttribute is one declared attribute with its offered terms; the
+// grounding check reads exactly these values.
+type ProductAttribute struct {
+	Name    string   `json:"name"`
+	Options []string `json:"options,omitempty"`
 }
 
 type IDRef struct {

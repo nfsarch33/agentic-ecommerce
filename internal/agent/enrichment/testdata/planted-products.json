@@ -1,0 +1,25 @@
+{
+  "corpus": "grounding-v1",
+  "note": "synthetic planted products for the grounding eval; the same ten (plus the negative-claims table) live in the KB eval corpus",
+  "products": [
+    {"sku": "ENR-P-001", "name": "Terracotta Planter Wide", "price": "34.50", "currency": "AUD", "categories": ["Home", "Garden"], "tags": ["handmade"], "attributes": {"Colour": ["Terracotta"], "Material": ["Terracotta clay"], "Capacity": ["2 L"]}},
+    {"sku": "ENR-P-002", "name": "Recycled Aluminium Bottle", "price": "29.00", "currency": "AUD", "categories": ["Sports", "Outdoors"], "tags": ["sustainable"], "attributes": {"Colour": ["Obsidian", "Ivory"], "Material": ["Recycled aluminium"], "Capacity": ["750 ml"]}},
+    {"sku": "ENR-P-003", "name": "Bamboo Desk Organiser", "price": "49.90", "currency": "AUD", "categories": ["Office"], "tags": [], "attributes": {"Material": ["Bamboo"], "Finish": ["Natural"]}},
+    {"sku": "ENR-P-004", "name": "Organic Cotton Tee", "price": "39.00", "currency": "AUD", "categories": ["Apparel"], "tags": ["fair-trade"], "attributes": {"Colour": ["Olive", "Cobalt"], "Material": ["Organic cotton"], "Size": ["S", "M", "L", "XL"]}},
+    {"sku": "ENR-P-005", "name": "Copper Pour-Over Kettle", "price": "89.00", "currency": "AUD", "categories": ["Home", "Kitchen"], "tags": ["barista"], "attributes": {"Material": ["Copper"], "Capacity": ["1 L"]}},
+    {"sku": "ENR-P-006", "name": "Walnut Serving Board", "price": "64.00", "currency": "AUD", "categories": ["Home", "Kitchen"], "tags": ["gift"], "attributes": {"Material": ["Walnut"], "Dimensions": ["40 cm"]}},
+    {"sku": "ENR-P-007", "name": "Linen Throw Sandstone", "price": "119.00", "currency": "AUD", "categories": ["Home"], "tags": [], "attributes": {"Colour": ["Sandstone"], "Material": ["Linen"]}},
+    {"sku": "ENR-P-008", "name": "Stainless Steel Lunchbox", "price": "44.50", "currency": "AUD", "categories": ["Home", "Kitchen"], "tags": ["plastic-free"], "attributes": {"Material": ["Stainless steel"], "Capacity": ["1.2 L"]}},
+    {"sku": "ENR-P-009", "name": "Leather Journal Amber", "price": "54.00", "currency": "AUD", "categories": ["Office", "Gift"], "tags": [], "attributes": {"Colour": ["Amber"], "Material": ["Leather"], "Pages": ["192 pages"]}},
+    {"sku": "ENR-P-010", "name": "Jute Floor Runner", "price": "99.00", "currency": "AUD", "categories": ["Home"], "tags": ["handwoven"], "attributes": {"Material": ["Jute"], "Dimensions": ["180 cm"]}}
+  ],
+  "negative_claims": [
+    {"sku": "ENR-P-001", "claim": "waterproof", "kind": "property", "reason": "row says nothing about water resistance"},
+    {"sku": "ENR-P-002", "claim": "burgundy", "kind": "colour", "reason": "offered colours are obsidian and ivory"},
+    {"sku": "ENR-P-003", "claim": "marble", "kind": "material", "reason": "the organiser is bamboo"},
+    {"sku": "ENR-P-004", "claim": "XXL", "kind": "size", "reason": "offered sizes stop at XL"},
+    {"sku": "ENR-P-005", "claim": "dishwasher-safe", "kind": "property", "reason": "no such attribute on the row"},
+    {"sku": "ENR-P-008", "claim": "1.5 L", "kind": "measure", "reason": "capacity is 1.2 L"},
+    {"sku": "ENR-P-009", "claim": "$45.00", "kind": "price", "reason": "the store price is $54.00"}
+  ]
+}
