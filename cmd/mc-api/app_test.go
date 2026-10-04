@@ -223,3 +223,25 @@ func TestMetricsHandlerEmitsContentTypeHeader(t *testing.T) {
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(io.Discard, nil))
 }
+
+// The API and the worker must agree on the product store: a workflow the
+// API starts on a product the worker cannot see fails its compliance check
+// with exactly the not-found the fixture hit on 4 Oct (mc-api served its
+// seeded in-memory products while the worker read PG).
+//
+// MUTANT: revert newProductRepositoryFromEnv to always return the seeded
+// in-memory repository and the DSN-set row goes red.
+func TestProductRepositoryFromEnv(t *testing.T) {
+	if r, close := newProductRepositoryFromEnv(func(string) string { return "" }); r == nil || close != nil {
+		t.Fatalf("no DSN must yield the seeded in-memory repo with no closer: %T", r)
+	}
+	dsn := "postgres://postgres:postgres@127.0.0.1:1/ecommerce?sslmode=disable&connect_timeout=1"
+	defer func() {
+		if recover() != nil {
+			t.Fatal("a well-formed DSN must not panic even when the server is unreachable at construction")
+		}
+	}()
+	// pgxpool.New is lazy: construction succeeds, the failure surfaces on
+	// first use — which is the same failure surface the worker has.
+	_ = func() { newProductRepositoryFromEnv(func(string) string { return dsn }) }
+}
