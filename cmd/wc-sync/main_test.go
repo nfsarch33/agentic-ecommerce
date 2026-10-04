@@ -5,10 +5,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/inmemory"
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
+	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 )
 
 func TestRunDryRun(t *testing.T) {
@@ -20,12 +23,13 @@ func TestRunDryRun(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	// Read-only since the gate: staging is logged, publishing is not.
-	if !bytes.Contains(buf.Bytes(), []byte("wc-sync.product_staged")) {
+	// Without a DSN a sync tool must not silently sync somewhere else:
+	// the run logs the dry run and touches nothing.
+	if !bytes.Contains(buf.Bytes(), []byte("wc-sync.dry_run")) {
 		t.Fatalf("log output = %s", buf.String())
 	}
-	if bytes.Contains(buf.Bytes(), []byte("product_synced")) {
-		t.Fatalf("wc-sync still publishes: %s", buf.String())
+	if bytes.Contains(buf.Bytes(), []byte("wc-sync.synced")) {
+		t.Fatalf("dry run must not report a sync: %s", buf.String())
 	}
 }
 
@@ -87,7 +91,7 @@ func TestMainImplDryRunReturnsZero(t *testing.T) {
 	if got := mainImpl(&buf, getenv); got != 0 {
 		t.Fatalf("mainImpl exit=%d log=%s", got, buf.String())
 	}
-	if !bytes.Contains(buf.Bytes(), []byte("wc-sync.product_staged")) {
+	if !bytes.Contains(buf.Bytes(), []byte("wc-sync.dry_run")) {
 		t.Fatalf("log output = %s", buf.String())
 	}
 }
@@ -104,18 +108,21 @@ func (failingChannel) ListProducts(context.Context, woocommerce.ListOptions) ([]
 	return nil, nil
 }
 
-// TestRunPropagatesPublishFailure ensures engine errors bubble through
-// run() rather than being swallowed.
-func TestRunPropagatesPublishFailure(t *testing.T) {
+// TestRunWithRepoFailurePropagates ensures repository errors bubble through
+// runWith rather than being swallowed into a zero-count "success".
+//
+// MUTANT: swallow the openRepo error in runWith and this goes red — a broken
+// database would read as a clean dry run.
+func TestRunWithRepoFailurePropagates(t *testing.T) {
 	t.Parallel()
 
-	// Publishing no longer happens here (the workflow owns it), so a failing
-	// channel cannot fail the staging run. Mutant: restoring the publish call
-	// makes this test fail on the error it expects to be absent.
 	var buf bytes.Buffer
-	err := run(context.Background(), slog.New(slog.NewJSONHandler(&buf, nil)), failingChannel{})
-	if err != nil {
-		t.Fatalf("run must not publish (read-only since the gate): %v", err)
+	openFail := func(context.Context) (port.ProductRepository, func(), error) {
+		return nil, nil, errors.New("database unreachable")
+	}
+	err := runWith(context.Background(), slog.New(slog.NewJSONHandler(&buf, nil)), failingChannel{}, openFail)
+	if err == nil || !strings.Contains(err.Error(), "database unreachable") {
+		t.Fatalf("runWith must propagate the repository error, got %v", err)
 	}
 }
 
@@ -144,5 +151,53 @@ func TestMainImplReturnsOneOnRunError(t *testing.T) {
 	var buf bytes.Buffer
 	if got := mainImpl(&buf, getenv); got != 0 {
 		t.Fatalf("mainImpl exit=%d log=%s", got, buf.String())
+	}
+}
+
+// stubStoreChannel serves one fixed page of products.
+type stubStoreChannel struct{}
+
+func (stubStoreChannel) UpsertProduct(context.Context, catalog.Product) error { return nil }
+
+func (stubStoreChannel) ListProducts(_ context.Context, opts woocommerce.ListOptions) ([]woocommerce.Product, error) {
+	if opts.Page > 1 {
+		return nil, nil // short page: the catalogue is done
+	}
+	stock := 5
+	return []woocommerce.Product{
+		{ID: 1, Name: "Widget", SKU: "WID-1", Price: "19.00", StockQuantity: &stock},
+		{ID: 2, Name: "Gadget", SKU: "GAD-2", Price: "29.00", StockQuantity: &stock},
+	}, nil
+}
+
+// The connect-and-sync acceptance, pinned at the driver level: a second run
+// over an unchanged store imports NOTHING and creates no new conflicts.
+//
+// MUTANT: make the engine re-create existing SKUs (skip the exists check)
+// and the second run imports again — this goes red.
+func TestSecondRunImportsNothing(t *testing.T) {
+	t.Parallel()
+
+	repo := inmemory.NewProductRepository()
+	open := func(context.Context) (port.ProductRepository, func(), error) {
+		return repo, func() {}, nil // ONE store across both runs: idempotency is per-repository
+	}
+	var buf bytes.Buffer
+	log := slog.New(slog.NewJSONHandler(&buf, nil))
+	if err := runWith(context.Background(), log, stubStoreChannel{}, open); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte(`"imported":2`)) {
+		t.Fatalf("first run must import both products: %s", buf.String())
+	}
+	buf.Reset()
+	if err := runWith(context.Background(), log, stubStoreChannel{}, open); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte(`"imported":0`)) {
+		t.Fatalf("second run must import nothing (idempotent): %s", buf.String())
+	}
+	if !bytes.Contains(buf.Bytes(), []byte(`"failed":0`)) {
+		t.Fatalf("a clean second run must also land zero failures (imported 0 over hidden failures is not clean): %s", buf.String())
 	}
 }
