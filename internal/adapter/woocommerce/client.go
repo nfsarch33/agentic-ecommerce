@@ -195,6 +195,9 @@ func addListOptions(values url.Values, opts ListOptions) {
 	if opts.After != "" {
 		values.Set("after", opts.After)
 	}
+	if opts.Before != "" {
+		values.Set("before", opts.Before)
+	}
 	if opts.SKU != "" {
 		values.Set("sku", opts.SKU)
 	}

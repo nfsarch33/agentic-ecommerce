@@ -1,0 +1,12 @@
+[Unit]
+Description=agentic-ecommerce daily ops digest (orders, refunds, revenue, reviews, site health)
+
+[Service]
+Type=oneshot
+# %h-relative only: a unit shipped in a public repo must not name a user's
+# home or any internal worktree path. The env file is the neutral
+# agentic-ecommerce config location (deploy renders the Woo credentials
+# into it; the fixture stack's env file is copied there on deploy).
+EnvironmentFile=%h/.config/agentic-ecommerce/ops-digest.env
+Environment=OPS_DIGEST_OUT=%h/runs/ops-digest
+ExecStart=%h/.local/bin/ec-ops-digest

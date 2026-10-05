@@ -44,6 +44,17 @@ type Order struct {
 	PaymentMethod string          `json:"payment_method,omitempty"`
 	Billing       OrderBilling    `json:"billing"`
 	LineItems     []OrderLineItem `json:"line_items"`
+	// Refunds carries the order's refund set (each entry's Total is the
+	// refunded amount, negative in WooCommerce's JSON). Additive: the field
+	// rides the orders payload the API already returns; the ops digest is
+	// its first consumer.
+	Refunds []OrderRefund `json:"refunds,omitempty"`
+}
+
+type OrderRefund struct {
+	RefundID int    `json:"refund_id"`
+	Reason   string `json:"reason,omitempty"`
+	Total    string `json:"total"`
 }
 
 type OrderBilling struct {
@@ -65,6 +76,7 @@ type ListOptions struct {
 	Page    int
 	Status  string
 	After   string
+	Before  string
 	SKU     string
 }
 
