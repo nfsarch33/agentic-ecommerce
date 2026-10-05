@@ -156,32 +156,20 @@ type review struct {
 	Reviewer string `json:"reviewer"`
 }
 
+// paidStatuses is exactly the set the store's own sales report counts. A
+// status=any listing (the WooCommerce default) would put pending, failed,
+// cancelled and refunded-in-full orders into GrossCents, so on any day with
+// an abandoned checkout the digest printed DIFFERS and overstated revenue.
+var paidStatuses = []string{"processing", "completed", "on-hold"}
+
 // collectDigest pulls the day's numbers. Refunds sum the orders' refund
 // sets (Woo keeps the order total at its original value; the refunds array
 // carries what actually went back, negative).
 func collectDigest(ctx context.Context, client woocommerce.Client, httpClient *http.Client, baseURL string, now time.Time) (Digest, error) {
 	start, end, date := digestWindow(now)
-	// Page until a short page: a single 100-slot request silently
-	// truncates every total on a busy day, and a digest with wrong
-	// numbers is worse than no digest.
-	var orders []woocommerce.Order
-	for page := 1; page <= 10; page++ {
-		batch, err := client.ListOrders(ctx, woocommerce.ListOptions{
-			PerPage: 100,
-			Page:    page,
-			After:   start.UTC().Format(time.RFC3339),
-			Before:  end.UTC().Format(time.RFC3339),
-		})
-		if err != nil {
-			return Digest{}, fmt.Errorf("list orders page %d: %w", page, err)
-		}
-		orders = append(orders, batch...)
-		if len(batch) < 100 {
-			break
-		}
-		if page == 10 {
-			return Digest{}, fmt.Errorf("over %d orders in one day: refusing to render a truncated digest", len(orders))
-		}
+	orders, err := listPaidOrders(ctx, client, start, end)
+	if err != nil {
+		return Digest{}, err
 	}
 
 	d := Digest{Date: date, Orders: len(orders)}
@@ -217,32 +205,80 @@ func collectDigest(ctx context.Context, client woocommerce.Client, httpClient *h
 	return d, nil
 }
 
+// listPaidOrders pages through each paid status separately (the client's
+// Status is a single value, not a list). Statuses are disjoint, so no
+// dedup is needed. Page until a short page: a single 100-slot request
+// silently truncates every total on a busy day, and a digest with wrong
+// numbers is worse than no digest.
+func listPaidOrders(ctx context.Context, client woocommerce.Client, start, end time.Time) ([]woocommerce.Order, error) {
+	var orders []woocommerce.Order
+	for _, status := range paidStatuses {
+		for page := 1; page <= 10; page++ {
+			batch, err := client.ListOrders(ctx, woocommerce.ListOptions{
+				PerPage: 100,
+				Page:    page,
+				Status:  status,
+				After:   start.UTC().Format(time.RFC3339),
+				Before:  end.UTC().Format(time.RFC3339),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("list orders %s page %d: %w", status, page, err)
+			}
+			orders = append(orders, batch...)
+			if len(batch) < 100 {
+				break
+			}
+			if page == 10 {
+				return nil, fmt.Errorf("over %d %s orders in one day: refusing to render a truncated digest", len(orders), status)
+			}
+		}
+	}
+	return orders, nil
+}
+
 // listReviews fetches the product reviews INSIDE the digest's window (the
 // count is "yesterday's reviews", not "all reviews"): after/before take
-// ISO-8601 dates exactly like the orders listing's.
+// ISO-8601 dates exactly like the orders listing's. Paged like the orders —
+// one per_page=100 request would silently truncate a busy day's count.
 func listReviews(ctx context.Context, httpClient *http.Client, baseURL string, start, end time.Time) ([]review, error) {
-	endpoint, err := url.JoinPath(baseURL, "wp-json/wc/v3/products/reviews")
-	if err != nil {
-		return nil, err
+	var all []review
+	for page := 1; page <= 10; page++ {
+		endpoint, err := url.JoinPath(baseURL, "wp-json/wc/v3/products/reviews")
+		if err != nil {
+			return nil, err
+		}
+		q := url.Values{}
+		q.Set("per_page", "100")
+		q.Set("page", strconv.Itoa(page))
+		q.Set("after", start.UTC().Format(time.RFC3339))
+		q.Set("before", end.UTC().Format(time.RFC3339))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?"+q.Encode(), nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("reviews: HTTP %d", resp.StatusCode)
+		}
+		var batch []review
+		err = json.NewDecoder(resp.Body).Decode(&batch)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+		if len(batch) < 100 {
+			return all, nil
+		}
+		if page == 10 {
+			return nil, fmt.Errorf("over %d reviews in one day: refusing to render a truncated digest", len(all))
+		}
 	}
-	q := url.Values{}
-	q.Set("per_page", "100")
-	q.Set("after", start.UTC().Format(time.RFC3339))
-	q.Set("before", end.UTC().Format(time.RFC3339))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?"+q.Encode(), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("reviews: HTTP %d", resp.StatusCode)
-	}
-	var reviews []review
-	return reviews, json.NewDecoder(resp.Body).Decode(&reviews)
+	return all, nil
 }
 
 // probeHealth checks the store's own healthz (the fixture store proxy

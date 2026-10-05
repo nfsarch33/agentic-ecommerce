@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -94,28 +95,42 @@ func TestDigestWindowPreviousShopLocalDay(t *testing.T) {
 }
 
 // stubQueries records the raw query each endpoint served, so the tests
-// assert the WINDOW the digest actually asked for.
+// assert the WINDOW and the STATUS SET the digest actually asked for.
 type stubQueries struct {
-	reviews url.Values
+	orders  []url.Values
+	reviews []url.Values
 	sales   url.Values
 }
 
-func wooStub(t *testing.T, ordersJSON, reviewsJSON, salesJSON string, health int) (*httptest.Server, *stubQueries) {
+// wooStub serves orders keyed by the requested status (a status the map
+// does not carry answers []; the "" bucket is what a regressed statusless
+// digest gets, so the paid-only row can catch it), reviews keyed by page,
+// and the sales report verbatim.
+func wooStub(t *testing.T, ordersByStatus map[string]string, reviewsByPage map[int]string, salesJSON string, health int) (*httptest.Server, *stubQueries) {
 	t.Helper()
 	served := &stubQueries{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/wp-json/wc/v3/orders", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/wp-json/wc/v3/orders", func(w http.ResponseWriter, r *http.Request) {
+		served.orders = append(served.orders, r.URL.Query())
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(ordersJSON))
-	})
-	mux.HandleFunc("/wp-json/wc/v3/products/reviews", func(w http.ResponseWriter, r *http.Request) {
-		served.reviews = r.URL.Query()
-		if reviewsJSON == "" {
-			w.WriteHeader(http.StatusInternalServerError)
+		if js, ok := ordersByStatus[r.URL.Query().Get("status")]; ok {
+			_, _ = w.Write([]byte(js))
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(reviewsJSON))
+		_, _ = w.Write([]byte(`[]`))
+	})
+	mux.HandleFunc("/wp-json/wc/v3/products/reviews", func(w http.ResponseWriter, r *http.Request) {
+		served.reviews = append(served.reviews, r.URL.Query())
+		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		if page < 1 {
+			page = 1
+		}
+		if js, ok := reviewsByPage[page]; ok {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(js))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
 	})
 	mux.HandleFunc("/wp-json/wc/v3/reports/sales", func(w http.ResponseWriter, r *http.Request) {
 		served.sales = r.URL.Query()
@@ -141,7 +156,9 @@ func TestCollectDigestNumbersAndReconciliation(t *testing.T) {
 		{"id":2,"total":"80.00"},
 		{"id":3,"total":"0.00","refunds":[{"refund_id":10,"total":"-20.00"}]}
 	]`
-	server, served := wooStub(t, orders, `[{"reviewer":"ada"},{"reviewer":"bob"}]`,
+	server, served := wooStub(t,
+		map[string]string{"processing": orders},
+		map[int]string{1: `[{"reviewer":"ada"},{"reviewer":"bob"}]`},
 		`{"total_sales":"125.00"}`, http.StatusOK)
 
 	now := time.Date(2026, 10, 5, 7, 0, 0, 0, time.UTC)
@@ -155,8 +172,11 @@ func TestCollectDigestNumbersAndReconciliation(t *testing.T) {
 	// must be the DAY's — assert the queries, not just the outputs.
 	// now = Oct 5 07:00Z = Oct 5 18:00 AEDT -> digest day Oct 4: window
 	// [Oct 4 00:00 AEST, Oct 5 00:00 AEDT) = [Oct 3 14:00Z, Oct 4 13:00Z).
-	if got := served.reviews.Get("after"); got != "2026-10-03T14:00:00Z" || served.reviews.Get("before") != "2026-10-04T13:00:00Z" {
-		t.Fatalf("reviews query window: after=%s before=%s", served.reviews.Get("after"), served.reviews.Get("before"))
+	if len(served.reviews) == 0 {
+		t.Fatal("no reviews query served")
+	}
+	if got := served.reviews[0].Get("after"); got != "2026-10-03T14:00:00Z" || served.reviews[0].Get("before") != "2026-10-04T13:00:00Z" {
+		t.Fatalf("reviews query window: after=%s before=%s", got, served.reviews[0].Get("before"))
 	}
 	if served.sales.Get("date_min") != "2026-10-04" || served.sales.Get("date_max") != "2026-10-04" {
 		t.Fatalf("sales query day: date_min=%s date_max=%s", served.sales.Get("date_min"), served.sales.Get("date_max"))
@@ -172,10 +192,83 @@ func TestCollectDigestNumbersAndReconciliation(t *testing.T) {
 	}
 }
 
+// The paid-only regression row (r2): cancelled, failed and pending orders
+// must never move gross, orders or the reconciliation. The stub serves the
+// bad orders ONLY under their own statuses and under "" (what a statusless
+// digest asks), so a regressed status=any listing trips every assertion.
+// MUTANT: drop Status from listPaidOrders's ListOptions and this row goes red.
+func TestCollectDigestCountsPaidStatusesOnly(t *testing.T) {
+	t.Parallel()
+	server, served := wooStub(t,
+		map[string]string{
+			"processing": `[{"id":1,"total":"45.00"},{"id":2,"total":"80.00"}]`,
+			"completed":  `[{"id":3,"total":"25.00"}]`,
+			"on-hold":    `[]`,
+			"cancelled":  `[{"id":4,"total":"999.00"}]`,
+			"failed":     `[{"id":5,"total":"500.00"}]`,
+			"pending":    `[{"id":6,"total":"77.00"}]`,
+			"":           `[{"id":4,"total":"999.00"},{"id":5,"total":"500.00"},{"id":6,"total":"77.00"}]`,
+		},
+		map[int]string{1: `[]`},
+		`{"total_sales":"150.00"}`, http.StatusOK)
+
+	d, err := collectDigest(context.Background(),
+		woocommerce.NewClient(woocommerce.Config{BaseURL: server.URL}, server.Client()),
+		server.Client(), server.URL, time.Date(2026, 10, 5, 7, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collectDigest: %v", err)
+	}
+	if d.Orders != 3 || d.GrossCents != 15000 {
+		t.Fatalf("paid-only: orders=%d gross=%d (cancelled/failed/pending leaked in?)", d.Orders, d.GrossCents)
+	}
+	if !d.Reconciled {
+		t.Fatalf("gross %d must reconcile with the paid-only report 15000", d.GrossCents)
+	}
+	seen := map[string]bool{}
+	for _, q := range served.orders {
+		st := q.Get("status")
+		if st == "" {
+			t.Fatalf("orders query without status (status=any regression): %v", q)
+		}
+		seen[st] = true
+	}
+	for _, st := range []string{"processing", "completed", "on-hold"} {
+		if !seen[st] {
+			t.Fatalf("digest never asked for paid status %q (served: %v)", st, seen)
+		}
+	}
+}
+
+// Reviews page like the orders (r2): 101 reviews across two pages must all
+// be counted; one per_page=100 call would report 100. MUTANT: remove the
+// page loop from listReviews and this row goes red (101 -> 100).
+func TestCollectDigestPagesReviews(t *testing.T) {
+	t.Parallel()
+	page1 := "[" + strings.Repeat(`{"reviewer":"r"},`, 99) + `{"reviewer":"r"}]`
+	page2 := `[{"reviewer":"last"}]`
+	server, served := wooStub(t,
+		map[string]string{"processing": `[]`},
+		map[int]string{1: page1, 2: page2},
+		`{"total_sales":"0.00"}`, http.StatusOK)
+
+	d, err := collectDigest(context.Background(),
+		woocommerce.NewClient(woocommerce.Config{BaseURL: server.URL}, server.Client()),
+		server.Client(), server.URL, time.Date(2026, 10, 5, 7, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collectDigest: %v", err)
+	}
+	if d.Reviews != 101 {
+		t.Fatalf("reviews=%d, want 101 (second page missed)", d.Reviews)
+	}
+	if served.reviews[len(served.reviews)-1].Get("page") != "2" {
+		t.Fatalf("second reviews page never requested: %v", served.reviews)
+	}
+}
+
 func TestCollectDigestFlagsDifferingReport(t *testing.T) {
 	t.Parallel()
-	orders := `[{"id":1,"total":"45.00"}]`
-	server, _ := wooStub(t, orders, `[]`, `{"total_sales":"44.00"}`, http.StatusOK)
+	server, _ := wooStub(t, map[string]string{"processing": `[{"id":1,"total":"45.00"}]`},
+		map[int]string{1: `[]`}, `{"total_sales":"44.00"}`, http.StatusOK)
 
 	d, err := collectDigest(context.Background(),
 		woocommerce.NewClient(woocommerce.Config{BaseURL: server.URL}, server.Client()),
@@ -190,8 +283,8 @@ func TestCollectDigestFlagsDifferingReport(t *testing.T) {
 
 func TestCollectDigestWithoutReportEndpoint(t *testing.T) {
 	t.Parallel()
-	orders := `[{"id":1,"total":"10.00"}]`
-	server, _ := wooStub(t, orders, `[]`, "", http.StatusOK)
+	server, _ := wooStub(t, map[string]string{"processing": `[{"id":1,"total":"10.00"}]`},
+		map[int]string{1: `[]`}, "", http.StatusOK)
 
 	d, err := collectDigest(context.Background(),
 		woocommerce.NewClient(woocommerce.Config{BaseURL: server.URL}, server.Client()),
@@ -209,8 +302,8 @@ func TestCollectDigestWithoutReportEndpoint(t *testing.T) {
 
 func TestCollectDigestReviewsUnavailableRendersNotZero(t *testing.T) {
 	t.Parallel()
-	orders := `[{"id":1,"total":"10.00"}]`
-	server, _ := wooStub(t, orders, "", "", http.StatusOK) // reviews handler 500s
+	server, _ := wooStub(t, map[string]string{"processing": `[{"id":1,"total":"10.00"}]`},
+		map[int]string{}, "", http.StatusOK) // reviews handler 500s
 
 	d, err := collectDigest(context.Background(),
 		woocommerce.NewClient(woocommerce.Config{BaseURL: server.URL}, server.Client()),
