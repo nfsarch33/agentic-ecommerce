@@ -31,7 +31,10 @@ type Digest struct {
 	RefundedCents int64
 	NetCents      int64
 	Reviews       int
-	HealthOK      bool
+	// ReviewsAvailable is false when the reviews endpoint errored: the
+	// render says unavailable rather than a confident zero.
+	ReviewsAvailable bool
+	HealthOK         bool
 	// ReportGrossCents is the WooCommerce sales report's total_sales for
 	// the same day, when the endpoint answers; Reconciled says whether it
 	// matches the computed gross to the cent.
@@ -49,7 +52,11 @@ func renderDigest(d Digest) string {
 	fmt.Fprintf(&b, "gross:             %s\n", cents(d.GrossCents))
 	fmt.Fprintf(&b, "refunded:          %s\n", cents(d.RefundedCents))
 	fmt.Fprintf(&b, "net:               %s\n", cents(d.NetCents))
-	fmt.Fprintf(&b, "reviews:           %d\n", d.Reviews)
+	if d.ReviewsAvailable {
+		fmt.Fprintf(&b, "reviews:           %d\n", d.Reviews)
+	} else {
+		b.WriteString("reviews:           unavailable\n")
+	}
 	fmt.Fprintf(&b, "site-health:       %s\n", map[bool]string{true: "ok", false: "DOWN"}[d.HealthOK])
 	switch {
 	case !d.ReportAvailable:
@@ -126,7 +133,7 @@ var melbourne = mustTZ("Australia/Melbourne")
 func mustTZ(name string) *time.Location {
 	loc, err := time.LoadLocation(name)
 	if err != nil {
-		return time.UTC
+		panic("ops-digest: cannot load " + name + " (tzdata missing — the day boundary would silently move to UTC)")
 	}
 	return loc
 }
@@ -137,7 +144,11 @@ func digestWindow(now time.Time) (time.Time, time.Time, string) {
 	local := now.In(melbourne)
 	day := local.AddDate(0, 0, -1)
 	start := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, melbourne)
-	return start, start.Add(24 * time.Hour), day.Format("2006-01-02")
+	// The next LOCAL midnight, not +24h: on DST-change days the local day
+	// is 23h or 25h, and a fixed 24h span would double-count the first
+	// hour of the next day (or drop the last hour of a 25h day).
+	end := time.Date(day.Year(), day.Month(), day.Day()+1, 0, 0, 0, 0, melbourne)
+	return start, end, day.Format("2006-01-02")
 }
 
 // review is the slice of the Woo product-review payload the digest counts.
@@ -150,13 +161,27 @@ type review struct {
 // carries what actually went back, negative).
 func collectDigest(ctx context.Context, client woocommerce.Client, httpClient *http.Client, baseURL string, now time.Time) (Digest, error) {
 	start, end, date := digestWindow(now)
-	orders, err := client.ListOrders(ctx, woocommerce.ListOptions{
-		PerPage: 100,
-		After:   start.UTC().Format(time.RFC3339),
-		Before:  end.UTC().Format(time.RFC3339),
-	})
-	if err != nil {
-		return Digest{}, fmt.Errorf("list orders: %w", err)
+	// Page until a short page: a single 100-slot request silently
+	// truncates every total on a busy day, and a digest with wrong
+	// numbers is worse than no digest.
+	var orders []woocommerce.Order
+	for page := 1; page <= 10; page++ {
+		batch, err := client.ListOrders(ctx, woocommerce.ListOptions{
+			PerPage: 100,
+			Page:    page,
+			After:   start.UTC().Format(time.RFC3339),
+			Before:  end.UTC().Format(time.RFC3339),
+		})
+		if err != nil {
+			return Digest{}, fmt.Errorf("list orders page %d: %w", page, err)
+		}
+		orders = append(orders, batch...)
+		if len(batch) < 100 {
+			break
+		}
+		if page == 10 {
+			return Digest{}, fmt.Errorf("over %d orders in one day: refusing to render a truncated digest", len(orders))
+		}
 	}
 
 	d := Digest{Date: date, Orders: len(orders)}
@@ -179,11 +204,12 @@ func collectDigest(ctx context.Context, client woocommerce.Client, httpClient *h
 	}
 	d.NetCents = d.GrossCents - d.RefundedCents
 
-	reviews, _ := listReviews(ctx, httpClient, baseURL)
+	reviews, reviewsErr := listReviews(ctx, httpClient, baseURL, start, end)
+	d.ReviewsAvailable = reviewsErr == nil
 	d.Reviews = len(reviews)
 	d.HealthOK = probeHealth(ctx, httpClient, baseURL)
 
-	if report, ok := fetchSalesTotal(ctx, httpClient, baseURL, start, end); ok {
+	if report, ok := fetchSalesTotal(ctx, httpClient, baseURL, date); ok {
 		d.ReportAvailable = true
 		d.ReportGrossCents = report
 		d.Reconciled = d.ReportGrossCents == d.GrossCents
@@ -191,14 +217,19 @@ func collectDigest(ctx context.Context, client woocommerce.Client, httpClient *h
 	return d, nil
 }
 
-// listReviews pages the product-review list once (page size 100 covers the
-// fixture shop's day comfortably; a shop outgrowing that gets a follow-up).
-func listReviews(ctx context.Context, httpClient *http.Client, baseURL string) ([]review, error) {
+// listReviews fetches the product reviews INSIDE the digest's window (the
+// count is "yesterday's reviews", not "all reviews"): after/before take
+// ISO-8601 dates exactly like the orders listing's.
+func listReviews(ctx context.Context, httpClient *http.Client, baseURL string, start, end time.Time) ([]review, error) {
 	endpoint, err := url.JoinPath(baseURL, "wp-json/wc/v3/products/reviews")
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?per_page=100", nil)
+	q := url.Values{}
+	q.Set("per_page", "100")
+	q.Set("after", start.UTC().Format(time.RFC3339))
+	q.Set("before", end.UTC().Format(time.RFC3339))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?"+q.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -237,13 +268,17 @@ func probeHealth(ctx context.Context, httpClient *http.Client, baseURL string) b
 // classic reports endpoint is best-effort: a Woo build without it returns
 // !ok and the digest prints "unavailable (cannot reconcile)" instead of
 // failing the day's numbers.
-func fetchSalesTotal(ctx context.Context, httpClient *http.Client, baseURL string, start, end time.Time) (int64, bool) {
+func fetchSalesTotal(ctx context.Context, httpClient *http.Client, baseURL string, day string) (int64, bool) {
 	endpoint, err := url.JoinPath(baseURL, "wp-json/wc/v3/reports/sales")
 	if err != nil {
 		return 0, false
 	}
+	// The endpoint takes date_min/date_max as SHOP-LOCAL YYYY-MM-DD; a UTC
+	// rendering of local midnight names the previous calendar day, and
+	// unknown params make it answer its default period — the reconciliation
+	// then compares against the wrong window. One day: min == max == day.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		endpoint+"?date="+url.QueryEscape(start.UTC().Format("2006-01-02"))+"&date_after="+url.QueryEscape(end.UTC().Format("2006-01-02")), nil)
+		endpoint+"?date_min="+url.QueryEscape(day)+"&date_max="+url.QueryEscape(day), nil)
 	if err != nil {
 		return 0, false
 	}
@@ -267,4 +302,3 @@ func fetchSalesTotal(ctx context.Context, httpClient *http.Client, baseURL strin
 	}
 	return total, true
 }
-

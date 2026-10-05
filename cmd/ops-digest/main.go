@@ -8,12 +8,15 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
+
+	_ "time/tzdata" // the day boundary must never silently move to UTC on a host without zoneinfo
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 )
@@ -72,8 +75,13 @@ func run(logger *slog.Logger) error {
 }
 
 func postSlack(ctx context.Context, webhook, date, text string) error {
-	payload := fmt.Sprintf("{\"text\":\"ops digest %s\\n```%s```\"}", date, text)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook, bytes.NewReader([]byte(payload)))
+	// json.Marshal, not Sprintf: a quote or backslash in the digest text
+	// must not yield invalid JSON.
+	payload, err := json.Marshal(map[string]string{"text": fmt.Sprintf("ops digest %s\n```%s```", date, text)})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
