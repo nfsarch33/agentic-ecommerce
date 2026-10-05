@@ -40,7 +40,10 @@ func mainImpl(ctx context.Context, args []string, stdout io.Writer, getenv func(
 		return 0
 	}
 
-	repo := newSeededProductRepository()
+	repo, repoClose := newProductRepositoryFromEnv(getenv)
+	if repoClose != nil {
+		defer repoClose()
+	}
 	orderRepo, cartRepo := newOrderAndCartRepos()
 
 	addr := getenvFn(getenv, "ECOMMERCE_HTTP_ADDR", "127.0.0.1:8080")

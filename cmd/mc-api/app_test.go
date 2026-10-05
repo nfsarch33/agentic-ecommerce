@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/postgres"
 )
 
 // File scope: v2.6.1 cmd/* DI refactor coverage for mc-api. Drives
@@ -222,4 +224,33 @@ func TestMetricsHandlerEmitsContentTypeHeader(t *testing.T) {
 
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(io.Discard, nil))
+}
+
+// The API and the worker must agree on the product store: a workflow the
+// API starts on a product the worker cannot see fails its compliance check
+// with exactly the not-found the fixture hit on 4 Oct (mc-api served its
+// seeded in-memory products while the worker read PG).
+//
+// MUTANT: revert newProductRepositoryFromEnv to always return the seeded
+// in-memory repository and the DSN-set row goes red.
+func TestProductRepositoryFromEnv(t *testing.T) {
+	if r, closer := newProductRepositoryFromEnv(func(string) string { return "" }); r == nil || closer != nil {
+		t.Fatalf("no DSN must yield the seeded in-memory repo with no closer: %T", r)
+	}
+	dsn := "postgres://postgres:postgres@127.0.0.1:1/ecommerce?sslmode=disable&connect_timeout=1"
+	// pgxpool.New is lazy: construction succeeds, the failure surfaces on
+	// first use — which is the same failure surface the worker has.
+	defer func() {
+		if recover() != nil {
+			t.Fatal("a well-formed DSN must not panic even when the server is unreachable at construction")
+		}
+	}()
+	repo, closer := newProductRepositoryFromEnv(func(string) string { return dsn })
+	if _, ok := repo.(*postgres.ProductRepository); !ok {
+		t.Fatalf("a set DSN must yield the PG repository, got %T", repo)
+	}
+	if closer == nil {
+		t.Fatal("the PG repository must come with a non-nil closer")
+	}
+	closer()
 }
