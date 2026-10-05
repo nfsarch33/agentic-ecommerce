@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily ops digest at 08:00 shop-local time (AEST/AEDT)
+
+[Timer]
+# The timezone suffix keeps 08:00 on the shop's calendar through the DST
+# shift; Persistent=true renders the missed digest after downtime instead
+# of skipping a day (the ticket's 7-consecutive-digests gate).
+OnCalendar=*-*-* 08:00:00 Australia/Melbourne
+Persistent=true
+
+[Install]
+WantedBy=timers.target

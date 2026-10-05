@@ -1,0 +1,12 @@
+[Unit]
+Description=agentic-ecommerce daily ops digest (orders, refunds, revenue, reviews, site health)
+Documentation=file://~/Code/agentic-ecommerce/cmd/ops-digest
+
+[Service]
+Type=oneshot
+# The digest reads the fixture store with the same WOO_* credentials the
+# fixture env file renders for the other ec stack units.
+EnvironmentFile=/home/jaslian/runs/worktrees/agentic-ecommerce/fixture-init/.local/fixture-woo.env
+Environment=WOO_BASE_URL=http://127.0.0.1:8081
+Environment=OPS_DIGEST_OUT=/home/jaslian/runs/ops-digest
+ExecStart=/home/jaslian/.local/bin/ec-ops-digest
