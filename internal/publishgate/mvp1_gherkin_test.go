@@ -11,8 +11,9 @@ import (
 // scenario; the Gherkin text each row implements is quoted above it so
 // the plan and the suite cannot drift silently.
 //
-// MUTANT (scenario 2): make Gate.Publish skip the Claim (idempotency)
-// and the concurrent-approval row goes red — two REST writes land.
+// MUTANT (scenario 2): drop the ErrAlreadyCompleted short-circuit in
+// Publish and the double-approval row goes red — 'publish 2: publishgate:
+// key already completed' means the second publish reached the claim.
 // MUTANT (scenario 3): make Publish skip the live-fingerprint check and
 // the crash-restart row goes red — the retried publish writes twice.
 
