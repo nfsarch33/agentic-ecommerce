@@ -224,9 +224,25 @@ func main() {
 	defer pool.Close()
 	ledger := costledger.NewPGRecorder(pool)
 
-	products, err := wc.ListProducts(ctx, woocommerce.ListOptions{PerPage: 100})
-	if err != nil {
-		fatal("list products: %v", err)
+	// Page until a short page: one 100-slot request silently worked only
+	// the newest page of the catalogue (older pages sat unseen), and a
+	// partial batch reads as a full pass on the report.
+	var products []woocommerce.Product
+	for page := 1; page <= 20; page++ {
+		batch, err := wc.ListProducts(ctx, woocommerce.ListOptions{PerPage: 100, Page: page})
+		if err != nil {
+			fatal("list products page %d: %v", page, err)
+		}
+		products = append(products, batch...)
+		if len(batch) < 100 {
+			break
+		}
+		if page == 20 {
+			// A full 20th page means the catalogue exceeds the cap: exiting
+			// quietly here would be exactly the silent partial pass this
+			// paging exists to end.
+			fatal("catalogue exceeds 20 pages of 100; raise the cap")
+		}
 	}
 	var eligible []woocommerce.Product
 	for _, p := range products {

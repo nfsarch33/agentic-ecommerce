@@ -44,3 +44,5 @@ credentials/
 /tests/load/results/
 /temporal-worker
 .local/fixture-woo.env
+
+/enrich-batch
