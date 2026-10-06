@@ -225,8 +225,8 @@ func main() {
 	ledger := costledger.NewPGRecorder(pool)
 
 	// Page until a short page: one 100-slot request silently worked only
-	// the newest half of the catalogue (the r25 run's older half sat on
-	// page 2), and a partial batch reads as a full pass on the report.
+	// the newest page of the catalogue (older pages sat unseen), and a
+	// partial batch reads as a full pass on the report.
 	var products []woocommerce.Product
 	for page := 1; page <= 20; page++ {
 		batch, err := wc.ListProducts(ctx, woocommerce.ListOptions{PerPage: 100, Page: page})
