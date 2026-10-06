@@ -80,8 +80,9 @@ func Validate(p Post) []Violation {
 func instagram(p Post) []Violation {
 	var vs []Violation
 	for i, m := range p.Media {
-		if m.Format != "jpg" {
-			vs = append(vs, Violation{Rule: "instagram.media-jpeg", Detail: fmt.Sprintf("slide %d is %q; instagram slides must be jpg", i, m.Format)})
+		// Upload tooling emits "jpg", "jpeg" and both cases; all are JPEG.
+		if !strings.EqualFold(m.Format, "jpg") && !strings.EqualFold(m.Format, "jpeg") {
+			vs = append(vs, Violation{Rule: "instagram.media-jpeg", Detail: fmt.Sprintf("slide %d is %q; instagram slides must be JPEG (jpg or jpeg)", i, m.Format)})
 		}
 	}
 	if len(p.Media) > 10 {
@@ -103,29 +104,19 @@ func instagram(p Post) []Violation {
 // own count of the rendered post.
 func xRules(p Post) []Violation {
 	var vs []Violation
-	n := 0
+	// The caption is counted AS TYPED (X counts what it renders): every
+	// rune of the caption, with each link token's runes replaced by the
+	// fixed 23 — one pass, no separator arithmetic.
+	n := utf8.RuneCountInString(p.Caption)
 	for _, tok := range strings.Fields(p.Caption) {
 		if strings.HasPrefix(tok, "http://") || strings.HasPrefix(tok, "https://") {
-			n += xLinkRunes
-			continue
+			n += xLinkRunes - utf8.RuneCountInString(tok)
 		}
-		n += utf8.RuneCountInString(tok)
 	}
-	n += separatorsIn(p.Caption)
 	if n > 280 {
 		vs = append(vs, Violation{Rule: "x.length", Detail: fmt.Sprintf("caption counts as %d runes (links at %d); the maximum is 280", n, xLinkRunes)})
 	}
 	return vs
-}
-
-// separatorsIn counts the rune distance strings.Fields collapsed, which is
-// every space and newline between tokens.
-func separatorsIn(s string) int {
-	total := utf8.RuneCountInString(s)
-	for _, tok := range strings.Fields(s) {
-		total -= utf8.RuneCountInString(tok)
-	}
-	return total
 }
 
 // youtube: title and description caps; video uploads themselves are the

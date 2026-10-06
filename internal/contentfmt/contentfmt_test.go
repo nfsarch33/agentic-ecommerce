@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// The contract of record for v18870-3. Every rule the plan names has both a
+// The format contract of record. Every rule the plan names has both a
 // pass case and a fail case on the other side of the same branch, so the
 // table doubles as the branch-coverage map: 100% of Validate's branches are
 // exercised by rows here, and go tool cover -func must report 100.0%.
@@ -21,6 +21,14 @@ func TestValidateContract(t *testing.T) {
 			Caption:  strings.Repeat("a", 2200),
 			Hashtags: fill(30, "#tag"),
 			Media:    fill(10, Media{Format: "jpg"}),
+		}, nil},
+		{"instagram ten jpeg slides clean (jpeg is JPEG)", Post{
+			Platform: Instagram,
+			Media:    fill(10, Media{Format: "jpeg"}),
+		}, nil},
+		{"instagram ten JPG slides clean (case-insensitive)", Post{
+			Platform: Instagram,
+			Media:    fill(10, Media{Format: "JPG"}),
 		}, nil},
 		{"instagram png slide", Post{
 			Platform: Instagram,
