@@ -214,9 +214,9 @@ func main() {
 						row.ToneNote = "judge error: " + jerr.Error()
 					} else if n, ok := parseScore(score); ok {
 						row.ToneScore = n
-						row.ToneNote = firstLine(score)
+						row.ToneNote = firstLine(scoreLine(score))
 					} else {
-						row.ToneNote = "judge unparseable: " + firstLine(score)
+						row.ToneNote = "judge unparseable: " + firstLine(scoreLine(score))
 					}
 				}
 			}
@@ -245,6 +245,9 @@ func judgeUser(p contentgen.Platform, v contentgen.Variant) string {
 	return "PLATFORM: " + p.Name + "\nPOST:\n" + body
 }
 
+// parseScore reads the judge reply. The MiniMax judge reasons inside a
+// <think> block first; the verdict is the SCORE: line after it — the note
+// must carry that line's reason, never the reasoning preamble.
 func parseScore(s string) (int, bool) {
 	for _, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
@@ -257,6 +260,15 @@ func parseScore(s string) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+func scoreLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(line)), "SCORE:") {
+			return strings.TrimSpace(line)
+		}
+	}
+	return ""
 }
 
 func firstLine(s string) string {
