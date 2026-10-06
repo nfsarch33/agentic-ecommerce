@@ -2,13 +2,14 @@ package publishgate
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
-// The MVP-1 QA Gherkin (plans/v18870-commercial-launch-c0-c3.plan.md),
-// automated against the same in-memory store and fake remote the gate
-// tests use. One row per scenario; the Gherkin text each row implements
-// is quoted above it so the plan and the suite cannot drift silently.
+// The MVP-1 QA Gherkin (the launch plan, Epic 2), automated against the
+// same in-memory store and fake remote the gate tests use. One row per
+// scenario; the Gherkin text each row implements is quoted above it so
+// the plan and the suite cannot drift silently.
 //
 // MUTANT (scenario 2): make Gate.Publish skip the Claim (idempotency)
 // and the concurrent-approval row goes red — two REST writes land.
@@ -32,7 +33,7 @@ func TestMVP1_Gherkin_NoApprovalNeverPublishes(t *testing.T) {
 		t.Fatalf("the remote must stay untouched without approval: posts=%d puts=%d", remote.posts, remote.puts)
 	}
 	// The audit shape: the refusal names the reason the operator greps.
-	if want := "publish refuses to write without a recorded decision"; !contains(err.Error(), want) {
+	if want := "publish refuses to write without a recorded decision"; !strings.Contains(err.Error(), want) {
 		t.Fatalf("the refusal must carry the audit wording, got %q", err.Error())
 	}
 }
@@ -41,7 +42,7 @@ func TestMVP1_Gherkin_NoApprovalNeverPublishes(t *testing.T) {
 // approvals for the same draft arrive concurrently / Then exactly one
 // REST update is sent with the draft's idempotency key / And the second
 // approval returns 'already approved'."
-func TestMVP1_Gherkin_ConcurrentApprovalsPublishOnce(t *testing.T) {
+func TestMVP1_Gherkin_DoubleApprovalPublishesOnce(t *testing.T) {
 	t.Parallel()
 	store := approvedStore(t) // one approval for wf-1
 	remote := &fakeRemote{bySKU: map[string]*RemoteProduct{}}
@@ -61,16 +62,18 @@ func TestMVP1_Gherkin_ConcurrentApprovalsPublishOnce(t *testing.T) {
 	// Both racing approvals each drive a publish. The lease is
 	// deliberately same-owner re-entrant (PG: OR lease_owner = $2 — one
 	// worker process may reclaim its own key), so the exactly-once
-	// invariant is the LIVE FINGERPRINT: the second publish finds the
-	// change already on the store and writes nothing. Two publishes, one
-	// REST write, however the race interleaves.
+	// invariant is the COMPLETED LEDGER: the first publish completes the
+	// ledger row, and the second returns at the ErrAlreadyCompleted
+	// short-circuit before it ever reaches the remote. Two sequential
+	// publishes, one REST write — the fingerprint check is the crash
+	// path's guard (scenario 3), not this one's.
 	for i := 0; i < 2; i++ {
 		if _, err := g.Publish(context.Background(), PublishRequest{WorkflowID: "wf-1", TenantID: "t1", ProductID: "p1", SKU: "S-2", Fields: map[string]string{"name": "once"}}); err != nil {
 			t.Fatalf("publish %d: %v", i+1, err)
 		}
 	}
 	if remote.posts+remote.puts != 1 {
-		t.Fatalf("exactly one REST write may land (the second must no-op on the live fingerprint), got posts=%d puts=%d", remote.posts, remote.puts)
+		t.Fatalf("exactly one REST write may land (the second returns at the completed-ledger short-circuit), got posts=%d puts=%d", remote.posts, remote.puts)
 	}
 }
 
@@ -97,16 +100,10 @@ func TestMVP1_Gherkin_CrashAfterSendBeforeLedgerWritesOnce(t *testing.T) {
 		t.Fatalf("setup: the first publish must send exactly one write, got %d", sent)
 	}
 
-	// Kill-before-record: drop the ledger row the dead process never
-	// wrote, and make the live product carry the sent change (the store
-	// accepted it) — the restart then finds the fingerprint already live.
+	// Kill-before-record: the dead process never wrote the ledger row;
+	// the in-memory Fail is the crash proxy and MUST succeed.
 	if err := store.Fail(context.Background(), mustKey(t, "p1", map[string]string{"name": "v1"})); err != nil {
-		// The in-memory store's Fail is the crash proxy; a completed row
-		// short-circuits instead, which is the ledger-completed shape the
-		// gate tests already pin. For the crash-before-complete shape the
-		// claim is still open, so the retry path must consult the LIVE
-		// product — stage that here.
-		_ = err
+		t.Fatal(err)
 	}
 	remote.bySKU["S-3"] = &RemoteProduct{ID: "wp-100", Fields: map[string]string{"name": "v1"}}
 
@@ -147,15 +144,6 @@ func TestMVP1_Gherkin_FailingRemoteReleasesForRetry(t *testing.T) {
 	if _, err := g.Publish(context.Background(), PublishRequest{WorkflowID: "wf-1", TenantID: "t1", ProductID: "p1", SKU: "S-4", Fields: map[string]string{"name": "x"}}); err != nil {
 		t.Fatalf("after the store heals a retry must proceed (failures must release the lease): %v", err)
 	}
-}
-
-func contains(haystack, needle string) bool {
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return true
-		}
-	}
-	return false
 }
 
 func mustKey(t *testing.T, productID string, fields map[string]string) string {
