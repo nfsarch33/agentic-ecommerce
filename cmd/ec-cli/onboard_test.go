@@ -19,8 +19,12 @@ import (
 // MUTANT: drop the administrator refusal in storeonboard's liveUserRole
 // consumer and the admin-role row goes green (undetected privilege).
 
-func fixtureStore(t *testing.T, adminRole bool) *httptest.Server {
+// roleShape steers the users/me answer: "plain" (one role), "admin",
+// "second-admin" ([shop_manager, administrator] — the round-1 fail-open
+// hole), "unreadable" (no roles field), "garbage" (non-JSON body).
+func fixtureStore(t *testing.T, roleShape string) *httptest.Server {
 	t.Helper()
+	adminRole := roleShape == "admin"
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /wp-json/wc/v3/system_status", func(w http.ResponseWriter, r *http.Request) {
 		u, p, ok := r.BasicAuth()
@@ -35,6 +39,20 @@ func fixtureStore(t *testing.T, adminRole bool) *httptest.Server {
 		u, p, ok := r.BasicAuth()
 		if !ok || u != "agent-bot" || p != "abcd efgh ijkl mnop" {
 			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch roleShape {
+		case "garbage":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`<html>not json</html>`))
+			return
+		case "unreadable":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":7,"name":"agent-bot"}`))
+			return
+		case "second-admin":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":7,"name":"agent-bot","roles":["shop_manager","administrator"]}`))
 			return
 		}
 		role := "shop_manager"
@@ -82,7 +100,7 @@ func runOnboardCheck(t *testing.T, cfgPath string, env map[string]string) (int, 
 }
 
 func TestOnboardCheckFixtureStorePasses(t *testing.T) {
-	store := fixtureStore(t, false)
+	store := fixtureStore(t, "plain")
 	path := writeOnboardConfig(t, func(m map[string]any) { m["store_url"] = store.URL })
 	code, out := runOnboardCheck(t, path, map[string]string{
 		"EC_STORE_KEY": "ck_fixture", "EC_STORE_SECRET": "cs_fixture", "EC_STORE_APP_PASSWORD": "abcd efgh ijkl mnop",
@@ -98,7 +116,7 @@ func TestOnboardCheckFixtureStorePasses(t *testing.T) {
 }
 
 func TestOnboardCheckEachRuleFailsItsRow(t *testing.T) {
-	store := fixtureStore(t, true) // the live user IS an administrator
+	store := fixtureStore(t, "admin") // the live user IS an administrator
 	path := writeOnboardConfig(t, func(m map[string]any) {
 		m["store_url"] = store.URL
 		m["agent_user_role"] = "administrator" // the record agrees — both must refuse
@@ -133,10 +151,32 @@ func TestOnboardCheckEachRuleFailsItsRow(t *testing.T) {
 		t.Fatalf("an unsigned statement must fail the record row:\n%s", out)
 	}
 
+	// Round 1, fail-open hole 1: a user whose roles list cannot be read
+	// (hidden context, non-JSON body) must FAIL the row, not pass silently.
+	unreadable := fixtureStore(t, "unreadable")
+	path = writeOnboardConfig(t, func(m map[string]any) { m["store_url"] = unreadable.URL })
+	code, out = runOnboardCheck(t, path, map[string]string{
+		"EC_STORE_KEY": "ck_fixture", "EC_STORE_SECRET": "cs_fixture", "EC_STORE_APP_PASSWORD": "abcd efgh ijkl mnop",
+	})
+	if code == 0 || !strings.Contains(out, "roles are unreadable") {
+		t.Fatalf("an unreadable roles list must fail closed:\n%s", out)
+	}
+
+	// Round 1, fail-open hole 2: [shop_manager, administrator] must FAIL —
+	// any administrator role refuses the gate, not only the first listed.
+	secondAdmin := fixtureStore(t, "second-admin")
+	path = writeOnboardConfig(t, func(m map[string]any) { m["store_url"] = secondAdmin.URL })
+	code, out = runOnboardCheck(t, path, map[string]string{
+		"EC_STORE_KEY": "ck_fixture", "EC_STORE_SECRET": "cs_fixture", "EC_STORE_APP_PASSWORD": "abcd efgh ijkl mnop",
+	})
+	if code == 0 || !strings.Contains(out, "administrator role") {
+		t.Fatalf("a second-role administrator must fail the gate:\n%s", out)
+	}
+
 	// Wrong credentials fail the live rows, not the record row.
 	path = writeOnboardConfig(t, nil)
 	_ = path
-	goodStore := fixtureStore(t, false)
+	goodStore := fixtureStore(t, "plain")
 	path = writeOnboardConfig(t, func(m map[string]any) { m["store_url"] = goodStore.URL })
 	code, out = runOnboardCheck(t, path, map[string]string{
 		"EC_STORE_KEY": "ck_wrong", "EC_STORE_SECRET": "cs_fixture", "EC_STORE_APP_PASSWORD": "abcd efgh ijkl mnop",

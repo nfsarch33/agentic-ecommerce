@@ -129,8 +129,12 @@ func checkStoreReachable(ctx context.Context, cfg Config, sec Secrets, client *h
 
 // checkAppPassword authenticates the agent's Application Password and
 // verifies the USER it belongs to is not an administrator — the
-// minimum-privilege rule for machine users. MUTANT LINE: dropping the
-// administrator refusal turns the admin-role row green.
+// minimum-privilege rule for machine users. The live role read FAILS
+// CLOSED: an unreadable roles list fails the row (the record's
+// self-declared role cannot stand in for the store's answer), and ANY
+// administrator role among the user's roles refuses the gate, not only the
+// first (round 1: [shop_manager, administrator] passed and an unreadable
+// list passed — both were fail-open holes).
 func checkAppPassword(ctx context.Context, cfg Config, sec Secrets, client *http.Client, timeout time.Duration) Result {
 	if sec.AppPassword == "" {
 		return Result{"app-password", false, "application password not provided"}
@@ -146,68 +150,41 @@ func checkAppPassword(ctx context.Context, cfg Config, sec Secrets, client *http
 	if err != nil {
 		return Result{"app-password", false, "WP REST unreachable: " + err.Error()}
 	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close()
+	if err != nil {
+		return Result{"app-password", false, "reading users/me: " + err.Error()}
+	}
 	if resp.StatusCode != http.StatusOK {
 		return Result{"app-password", false, fmt.Sprintf("users/me answered %d with the application password", resp.StatusCode)}
-	}
-	// The authenticated user's roles arrive on the same endpoint when the
-	// context permits; the ROLE was also verified in the record check, and
-	// this live confirmation re-reads it from the store.
-	if role := liveUserRole(ctx, cfg, sec, client, timeout); role != "" && strings.EqualFold(role, "administrator") {
-		return Result{"app-password", false, "the application password's user is an administrator — minimum privilege refused"}
-	}
-	return Result{"app-password", true, "application password authenticates a non-administrator user"}
-}
-
-// liveUserRole re-reads the authenticated user's role from the store, with
-// the APPLICATION PASSWORD as the credential (the WP REST namespace, not the
-// WC one). An empty answer (role hidden from the user's own context) defers
-// to the record check rather than failing the gate twice on one cause.
-func liveUserRole(ctx context.Context, cfg Config, sec Secrets, client *http.Client, timeout time.Duration) string {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		strings.TrimRight(cfg.StoreURL, "/")+"/wp-json/wp/v2/users/me?context=edit", nil)
-	if err != nil {
-		return ""
-	}
-	auth := base64.StdEncoding.EncodeToString([]byte(cfg.AgentUserLogin + ":" + sec.AppPassword))
-	req.Header.Set("Authorization", "Basic "+auth)
-	resp, err := doWithTimeout(client, req, timeout)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return ""
 	}
 	var user struct {
 		Roles []string `json:"roles"`
 	}
 	if json.Unmarshal(body, &user) != nil || len(user.Roles) == 0 {
-		return ""
+		return Result{"app-password", false, "the authenticated user's roles are unreadable — failing closed (the record's self-declared role cannot stand in)"}
 	}
-	return user.Roles[0]
+	for _, role := range user.Roles {
+		if strings.EqualFold(role, "administrator") {
+			return Result{"app-password", false, "the application password's user holds the administrator role — minimum privilege refused"}
+		}
+	}
+	return Result{"app-password", true, "application password authenticates a user with no administrator role"}
 }
 
 func wcGet(ctx context.Context, cfg Config, sec Secrets, client *http.Client, timeout time.Duration, path string) (int, []byte, error) {
-	body, status, err := wcGetBody(ctx, cfg, sec, client, timeout, path)
-	return status, body, err
-}
-
-func wcGetBody(ctx context.Context, cfg Config, sec Secrets, client *http.Client, timeout time.Duration, path string) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(cfg.StoreURL, "/")+path, nil)
 	if err != nil {
-		return nil, 0, err
+		return 0, nil, err
 	}
 	req.SetBasicAuth(sec.ConsumerKey, sec.ConsumerSecret)
 	resp, err := doWithTimeout(client, req, timeout)
 	if err != nil {
-		return nil, 0, err
+		return 0, nil, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	return body, resp.StatusCode, err
+	return resp.StatusCode, body, err
 }
 
 func doWithTimeout(client *http.Client, req *http.Request, timeout time.Duration) (*http.Response, error) {
