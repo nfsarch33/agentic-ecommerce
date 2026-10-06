@@ -237,6 +237,12 @@ func main() {
 		if len(batch) < 100 {
 			break
 		}
+		if page == 20 {
+			// A full 20th page means the catalogue exceeds the cap: exiting
+			// quietly here would be exactly the silent partial pass this
+			// paging exists to end.
+			fatal("catalogue exceeds 20 pages of 100; raise the cap")
+		}
 	}
 	var eligible []woocommerce.Product
 	for _, p := range products {
