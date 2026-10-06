@@ -3,7 +3,7 @@
 ![Go](https://img.shields.io/badge/Go-1.26.3-00ADD8?logo=go)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-Production-ready agentic e-commerce platform with multi-channel selling, AI-driven pricing, 4-provider payment gateway, cloud-native K8s deployment, GDPR compliance, and MADRL agent coordination.
+Agentic e-commerce backend with multi-channel selling adapters, AI-driven pricing with guardrails, a four-provider payment gateway (Stripe, Alipay, WeChat Pay, PayPal; sandbox-first adapters behind ports), tenant GDPR compliance endpoints, and MADRL pricing-vs-fulfilment coordination. Deployment is container-first on the fleet stack; the deploy/ and tests/k8s assets are legacy CI fixtures, not the operating model.
 
 Current release: **v9.0.0**. See `VERSION`, `CHANGELOG.md`, and `docs/release-checklist.md` for release gates.
 
@@ -20,7 +20,7 @@ commit status back to GitHub and drives the blocking local-CD lane on
 ## Features
 
 - **Multi-channel selling** -- TikTok Shop, Facebook, Instagram, Pinterest, RedNote, WooCommerce with unified listing, order, and inventory sync across all 6 channels
-- **4-provider payment gateway** -- Stripe, Alipay, WeChat Pay, PayPal with Temporal saga orchestration, webhook normalisation, and AI payment advisor
+- **4-provider payment gateway** -- Stripe, Alipay, WeChat Pay, PayPal adapters (sandbox URLs by default, production behind env) with Temporal saga orchestration and webhook normalisation; mc-api wires the payments surface through its load matrix, and the fixture build serves the stub profile
 - **AI-driven pricing** -- competitor price scraping, dynamic pricing agent with margin guardrails, MADRL multi-agent coordination for pricing vs fulfilment conflict resolution
 - **China sourcing pipeline** -- 1688 + Taobao adapters, supplier scoring, AU-import compliance gate, trend-signal blending via pgvector
 - **AI product enrichment** -- multilingual description generation, hero image processing, SEO optimisation, content calendar with EMA feedback loop
