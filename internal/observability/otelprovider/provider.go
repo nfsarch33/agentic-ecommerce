@@ -1,4 +1,4 @@
-// Package otelprovider wires the MVP-1 trace path (v18870-2): one global
+// Package otelprovider wires the MVP-1 trace path: one global
 // TracerProvider per process with an OTLP/HTTP exporter, fail-open by
 // construction. The exporter talks to a local trace backend bound to
 // loopback; a down backend costs the batch processor a dropped span, never
@@ -40,7 +40,7 @@ var AllowedKeys = map[string]struct{}{
 // Setup installs a global TracerProvider exporting OTLP/HTTP to endpoint.
 // An empty endpoint returns a no-op shutdown with the default provider
 // left in place (tracing off). Loopback endpoints export insecurely; the
-// backend is a local container by design (ADR-0107 C9).
+// backend is a local container by design (the local-backend decision).
 func Setup(ctx context.Context, endpoint, serviceName string) (func(context.Context) error, error) {
 	if strings.TrimSpace(endpoint) == "" {
 		return func(context.Context) error { return nil }, nil

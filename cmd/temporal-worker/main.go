@@ -107,7 +107,7 @@ func mainImpl(ctx context.Context, stdout io.Writer, getenv func(string) string,
 		return 1
 	}
 
-	// v18870-2 (ADR-0107 C9): the approve-to-publish trace crosses this
+	//  (the local-backend decision): the approve-to-publish trace crosses this
 	// worker — the OTLP exporter is fail-open, and the existing Temporal
 	// interceptor finally registers here. An unset endpoint leaves the noop
 	// provider: spans exist in code, export nothing.
@@ -135,7 +135,7 @@ func mainImpl(ctx context.Context, stdout io.Writer, getenv func(string) string,
 	defer deps.RepoCleanup()
 
 	w := worker.New(c, deps.TaskQueue, worker.Options{
-		// v18870-2: activity spans for the publish path, parented by the
+		// activity spans for the publish path, parented by the
 		// approve request's trace via the propagator both processes set.
 		Interceptors: []interceptor.WorkerInterceptor{temporalotel.TemporalInterceptor()},
 	})
@@ -385,7 +385,7 @@ func newContentGenerationActivitiesFromEnv(logger *slog.Logger) *ecworkflow.Cont
 				logger.Warn("temporal_worker.content_agent_disabled", "error", err)
 			}
 		} else {
-			// v18870-2: every model call lands in the cost ledger
+			// every model call lands in the cost ledger
 			// (job/tenant/action from the activity context, AUD cents
 			// via costcalc). Recording is best-effort observability.
 			var recorder costledger.Recorder = costledger.DiscardRecorder{}

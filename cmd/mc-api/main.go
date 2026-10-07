@@ -332,7 +332,7 @@ func (n noopHeader) Header() http.Header { return http.Header{} }
 func (n noopHeader) WriteHeader(int)     {}
 
 func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.OrderRepository, cartRepo port.CartRepository) *server {
-	// v18870-2: the approve-to-publish trace needs the WooCommerce PUT as
+	// the approve-to-publish trace needs the WooCommerce PUT as
 	// a client span; the transport is a pure wrapper, inert when tracing
 	// is off (the noop provider emits nothing).
 	wcClient := woocommerce.NewClient(woocommerce.Config{
@@ -369,7 +369,7 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	otelEnabled := parseBoolEnv("ECOMMERCE_OTEL_ENABLED", false)
 	if otelEnabled {
 		configureTelemetry()
-		// v18870-2: the OTLP exporter is fail-open — Setup never fails the
+		// the OTLP exporter is fail-open — Setup never fails the
 		// boot on a down backend; the batch processor drops, it does not block.
 		if sd, err := otelprovider.Setup(context.Background(), getenv("ECOMMERCE_OTEL_OTLP_ENDPOINT", ""), "agentic-ecommerce-mc-api"); err == nil {
 			cleanup = append(cleanup, func() { _ = sd(context.Background()) })

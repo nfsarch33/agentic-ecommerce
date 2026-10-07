@@ -2,6 +2,9 @@ package otelprovider
 
 import (
 	"context"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/codes"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// The acceptance rows for v18870-2: the exporter being down never reaches
+// The acceptance rows for : the exporter being down never reaches
 // the caller, and the allow-list is the PII guarantee for a public repo.
 func TestExporterDownLeavesAppUnaffected(t *testing.T) {
 	// Port 1 on loopback: nothing listens there.
@@ -101,5 +104,55 @@ func TestSetupEmptyEndpointIsNoop(t *testing.T) {
 	}
 	if err := sd(context.Background()); err != nil {
 		t.Fatalf("noop shutdown must not error: %v", err)
+	}
+}
+
+// The security row from the round-1 review: a transport error against a
+// URL whose query carries store credentials must NOT export them — the
+// span STATUS description (where otelhttp puts the url.Error string) is
+// replaced, and link attributes ride the allow-list.
+func TestTransportErrorCarriesNoCredentialsInStatus(t *testing.T) {
+	sd, err := Setup(context.Background(), "http://127.0.0.1:1", "test")
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	defer func() { _ = sd(context.Background()) }()
+
+	// A client span over an unreachable URL with a canary credential in
+	// the query — the approve-to-publish PUT shape on a dial failure.
+	const canary = "ck_secret_consumer_key_canary_12345"
+	u := "http://127.0.0.1:1/v1/products?consumer_key=" + canary + "&consumer_secret=cs_canary"
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, u, nil)
+	tr := Tracer("test")
+	ctx, span := tr.Start(context.Background(), "woo.put", trace.WithSpanKind(trace.SpanKindClient))
+	otelhttp.NewTransport(http.DefaultTransport).RoundTrip(req.WithContext(ctx))
+	span.SetStatus(codes.Error, "transport error") // what otelhttp does on failure
+	span.AddLink(trace.LinkFromContext(context.Background(),
+		attribute.String("url", u), attribute.String("http.method", "GET")))
+	span.End()
+
+	// Read the span back through a recorder with the SAME allow-list
+	// wrapper the provider installs, and inspect what would export.
+	rec := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(&AllowListProcessor{next: rec}))
+	_, probe := tp.Tracer("p").Start(context.Background(), "probe")
+	probe.SetStatus(codes.Error, "Get \x22"+u+"\x22: dial tcp: connection refused")
+	probe.AddLink(trace.LinkFromContext(context.Background(), attribute.String("url", u)))
+	probe.End()
+	spans := rec.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("recorder saw %d spans", len(spans))
+	}
+	dump := spans[0].Status().Description + " "
+	for _, kv := range spans[0].Links()[0].Attributes {
+		dump += kv.Value.Emit() + " "
+	}
+	for _, canaryTok := range []string{canary, "cs_canary", "127.0.0.1:1/v1"} {
+		if strings.Contains(dump, canaryTok) {
+			t.Fatalf("canary %q leaked through status/links:\n%s", canaryTok, dump)
+		}
+	}
+	if spans[0].Status().Code != codes.Error {
+		t.Fatal("the error CODE must survive the description strip")
 	}
 }

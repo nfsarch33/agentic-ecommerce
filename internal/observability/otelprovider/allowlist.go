@@ -42,6 +42,30 @@ func (f *filteredSpan) Attributes() []attribute.KeyValue {
 	return filterAttrs(f.ReadOnlySpan.Attributes())
 }
 
+// Status keeps the code and DROPS the description: otelhttp records
+// transport errors as SetStatus(codes.Error, err.Error()), and a
+// url.Error stringifies the full request URL — which carries query
+// credentials on store endpoints. The code is the signal; the text is
+// the leak.
+func (f *filteredSpan) Status() tracesdk.Status {
+	st := f.ReadOnlySpan.Status()
+	if st.Description != "" {
+		st.Description = "error"
+	}
+	return st
+}
+
+// Links carries attributes through the same allow-list.
+func (f *filteredSpan) Links() []tracesdk.Link {
+	ls := f.ReadOnlySpan.Links()
+	out := make([]tracesdk.Link, 0, len(ls))
+	for _, l := range ls {
+		l.Attributes = filterAttrs(l.Attributes)
+		out = append(out, l)
+	}
+	return out
+}
+
 func (f *filteredSpan) Events() []tracesdk.Event {
 	evs := f.ReadOnlySpan.Events()
 	out := make([]tracesdk.Event, 0, len(evs))
