@@ -139,14 +139,16 @@ func checkAppPassword(ctx context.Context, cfg Config, sec Secrets, client *http
 	if sec.AppPassword == "" {
 		return Result{"app-password", false, "application password not provided"}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+	cctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(cctx, http.MethodGet,
 		strings.TrimRight(cfg.StoreURL, "/")+"/wp-json/wp/v2/users/me", nil)
 	if err != nil {
 		return Result{"app-password", false, err.Error()}
 	}
 	auth := base64.StdEncoding.EncodeToString([]byte(cfg.AgentUserLogin + ":" + sec.AppPassword))
 	req.Header.Set("Authorization", "Basic "+auth)
-	resp, err := doWithTimeout(client, req, timeout)
+	resp, err := doRequest(client, req)
 	if err != nil {
 		return Result{"app-password", false, "WP REST unreachable: " + err.Error()}
 	}
@@ -173,12 +175,14 @@ func checkAppPassword(ctx context.Context, cfg Config, sec Secrets, client *http
 }
 
 func wcGet(ctx context.Context, cfg Config, sec Secrets, client *http.Client, timeout time.Duration, path string) (int, []byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(cfg.StoreURL, "/")+path, nil)
+	cctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(cctx, http.MethodGet, strings.TrimRight(cfg.StoreURL, "/")+path, nil)
 	if err != nil {
 		return 0, nil, err
 	}
 	req.SetBasicAuth(sec.ConsumerKey, sec.ConsumerSecret)
-	resp, err := doWithTimeout(client, req, timeout)
+	resp, err := doRequest(client, req)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -187,12 +191,13 @@ func wcGet(ctx context.Context, cfg Config, sec Secrets, client *http.Client, ti
 	return resp.StatusCode, body, err
 }
 
-func doWithTimeout(client *http.Client, req *http.Request, timeout time.Duration) (*http.Response, error) {
+// doWithTimeout is deliberately ABSENT: every request builds its own
+// context.WithTimeout at the call site (the cancel must outlive the body
+// read), and the CALLER's client is never mutated (round 2: a zero
+// client.Timeout was being rewritten — shared state).
+func doRequest(client *http.Client, req *http.Request) (*http.Response, error) {
 	if client == nil {
 		client = http.DefaultClient
-	}
-	if client.Timeout == 0 && timeout > 0 {
-		client.Timeout = timeout
 	}
 	return client.Do(req)
 }

@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -70,12 +70,12 @@ func fixtureStore(t *testing.T, roleShape string) *httptest.Server {
 func writeOnboardConfig(t *testing.T, mutate func(map[string]any)) string {
 	t.Helper()
 	cfg := map[string]any{
-		"store_url":         "REPLACED-BY-TEST",
-		"key_permissions":   "read_write",
-		"agent_user_login":  "agent-bot",
-		"agent_user_role":   "shop_manager",
-		"data_statement":    map[string]any{"version": "2026-10-a", "signed_at": "2026-10-05T22:00:00Z"},
-		"approver":          map[string]any{"name": "Dana Customer", "email": "dana@example.com"},
+		"store_url":        "REPLACED-BY-TEST",
+		"key_permissions":  "read_write",
+		"agent_user_login": "agent-bot",
+		"agent_user_role":  "shop_manager",
+		"data_statement":   map[string]any{"version": "2026-10-a", "signed_at": "2026-10-05T22:00:00Z"},
+		"approver":         map[string]any{"name": "Dana Customer", "email": "dana@example.com"},
 	}
 	if mutate != nil {
 		mutate(cfg)
@@ -174,8 +174,6 @@ func TestOnboardCheckEachRuleFailsItsRow(t *testing.T) {
 	}
 
 	// Wrong credentials fail the live rows, not the record row.
-	path = writeOnboardConfig(t, nil)
-	_ = path
 	goodStore := fixtureStore(t, "plain")
 	path = writeOnboardConfig(t, func(m map[string]any) { m["store_url"] = goodStore.URL })
 	code, out = runOnboardCheck(t, path, map[string]string{
