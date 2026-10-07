@@ -32,7 +32,7 @@ check "the overlay caps the data-bearing services (postgres, redis, mc-api) — 
 check "the runner is podman-only (the raw container word appears on no executable line — only in the prohibition comment)" \
   '! grep -vE "^[[:space:]]*#" scripts/pilot-instance.sh | grep -qiE "(^|[^a-z-])doc?ker?([[:space:]]| compose |-compose |.*prohibited)" '
 check "create refuses a pilot name outside [a-z0-9-] (the name reaches paths, env values, container names)" \
-  'grep -q "a-z0-9][a-z0-9-]" scripts/pilot-instance.sh'
+  'grep -q "pilot name must be" scripts/pilot-instance.sh && ! bash scripts/pilot-instance.sh create "Bad_Name" 2>/dev/null'
 check "isolation-test has both arms and an always-teardown trap" \
   'grep -q "ARM 1 FAILED" scripts/pilot-instance.sh && grep -q "ARM 2 FAILED" scripts/pilot-instance.sh && grep -q "trap cleanup EXIT" scripts/pilot-instance.sh'
 check "backup writes per-pilot gz dumps under backups/" \
