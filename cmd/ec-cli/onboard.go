@@ -12,7 +12,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/storeonboard"
 )
 
-// onboard.go — v18870-4: `ec-cli onboard --check --config store.json`
+// onboard.go — the customer-store onboarding gate: `ec-cli onboard check --config store.json`
 // verifies a customer-store onboarding record against the live store:
 // minimum-scope REST keys, the agent Application Password's non-admin user,
 // the signed data statement and the named approver. Secrets ride env vars

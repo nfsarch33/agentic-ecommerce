@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// The customer-store onboarding check (v18870-4): the fixture store serves
+// The customer-store onboarding check: the fixture store serves
 // the two live endpoints the gate reads; the happy config passes everything,
 // and each rule's violation fails exactly its row.
 //
