@@ -14,6 +14,7 @@ package gst
 
 import (
 	"errors"
+	"math"
 	"testing"
 )
 
@@ -61,5 +62,21 @@ func TestFromInclusive(t *testing.T) {
 	}
 	if _, _, err := FromInclusive(-11); !errors.Is(err, ErrNegative) {
 		t.Errorf("FromInclusive(-11) err = %v, want ErrNegative", err)
+	}
+}
+
+// Add must refuse an exclusive amount whose
+// GST-inclusive total cannot exist in int64 (today it wraps negative
+// with a nil error).
+func TestAddTooLarge(t *testing.T) {
+	if v, err := Add(math.MaxInt64); err != ErrTooLarge {
+		t.Fatalf("Add(MaxInt64) = %d, %v; want ErrTooLarge", v, err)
+	}
+	bound := int64(9223372036854775806) // one under MaxInt64
+	if _, err := Add(bound); err != ErrTooLarge {
+		t.Fatalf("Add near-max must also refuse: %v", err)
+	}
+	if v, err := Add(100); err != nil || v != 110 {
+		t.Fatalf("normal path disturbed: %d, %v", v, err)
 	}
 }

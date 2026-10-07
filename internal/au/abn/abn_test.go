@@ -79,3 +79,11 @@ func TestFormat(t *testing.T) {
 		t.Fatalf("Format(\"123\") err = %v, want ErrFormat", err)
 	}
 }
+
+// a leading zero is never a valid ABN. The weighted
+// sum of "00000090000" is 89 = 0 mod 89, which the mod-89 check alone accepts.
+func TestValidRejectsLeadingZero(t *testing.T) {
+	if Valid("00 000 090 000") {
+		t.Fatal("an ABN starting with 0 must be rejected even when the checksum passes")
+	}
+}

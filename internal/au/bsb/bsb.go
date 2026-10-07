@@ -12,7 +12,7 @@ var ErrFormat = errors.New("bsb: not six digits")
 // Normalise trims surrounding whitespace, strips every space and hyphen from
 // the remainder and returns the bare six digits. It returns ErrFormat if the
 // cleaned string is not exactly six ASCII digits.
-func Normalise(raw string) (string, error) {
+func Normalize(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	var b strings.Builder
 	b.Grow(len(trimmed))
@@ -33,6 +33,10 @@ func Normalise(raw string) (string, error) {
 	}
 	return s, nil
 }
+
+// Normalise is the spelling alias kept for callers written against
+// the original name (Normalize is canonical across internal/au).
+func Normalise(raw string) (string, error) { return Normalize(raw) }
 
 // Format applies the Normalise acceptance rule and renders the digits as XXX-XXX.
 func Format(raw string) (string, error) {

@@ -96,3 +96,28 @@ func TestSlugEmpty(t *testing.T) {
 		t.Errorf("Slug(spaces/hyphens) err = %v, want ErrEmpty", err)
 	}
 }
+
+// every Unicode space is a separator — tabs, newlines
+// and NBSP (common in WooCommerce titles) hyphenate like ASCII spaces.
+func TestSlugUnicodeSpacesHyphenate(t *testing.T) {
+	got, err := Slug("Red\u00A0Widget\tXL\n2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "red-widget-xl-2" {
+		t.Fatalf("Slug = %q, want red-widget-xl-2", got)
+	}
+}
+
+// The rune loop must drop non-ASCII runes exactly as the byte filter did:
+// a stroke-L and acute-z title keeps its main-branch output (the low-byte
+// cast turned Ł into A and ź into z, silently changing existing slugs).
+func TestSlugNonASCIIDroppedNotTransliterated(t *testing.T) {
+	const title = "Łódź Mug" // stroke-L, acute-z
+	if got, err := Slug(title); err != nil || got != "d-mug" {
+		t.Fatalf("Slug = %q, %v; want d-mug (main-branch behaviour)", got, err)
+	}
+	if got, err := NormaliseSKU(title); err != nil || got != "DMUG" {
+		t.Fatalf("NormaliseSKU = %q, %v; want DMUG (main-branch behaviour)", got, err)
+	}
+}

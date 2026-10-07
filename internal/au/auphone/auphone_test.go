@@ -75,3 +75,19 @@ func TestIsMobile(t *testing.T) {
 		}
 	}
 }
+
+// the "61" country code is tied to the 11-digit form,
+// a leading '+' survives surrounding whitespace, and a 9-digit number
+// starting "61" is a national number (leading 6 is unsupported), not a
+// stripped country form.
+func TestNormalizeCountryCodeTiedToElevenDigits(t *testing.T) {
+	if _, err := Normalize("612345678"); err != ErrUnsupported {
+		t.Fatalf("9-digit 61... is an unsupported NATIONAL number, got %v", err)
+	}
+	if got, err := Normalize(" +61 412 345 678"); err != nil || got != "+61412345678" {
+		t.Fatalf("leading-space +61 form: %q, %v", got, err)
+	}
+	if got, err := Normalize("+61 412 345 678"); err != nil || got != "+61412345678" {
+		t.Fatalf("plain +61 form regressed: %q, %v", got, err)
+	}
+}

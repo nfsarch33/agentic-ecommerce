@@ -90,3 +90,18 @@ func TestValid(t *testing.T) {
 		}
 	}
 }
+
+// Format refuses non-digit input (no reject row
+// existed for the format path).
+func TestFormatRejectsNonDigits(t *testing.T) {
+	if _, err := Format("12-34a"); err == nil {
+		t.Fatal("Format must refuse non-digit input")
+	}
+}
+
+// The spelling unification: Normalize is canonical, Normalise the alias.
+func TestNormaliseAlias(t *testing.T) {
+	if got, err := Normalise(" 123-456 "); err != nil || got != "123456" {
+		t.Fatalf("Normalise alias: %q, %v", got, err)
+	}
+}

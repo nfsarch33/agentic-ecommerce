@@ -1,11 +1,19 @@
 // Package gst computes Australian GST (10%) in integer cents, never floats.
 package gst
 
-import "errors"
+import (
+	"errors"
+	"math"
+)
 
 // ErrNegative is returned when the input is negative. Refunds are the caller's
 // sign convention; this package deals only with non-negative amounts.
 var ErrNegative = errors.New("gst: amount is negative")
+
+// ErrTooLarge is returned when the GST-inclusive total would overflow
+// int64 (Add used to wrap negative with a nil error near the
+// ceiling). The largest safe exclusive amount is (MaxInt64-1)*10/11.
+var ErrTooLarge = errors.New("gst: amount too large")
 
 // Add returns the GST-inclusive amount for a GST-exclusive amount in cents.
 // GST is 10% of the exclusive amount, rounded to the nearest cent with a
@@ -13,6 +21,9 @@ var ErrNegative = errors.New("gst: amount is negative")
 func Add(exCents int64) (int64, error) {
 	if exCents < 0 {
 		return 0, ErrNegative
+	}
+	if exCents > (math.MaxInt64-1)*10/11 {
+		return 0, ErrTooLarge
 	}
 	q := exCents / 10
 	r := exCents % 10

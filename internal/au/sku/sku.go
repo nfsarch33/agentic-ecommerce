@@ -5,6 +5,8 @@ package sku
 import (
 	"errors"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // ErrEmpty is returned by NormaliseSKU and Slug when the sanitised result
@@ -18,6 +20,10 @@ var ErrEmpty = errors.New("sku: empty")
 func NormaliseSKU(raw string) (string, error) {
 	return sanitise(strings.TrimSpace(raw), true)
 }
+
+// NormalizeSKU is the z-spelling alias (Normalize is canonical
+// across internal/au; NormaliseSKU keeps compiling for existing callers).
+func NormalizeSKU(raw string) (string, error) { return NormaliseSKU(raw) }
 
 // Slug returns the URL slug form of raw: surrounding whitespace is trimmed,
 // ASCII letters lowercased, spaces converted to '-' (BEFORE the character
@@ -37,14 +43,25 @@ func sanitise(raw string, upper bool) (string, error) {
 		return "", ErrEmpty
 	}
 	var b []byte
-	for i := 0; i < len(raw); i++ {
-		c := raw[i]
-		if c == ' ' {
+	// Rune-wise: every Unicode space (tab, newline, NBSP — common in
+	// WooCommerce titles) is a separator: hyphen in Slug mode, dropped
+	// in SKU mode. Non-space, non-ASCII runes fall through the byte
+	// filter exactly as before.
+	for _, r := range raw {
+		if unicode.IsSpace(r) {
 			if !upper {
 				b = append(b, '-')
 			}
 			continue
 		}
+		if r >= utf8.RuneSelf {
+			// Non-ASCII: dropped exactly as the byte filter on main
+			// dropped it. A rune-to-byte cast would truncate to the low
+			// byte and turn a dropped letter into a DIFFERENT ASCII
+			// letter, silently changing existing SKUs and slugs.
+			continue
+		}
+		c := byte(r)
 		switch {
 		case upper && c >= 'a' && c <= 'z':
 			c -= 'a' - 'A'
