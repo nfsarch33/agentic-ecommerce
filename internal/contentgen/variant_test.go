@@ -129,3 +129,17 @@ func TestParseSlidesNumberedOnly(t *testing.T) {
 		t.Fatalf("numbered-only contract: %v", got)
 	}
 }
+
+// Round 2: a percentage claim carries its number. The bare-% top-level
+// alternative extracted every percent as the token "%", so any invented
+// percentage passed whenever the source held any percentage at all.
+func TestGroundingPercentKeepsItsNumber(t *testing.T) {
+	s := Source{ID: "s1", Title: "Merino wool beanie", Body: "", Facts: []string{"100% merino wool"}}
+	got := CheckGrounding(Variant{SourceID: "s1", Platform: "x", Text: "Now 50% off."}, s)
+	if len(got) != 1 || !strings.Contains(got[0], `measure "50%"`) {
+		t.Fatalf("invented percentage must be caught: %v", got)
+	}
+	if got := CheckGrounding(Variant{SourceID: "s1", Platform: "x", Text: "Truly 100% merino."}, s); len(got) != 0 {
+		t.Fatalf("the source's own percentage must pass: %v", got)
+	}
+}
