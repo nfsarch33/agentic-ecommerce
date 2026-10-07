@@ -27,8 +27,8 @@ check "every pilot gets its own host port pair (loopback-bound)" \
   'grep -q "^BIND_HOST=127.0.0.1$" pilots/example.env && grep -q "^POSTGRES_HOST_PORT=" pilots/example.env'
 check "pilots/*.env and backups/ are gitignored; the template is not" \
   'grep -q "^pilots/\*.env$" .gitignore && grep -q "^!pilots/example.env$" .gitignore && grep -q "^backups/$" .gitignore'
-check "the overlay caps the data-bearing services (postgres, redis, mc-api)" \
-  'for s in postgres redis mc-api; do grep -A2 "^  $s:" docker-compose.pilot.yml | grep -q mem_limit || exit 1; done'
+check "the overlay caps the data-bearing services (postgres, redis, mc-api) — ACTIVE lines, not comments" \
+  '( for s in postgres redis mc-api; do grep -A2 "^  $s:" docker-compose.pilot.yml | grep -qE "^[[:space:]]+mem_limit:" || exit 1; done )'
 check "the runner is podman-only (the raw container word appears on no executable line — only in the prohibition comment)" \
   '! grep -vE "^[[:space:]]*#" scripts/pilot-instance.sh | grep -qiE "(^|[^a-z-])doc?ker?([[:space:]]| compose |-compose |.*prohibited)" '
 check "isolation-test has both arms and an always-teardown trap" \
