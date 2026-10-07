@@ -96,3 +96,15 @@ func TestSlugEmpty(t *testing.T) {
 		t.Errorf("Slug(spaces/hyphens) err = %v, want ErrEmpty", err)
 	}
 }
+
+// v18870-6 hardening: every Unicode space is a separator — tabs, newlines
+// and NBSP (common in WooCommerce titles) hyphenate like ASCII spaces.
+func TestSlugUnicodeSpacesHyphenate(t *testing.T) {
+	got, err := Slug("Red\u00A0Widget\tXL\n2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "red-widget-xl-2" {
+		t.Fatalf("Slug = %q, want red-widget-xl-2", got)
+	}
+}

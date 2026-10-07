@@ -66,3 +66,20 @@ func TestWordsRejects(t *testing.T) {
 		t.Errorf("Words(100000000000) err = %v, want ErrTooLarge", err)
 	}
 }
+
+// v18870-6 hardening: singular dollar/cent when the count is one, and the
+// 204 shape ("two hundred four") pinned.
+func TestWordsSingularAnd204(t *testing.T) {
+	if got, _ := Words(100); got != "one dollar and zero cents" {
+		t.Fatalf("Words(100) = %q, want 'one dollar and zero cents'", got)
+	}
+	if got, _ := Words(101); got != "one dollar and one cent" {
+		t.Fatalf("Words(101) = %q, want 'one dollar and one cent'", got)
+	}
+	if got, _ := Words(20400); got != "two hundred four dollars and zero cents" {
+		t.Fatalf("Words(20400) = %q, want 'two hundred four dollars and zero cents'", got)
+	}
+	if got, _ := Words(250); got != "two dollars and fifty cents" {
+		t.Fatalf("Words(250) = %q, plural path disturbed", got)
+	}
+}

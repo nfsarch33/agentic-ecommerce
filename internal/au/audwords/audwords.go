@@ -92,5 +92,13 @@ func Words(cents int64) (string, error) {
 		cword = renderBelow100(c)
 	}
 
-	return strings.Join(dparts, " ") + " dollars and " + cword + " cents", nil
+	dword := "dollars"
+	if dollars == 1 {
+		dword = "dollar"
+	}
+	ccent := "cents"
+	if c == 1 {
+		ccent = "cent"
+	}
+	return strings.Join(dparts, " ") + " " + dword + " and " + cword + " " + ccent, nil
 }

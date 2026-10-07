@@ -38,6 +38,11 @@ func Valid(s string) bool {
 	if err != nil {
 		return false
 	}
+	// v18870-6: no real ABN starts with 0, and a zero first digit drags
+	// the weighted sum by -10, so a crafted remainder can hit 0 mod 89.
+	if digits[0] == '0' {
+		return false
+	}
 	sum := (int(digits[0]-'0') - 1) * abnWeights[0]
 	for i := 1; i < 11; i++ {
 		sum += int(digits[i]-'0') * abnWeights[i]
