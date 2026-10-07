@@ -2,6 +2,7 @@ package otelprovider
 
 import (
 	"context"
+	"strings"
 
 	attribute "go.opentelemetry.io/otel/attribute"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
@@ -18,6 +19,13 @@ type AllowListProcessor struct {
 }
 
 var _ tracesdk.SpanProcessor = (*AllowListProcessor)(nil)
+
+// NewAllowListProcessor builds the processor for callers outside this
+// package (tests of downstream instrumentation that want the exact
+// export-time view).
+func NewAllowListProcessor(next tracesdk.SpanProcessor) *AllowListProcessor {
+	return &AllowListProcessor{next: next}
+}
 
 func (p *AllowListProcessor) OnStart(parent context.Context, s tracesdk.ReadWriteSpan) {
 	// Attributes set at start flow through the wrapped processor's OnEnd
@@ -40,6 +48,21 @@ type filteredSpan struct {
 
 func (f *filteredSpan) Attributes() []attribute.KeyValue {
 	return filterAttrs(f.ReadOnlySpan.Attributes())
+}
+
+// spanNameRedacted replaces span names that carry a URL shape (scheme
+// separator or query string): a formatted name can embed the full request
+// URL — query credentials included — and the name is exported verbatim
+// unless it is caught here.
+const spanNameRedacted = "span.name.redacted"
+
+// Name redacts URL-shaped span names; every other name passes.
+func (f *filteredSpan) Name() string {
+	n := f.ReadOnlySpan.Name()
+	if strings.Contains(n, "://") || strings.Contains(n, "?") {
+		return spanNameRedacted
+	}
+	return n
 }
 
 // Status keeps the code and DROPS the description: otelhttp records

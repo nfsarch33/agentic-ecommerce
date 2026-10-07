@@ -14,6 +14,9 @@ import (
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/workflow"
+
+	temporalotel "github.com/nfsarch33/agentic-ecommerce/internal/observability/temporal"
 
 	contentagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/content"
 	sourcingagent "github.com/nfsarch33/agentic-ecommerce/internal/agent/sourcing"
@@ -119,7 +122,14 @@ func newTemporalWorkflowClient(logger *slog.Logger, hostPort string) (temporalWo
 	if hostPort == "" {
 		return nil, nil
 	}
-	c, err := client.Dial(client.Options{HostPort: hostPort})
+	c, err := client.Dial(client.Options{
+		HostPort: hostPort,
+		// The header bridge: the approve request's trace (started by
+		// withTelemetry at the HTTP edge) crosses into the workflow and
+		// its activities — traceparent and baggage, the same composite
+		// propagator the worker side configures.
+		ContextPropagators: []workflow.ContextPropagator{temporalotel.ContextPropagator()},
+	})
 	if err != nil {
 		if logger != nil {
 			logger.Warn("temporal client not configured", "host_port", hostPort, "error", err)

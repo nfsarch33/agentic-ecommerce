@@ -9,9 +9,14 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/workflow"
 )
+
+// activityInfo is a seam so tests can drive ExecuteActivity without a
+// live Temporal worker: production reads the real activity context.
+var activityInfo = activity.GetInfo
 
 // TemporalInterceptor returns a Temporal worker interceptor that
 // creates spans for workflow executions and activity invocations,
@@ -51,6 +56,15 @@ func (a *activityInterceptor) ExecuteActivity(ctx context.Context, in *intercept
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(attribute.String("temporal.activity.type", activityName)),
 	)
+	// Real id wiring (round 2): the activity's own context knows which
+	// workflow and run it serves — opaque ids, allow-listed at export.
+	if info := activityInfo(ctx); info.WorkflowExecution.RunID != "" {
+		attrs := []attribute.KeyValue{attribute.String("run.id", info.WorkflowExecution.RunID)}
+		if info.WorkflowType != nil && info.WorkflowType.Name != "" {
+			attrs = append(attrs, attribute.String("workflow.name", info.WorkflowType.Name))
+		}
+		span.SetAttributes(attrs...)
+	}
 	defer span.End()
 
 	result, err := a.Next.ExecuteActivity(ctx, in)

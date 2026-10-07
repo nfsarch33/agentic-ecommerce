@@ -5,10 +5,12 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -154,5 +156,127 @@ func TestTransportErrorCarriesNoCredentialsInStatus(t *testing.T) {
 	}
 	if spans[0].Status().Code != codes.Error {
 		t.Fatal("the error CODE must survive the description strip")
+	}
+}
+
+// Round 2, the row the round-1 review asked for by name: a REAL
+// otelhttp span (no synthetic attributes) through the allow-list. The
+// instrumentation emits the STABLE semconv names — http.request.method,
+// http.response.status_code — and the exported span must carry exactly
+// those, while nothing about the URL (host, path, query credentials)
+// survives. Run with -v: the t.Log dump IS the probe output for the
+// ticket evidence.
+// MUTANT: drop http.request.method / http.response.status_code from
+// AllowedKeys and both assertions fail — the span exports empty.
+func TestOtelHTTPStableNamesThroughAllowList(t *testing.T) {
+	const canary = "ck_probe_consumer_key_canary"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	rec := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(&AllowListProcessor{next: rec}),
+	)
+	defer func() { _ = tp.Shutdown(context.Background()) }()
+
+	// WithTracerProvider: the transport must feed OUR provider chain
+	// (allow-list -> recorder), not the global one a test must not touch.
+	client := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport,
+		otelhttp.WithTracerProvider(tp))}
+	resp, err := client.Get(srv.URL + "/v1/products?consumer_key=" + canary)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	resp.Body.Close()
+
+	// The transport produced one client span; find it by kind.
+	var span sdktrace.ReadOnlySpan
+	for _, s := range rec.Ended() {
+		if s.SpanKind() == trace.SpanKindClient {
+			span = s
+			break
+		}
+	}
+	if span == nil {
+		t.Fatalf("no client span recorded: %d spans", len(rec.Ended()))
+	}
+
+	dump := ""
+	for _, kv := range span.Attributes() {
+		dump += string(kv.Key) + "=" + kv.Value.Emit() + "\n"
+	}
+	t.Logf("probe: real otelhttp client span %q exports:\n%s", span.Name(), dump)
+
+	for _, want := range []string{"http.request.method=GET", "http.response.status_code=200"} {
+		if !strings.Contains(dump, want) {
+			t.Fatalf("stable semconv attribute %s missing from the real otelhttp span:\n%s", want, dump)
+		}
+	}
+	for _, leak := range []string{canary, "/v1/products", "consumer_key", srv.Listener.Addr().String()} {
+		if strings.Contains(dump, leak) {
+			t.Fatalf("URL shape %q leaked into the exported attributes:\n%s", leak, dump)
+		}
+	}
+}
+
+// Round 2: a URL-shaped span NAME is redacted at export — formatted
+// names can embed the full request URL, credentials included, and the
+// name rides the span verbatim otherwise.
+// MUTANT: drop the Name() override on filteredSpan and the redaction
+// row fails (the raw URL name exports).
+func TestSpanNameRedaction(t *testing.T) {
+	rec := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(&AllowListProcessor{next: rec}),
+	)
+	defer func() { _ = tp.Shutdown(context.Background()) }()
+	tr := tp.Tracer("test")
+
+	const leaky = "GET https://store.example.com/v1/products?consumer_key=ck_name_canary"
+	_, s1 := tr.Start(context.Background(), leaky)
+	s1.End()
+	_, s2 := tr.Start(context.Background(), "woo.put")
+	s2.End()
+
+	spans := rec.Ended()
+	if len(spans) != 2 {
+		t.Fatalf("recorder saw %d spans, want 2", len(spans))
+	}
+	byName := map[string]bool{}
+	for _, s := range spans {
+		byName[s.Name()] = true
+	}
+	if byName[leaky] || byName["GET https://store.example.com"] {
+		t.Fatalf("URL-shaped span name exported: %+v", byName)
+	}
+	if !byName[spanNameRedacted] {
+		t.Fatalf("URL-shaped name must export as %q, saw %+v", spanNameRedacted, byName)
+	}
+	if !byName["woo.put"] {
+		t.Fatalf("a plain name must pass unredacted: %+v", byName)
+	}
+}
+
+// Round 2 reconciliation guard: the provider installs the composite
+// propagator mc-api's configureTelemetry also sets — one shape, so the
+// HTTP edge and the Temporal bridge cannot disagree.
+func TestSetupInstallsCompositePropagator(t *testing.T) {
+	prev := otel.GetTextMapPropagator()
+	defer otel.SetTextMapPropagator(prev)
+	sd, err := Setup(context.Background(), "http://127.0.0.1:1", "test")
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	defer func() { _ = sd(context.Background()) }()
+
+	fields := otel.GetTextMapPropagator().Fields()
+	want := map[string]bool{}
+	for _, f := range fields {
+		want[f] = true
+	}
+	if !want["traceparent"] || !want["baggage"] {
+		t.Fatalf("propagator must carry tracecontext AND baggage, got %v", fields)
 	}
 }
