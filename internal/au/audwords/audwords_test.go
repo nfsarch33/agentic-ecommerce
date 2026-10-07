@@ -67,7 +67,7 @@ func TestWordsRejects(t *testing.T) {
 	}
 }
 
-// v18870-6 hardening: singular dollar/cent when the count is one, and the
+// singular dollar/cent when the count is one, and the
 // 204 shape ("two hundred four") pinned.
 func TestWordsSingularAnd204(t *testing.T) {
 	if got, _ := Words(100); got != "one dollar and zero cents" {

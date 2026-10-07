@@ -11,7 +11,7 @@ import (
 var ErrNegative = errors.New("gst: amount is negative")
 
 // ErrTooLarge is returned when the GST-inclusive total would overflow
-// int64 (v18870-6: Add used to wrap negative with a nil error near the
+// int64 (Add used to wrap negative with a nil error near the
 // ceiling). The largest safe exclusive amount is (MaxInt64-1)*10/11.
 var ErrTooLarge = errors.New("gst: amount too large")
 

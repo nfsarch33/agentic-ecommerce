@@ -76,7 +76,7 @@ func TestIsMobile(t *testing.T) {
 	}
 }
 
-// v18870-6 hardening: the "61" country code is tied to the 11-digit form,
+// the "61" country code is tied to the 11-digit form,
 // a leading '+' survives surrounding whitespace, and a 9-digit number
 // starting "61" is a national number (leading 6 is unsupported), not a
 // stripped country form.

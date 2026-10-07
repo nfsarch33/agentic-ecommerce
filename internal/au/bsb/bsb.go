@@ -35,7 +35,7 @@ func Normalize(raw string) (string, error) {
 }
 
 // Normalise is the spelling alias kept for callers written against
-// the original name (v18870-6: Normalize is canonical across internal/au).
+// the original name (Normalize is canonical across internal/au).
 func Normalise(raw string) (string, error) { return Normalize(raw) }
 
 // Format applies the Normalise acceptance rule and renders the digits as XXX-XXX.

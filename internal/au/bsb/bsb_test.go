@@ -91,7 +91,7 @@ func TestValid(t *testing.T) {
 	}
 }
 
-// v18870-6 hardening: Format refuses non-digit input (no reject row
+// Format refuses non-digit input (no reject row
 // existed for the format path).
 func TestFormatRejectsNonDigits(t *testing.T) {
 	if _, err := Format("12-34a"); err == nil {

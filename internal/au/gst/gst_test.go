@@ -65,7 +65,7 @@ func TestFromInclusive(t *testing.T) {
 	}
 }
 
-// v18870-6 hardening: Add must refuse an exclusive amount whose
+// Add must refuse an exclusive amount whose
 // GST-inclusive total cannot exist in int64 (today it wraps negative
 // with a nil error).
 func TestAddTooLarge(t *testing.T) {

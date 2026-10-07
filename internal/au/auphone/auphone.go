@@ -21,7 +21,7 @@ var (
 // The remaining digits must be exactly 9, must not start with "0", and must start
 // with 2, 3, 4, 7 or 8; otherwise the appropriate sentinel error is returned.
 func Normalize(s string) (string, error) {
-	// v18870-6: trim FIRST — ' +61 412 ...' is the same number as
+	// trim FIRST — ' +61 412 ...' is the same number as
 	// '+61 412 ...', and the '+' check ran before whitespace removal.
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -61,7 +61,7 @@ func Normalize(s string) (string, error) {
 	// Drop the "61" country code ONLY in its full forms: 11 digits
 	// ("61" + national) or 12 digits ("61" + trunk 0 + national). A
 	// 9-digit number starting "61" is a national number whose leading 6
-	// is unsupported (v18870-6: the strip used to fire regardless of
+	// is unsupported (the strip used to fire regardless of
 	// length and misreported it as ErrFormat).
 	switch {
 	case len(s) == 11 && strings.HasPrefix(s, "61"):
