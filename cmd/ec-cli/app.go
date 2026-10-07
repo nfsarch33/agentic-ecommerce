@@ -27,6 +27,8 @@ func runApp(ctx context.Context, args []string, deps appDeps) int {
 		return runSkill(ctx, args[2:], deps)
 	case "version", "--version", "-v":
 		return runVersion(deps)
+	case "onboard":
+		return runOnboard(ctx, args[1:], deps)
 	case "help", "--help", "-h":
 		printUsage(deps.stdout)
 		return 0
@@ -48,6 +50,7 @@ Subcommands:
   tenant create --slug --name --plan
                                   provision a tenant via the registration API
   plugin validate --path <dir>    validate a plugin's manifest and run sandbox smoke
+  onboard check --config <file>   verify a customer-store onboarding record against the live store
   skill quality-check <path>      validate a SKILL.md against quality criteria
   skill codex-gen <path> <outdir> generate a Codex-compatible skill variant
   version                         print binary metadata
