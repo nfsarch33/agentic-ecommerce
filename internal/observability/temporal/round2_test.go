@@ -26,8 +26,8 @@ type fakeWorkflowContext struct{ values map[any]any }
 
 func (c *fakeWorkflowContext) Deadline() (time.Time, bool) { return time.Time{}, false }
 func (c *fakeWorkflowContext) Done() workflow.Channel      { return nil }
-func (c *fakeWorkflowContext) Err() error                   { return nil }
-func (c *fakeWorkflowContext) Value(k any) any              { return c.values[k] }
+func (c *fakeWorkflowContext) Err() error                  { return nil }
+func (c *fakeWorkflowContext) Value(k any) any             { return c.values[k] }
 
 // Round 2, the bridge row: the propagator the starter (mc-api) and the
 // worker both configure must carry tracecontext AND baggage across the
