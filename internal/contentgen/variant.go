@@ -55,7 +55,9 @@ var Platforms = []Platform{
 var (
 	// A word boundary after the unit keeps "5 great reasons" from
 	// reading as 5 g; % sits outside the boundary (its own edge).
-	numUnitRe = regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?\s*(?:%|(?:mm|cm|m|kg|g|ml|L|hours?|hrs?|mins?|minutes?|secs?|seconds?|days?|years?|W|V)\b)`)
+	// (?i): the corpus is norm()ed to lowercase before its scan, so the
+	// units must match case-blind on both sides ("2 L" and "2 l" agree).
+	numUnitRe = regexp.MustCompile(`(?i)[0-9]+(?:\.[0-9]+)?\s*(?:%|(?:mm|cm|m|kg|g|ml|L|hours?|hrs?|mins?|minutes?|secs?|seconds?|days?|years?|W|V)\b)`)
 	priceRe   = regexp.MustCompile(`\$[0-9]+(?:\.[0-9]{2})?`)
 	// (?i): a capitalised property is still a claim.
 	propRe = regexp.MustCompile(`(?i)\b(?:waterproof|wireless|rechargeable|organic|handmade|sustainable|biodegradable|recycled|adjustable|portable|lightweight|durable|hypoallergenic|vegan|cruelty-free|non-toxic|machine-washable|ergonomic|customisable|customizable)\b`)

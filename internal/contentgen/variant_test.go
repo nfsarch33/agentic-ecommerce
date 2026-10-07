@@ -130,6 +130,24 @@ func TestParseSlidesNumberedOnly(t *testing.T) {
 	}
 }
 
+// Round 3: the unit alternation carried case-sensitive L, W and V while
+// the corpus is norm()ed to lowercase before its own scan, so the two
+// scans disagreed: a lowercase invented unit rode through clean and a
+// capitalised source claim false-flagged as ungrounded.
+func TestGroundingCaseBlindUnits(t *testing.T) {
+	s := Source{ID: "s1", Title: "Camping lantern", Body: "", Facts: []string{"60 W bulb", "holds 2 L", "12 V battery"}}
+
+	got := CheckGrounding(Variant{SourceID: "s1", Platform: "x", Text: "A 60 W bulb."}, s)
+	if len(got) != 0 {
+		t.Fatalf("the source's own capitalised claim must pass: %v", got)
+	}
+
+	got = CheckGrounding(Variant{SourceID: "s1", Platform: "x", Text: "Holds 5 l of water."}, s)
+	if len(got) != 1 || !strings.Contains(got[0], `measure "5 l"`) {
+		t.Fatalf("a lowercase invented measure must be caught: %v", got)
+	}
+}
+
 // Round 2: a percentage claim carries its number. The bare-% top-level
 // alternative extracted every percent as the token "%", so any invented
 // percentage passed whenever the source held any percentage at all.
