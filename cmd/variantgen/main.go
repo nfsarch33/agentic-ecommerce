@@ -1,5 +1,5 @@
 // Command variantgen turns source items into platform variants
-// (v18870-3-variant-generator): one source, six shapes (facebook, instagram
+// (the variant generator): one source, six shapes (facebook, instagram
 // carousel, x, tiktok script, youtube short, linkedin), drafted by the
 // tier-0 alias through the router and grounded by CODE before the ledger
 // row is written. The tone judge is a separate flag-driven leg so the eval

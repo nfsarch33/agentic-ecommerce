@@ -1,5 +1,5 @@
 // Package contentgen turns one source item into platform variants
-// (v18870-3-variant-generator). Grounding is code, style is the model's:
+// (the variant generator). Grounding is code, style is the model's:
 // every claim token in a variant must come from the source corpus, and a
 // variant with violations is emitted flagged, never silently accepted —
 // the enrichment grounding rule (internal/agent/enrichment) applied to
@@ -32,7 +32,7 @@ type Variant struct {
 }
 
 // Platform is one output shape and its deterministic limits (the
-// format-validators contract, v18870-3, enforced here on generation so a
+// format-validators contract, , enforced here on generation so a
 // validator breach is a code defect, not a surprise).
 type Platform struct {
 	Name       string
@@ -53,9 +53,12 @@ var Platforms = []Platform{
 }
 
 var (
-	numUnitRe = regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?\s*(?:%|mm|cm|m|kg|g|ml|L|hours?|hrs?|mins?|minutes?|secs?|seconds?|days?|years?|W|V)`)
+	// A word boundary after the unit keeps "5 great reasons" from
+	// reading as 5 g; % sits outside the boundary (its own edge).
+	numUnitRe = regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?\s*(?:mm|cm|m|kg|g|ml|L|hours?|hrs?|mins?|minutes?|secs?|seconds?|days?|years?|W|V)\b|%`)
 	priceRe   = regexp.MustCompile(`\$[0-9]+(?:\.[0-9]{2})?`)
-	propRe    = regexp.MustCompile(`\b(?:waterproof|wireless|rechargeable|organic|handmade|sustainable|biodegradable|recycled|adjustable|portable|lightweight|durable|hypoallergenic|vegan|cruelty-free|non-toxic|machine-washable|ergonomic|customisable|customizable)\b`)
+	// (?i): a capitalised property is still a claim.
+	propRe = regexp.MustCompile(`(?i)\b(?:waterproof|wireless|rechargeable|organic|handmade|sustainable|biodegradable|recycled|adjustable|portable|lightweight|durable|hypoallergenic|vegan|cruelty-free|non-toxic|machine-washable|ergonomic|customisable|customizable)\b`)
 )
 
 // corpusText is every citable field joined, lowercased and
@@ -68,27 +71,43 @@ func (s Source) corpusText() string {
 
 var wsRe = regexp.MustCompile(`\s+`)
 
-func norm(text string) string { return wsRe.ReplaceAllString(strings.ToLower(strings.TrimSpace(text)), " ") }
+func norm(text string) string {
+	return wsRe.ReplaceAllString(strings.ToLower(strings.TrimSpace(text)), " ")
+}
 
 // CheckGrounding returns one violation string per claim token in the
 // variant that the source corpus does not carry: numbers with units, price
 // figures and strong property words are claims; anything else is style.
 func CheckGrounding(v Variant, s Source) []string {
+	// The corpus's OWN claim tokens, extracted with the same three
+	// regexes: a variant claim is grounded only by an EXACT normalised
+	// match, never by a substring - "Only $4" must not ride through on
+	// "$49.00", nor "0 g" on "80 g".
 	corpus := norm(s.corpusText())
+	known := map[string]bool{}
+	for _, m := range numUnitRe.FindAllString(corpus, -1) {
+		known[norm(m)] = true
+	}
+	for _, m := range priceRe.FindAllString(corpus, -1) {
+		known[norm(m)] = true
+	}
+	for _, m := range propRe.FindAllString(corpus, -1) {
+		known[norm(m)] = true
+	}
 	var out []string
 	scan := func(text, field string) {
 		for _, m := range numUnitRe.FindAllString(text, -1) {
-			if !strings.Contains(corpus, norm(m)) {
+			if !known[norm(m)] {
 				out = append(out, fmt.Sprintf("measure %q in %s", m, field))
 			}
 		}
 		for _, m := range priceRe.FindAllString(text, -1) {
-			if !strings.Contains(corpus, norm(m)) {
+			if !known[norm(m)] {
 				out = append(out, fmt.Sprintf("price %q in %s", m, field))
 			}
 		}
 		for _, m := range propRe.FindAllString(text, -1) {
-			if !strings.Contains(corpus, strings.ToLower(m)) {
+			if !known[norm(m)] {
 				out = append(out, fmt.Sprintf("property %q in %s", m, field))
 			}
 		}
@@ -120,8 +139,14 @@ func CheckFormat(v Variant, p Platform) []string {
 	return out
 }
 
-// ParseSlides pulls the model's slide lines ("1|..." or "1. ..." or "1 ...")
-// out of a raw completion into clean slide texts.
+// slideLineRe requires a SEPARATOR after a leading number (a bar, a
+// dot or a parenthesis): a bare number match ate the figures of
+// unnumbered lines ("100% merino wool" became "% merino wool").
+// Hoisted: the pattern compiled once per line before.
+var slideLineRe = regexp.MustCompile(`^\s*(?:\d+[|.)\s]|[-•])\s*(.+)$`)
+
+// ParseSlides pulls the model's slide lines ("1| ...", "1. ..." or a
+// bullet) out of a raw completion into clean slide texts.
 func ParseSlides(raw string) []string {
 	var out []string
 	for _, line := range strings.Split(raw, "\n") {
@@ -129,7 +154,7 @@ func ParseSlides(raw string) []string {
 		if line == "" {
 			continue
 		}
-		if m := regexp.MustCompile(`^\s*(?:\d+[|.)]|\d+|[-•])\s*(.+)$`).FindStringSubmatch(line); m != nil {
+		if m := slideLineRe.FindStringSubmatch(line); m != nil {
 			out = append(out, strings.TrimSpace(m[1]))
 		}
 	}

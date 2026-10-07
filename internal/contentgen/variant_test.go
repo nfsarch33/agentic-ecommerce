@@ -86,3 +86,46 @@ func platformByName(name string) Platform {
 	}
 	panic("unknown platform " + name)
 }
+
+// The round-1 probes: a capitalised property is a claim; substring
+// matches must not carry a shorter figure through on a longer corpus
+// figure; a number before a word is not a measure; an unnumbered slide
+// line keeps its figures.
+func TestGroundingRoundOneProbes(t *testing.T) {
+	s := Source{
+		ID:    "s1",
+		Title: "Merino wool beanie",
+		Body:  "One size fits most.",
+		Facts: []string{"100% merino wool", "machine-washable", "price $49.00", "weighs 80 g"},
+	}
+
+	got := CheckGrounding(Variant{SourceID: "s1", Platform: "x", Text: "Waterproof and warm."}, s)
+	if len(got) != 1 || !strings.Contains(got[0], `property "Waterproof"`) {
+		t.Fatalf("capitalised property must be caught: %v", got)
+	}
+
+	got = CheckGrounding(Variant{SourceID: "s1", Platform: "x", Text: "Only $4 today."}, s)
+	if len(got) != 1 || !strings.Contains(got[0], `price "$4"`) {
+		t.Fatalf("substring price must be caught: %v", got)
+	}
+
+	got = CheckGrounding(Variant{SourceID: "s1", Platform: "x", Text: "Just 0 g of fuss."}, s)
+	if len(got) != 1 || !strings.Contains(got[0], `measure "0 g"`) {
+		t.Fatalf("substring measure must be caught: %v", got)
+	}
+
+	got = CheckGrounding(Variant{SourceID: "s1", Platform: "x", Text: "5 great reasons to love it."}, s)
+	if len(got) != 0 {
+		t.Fatalf("a number before a word is not a measure: %v", got)
+	}
+}
+
+func TestParseSlidesNumberedOnly(t *testing.T) {
+	// A figure-leading unnumbered line is NOT a slide mangled into
+	// "% merino wool" — the number match requires a separator, so the
+	// line is left out entirely (slides are numbered; asides are asides).
+	got := ParseSlides("1| Hook\n100% merino wool, really")
+	if len(got) != 1 || got[0] != "Hook" {
+		t.Fatalf("numbered-only contract: %v", got)
+	}
+}
