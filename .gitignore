@@ -46,3 +46,8 @@ credentials/
 .local/fixture-woo.env
 
 /enrich-batch
+
+# Per-pilot instance secrets (stamped from example.env; never committed)
+pilots/*.env
+!pilots/example.env
+backups/

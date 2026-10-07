@@ -1,0 +1,20 @@
+# The per-pilot overlay: layered over docker-compose.yml by
+# scripts/pilot-instance.sh (-f docker-compose.yml -f docker-compose.pilot.yml).
+#
+# The base file is already instance-parameterised (project name, ports,
+# credentials, volumes all come from the pilot env file); this overlay
+# adds what a multi-tenant host owes every tenant: hard resource caps on
+# the data-bearing services. A pilot cannot starve its neighbours.
+#
+# Caps are deliberately coarse (a pilot is a small shop, not the main
+# deployment): postgres 1g/1.5 cpu, redis 256m/0.5, the API 1g/1.
+services:
+  postgres:
+    mem_limit: 1g
+    cpus: 1.5
+  redis:
+    mem_limit: 256m
+    cpus: 0.5
+  mc-api:
+    mem_limit: 1g
+    cpus: 1.0
