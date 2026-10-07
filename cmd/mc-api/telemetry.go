@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -71,4 +72,15 @@ func traceIDFromTraceparent(header string) string {
 		}
 	}
 	return traceID
+}
+
+// tracedHTTPClient wraps the default transport with otelhttp so outbound
+// store and bridge calls join the request's trace and carry traceparent to
+// the next hop (v18870-2). With the noop provider installed (tracing off)
+// the wrapper emits nothing and adds one no-op layer.
+func tracedHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+		Timeout:   60 * time.Second,
+	}
 }

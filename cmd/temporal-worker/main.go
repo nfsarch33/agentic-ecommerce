@@ -30,6 +30,8 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/memwatch"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
+	"github.com/nfsarch33/agentic-ecommerce/internal/observability/otelprovider"
+	temporalotel "github.com/nfsarch33/agentic-ecommerce/internal/observability/temporal"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	"github.com/nfsarch33/agentic-ecommerce/internal/publishgate"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
@@ -39,6 +41,7 @@ import (
 	ecworkflow "github.com/nfsarch33/agentic-ecommerce/internal/workflow"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 )
 
@@ -104,6 +107,19 @@ func mainImpl(ctx context.Context, stdout io.Writer, getenv func(string) string,
 		return 1
 	}
 
+	// v18870-2 (ADR-0107 C9): the approve-to-publish trace crosses this
+	// worker — the OTLP exporter is fail-open, and the existing Temporal
+	// interceptor finally registers here. An unset endpoint leaves the noop
+	// provider: spans exist in code, export nothing.
+	ep := getenv("ECOMMERCE_OTEL_OTLP_ENDPOINT")
+	if ep != "" {
+		if sd, err := otelprovider.Setup(ctx, ep, "agentic-ecommerce-temporal-worker"); err != nil {
+			logger.Warn("temporal_worker.otel_setup_failed", "error", err.Error())
+		} else {
+			defer func() { _ = sd(context.Background()) }()
+		}
+	}
+
 	c, err := dial(client.Options{HostPort: temporalAddr})
 	if err != nil {
 		logger.Error("temporal_worker.client", "addr", temporalAddr, "error", err)
@@ -118,7 +134,11 @@ func mainImpl(ctx context.Context, stdout io.Writer, getenv func(string) string,
 	}
 	defer deps.RepoCleanup()
 
-	w := worker.New(c, deps.TaskQueue, worker.Options{})
+	w := worker.New(c, deps.TaskQueue, worker.Options{
+		// v18870-2: activity spans for the publish path, parented by the
+		// approve request's trace via the propagator both processes set.
+		Interceptors: []interceptor.WorkerInterceptor{temporalotel.TemporalInterceptor()},
+	})
 	registerWorkflowsAndActivities(w, deps)
 
 	// v6.3.0 CF-14: register the GMV daily REFRESH schedule (cron
