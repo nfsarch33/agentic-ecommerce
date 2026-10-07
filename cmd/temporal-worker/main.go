@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 )
 
 // workerRegistry is the slice of temporal worker.Worker methods that
@@ -120,7 +121,13 @@ func mainImpl(ctx context.Context, stdout io.Writer, getenv func(string) string,
 		}
 	}
 
-	c, err := dial(client.Options{HostPort: temporalAddr})
+	c, err := dial(client.Options{
+		HostPort: temporalAddr,
+		// Round 2: the header bridge that actually parents activity
+		// spans to the approve request's trace (the comment below was
+		// aspirational until this propagator existed on BOTH sides).
+		ContextPropagators: []workflow.ContextPropagator{temporalotel.ContextPropagator()},
+	})
 	if err != nil {
 		logger.Error("temporal_worker.client", "addr", temporalAddr, "error", err)
 		return 1
@@ -134,9 +141,14 @@ func mainImpl(ctx context.Context, stdout io.Writer, getenv func(string) string,
 	}
 	defer deps.RepoCleanup()
 
+	// The context propagators ride the CLIENT options (this SDK has no
+	// worker-level propagator field): the worker inherits them from c, so
+	// headers cross workflow->activity on the same bridge the starter
+	// wrote into the run header.
 	w := worker.New(c, deps.TaskQueue, worker.Options{
 		// activity spans for the publish path, parented by the
-		// approve request's trace via the propagator both processes set.
+		// approve request's trace via the propagator both processes set,
+		// carrying workflow.name + run.id from the activity context.
 		Interceptors: []interceptor.WorkerInterceptor{temporalotel.TemporalInterceptor()},
 	})
 	registerWorkflowsAndActivities(w, deps)

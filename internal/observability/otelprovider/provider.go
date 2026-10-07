@@ -26,15 +26,24 @@ import (
 // repository. Anything not on it is dropped before export. Keys are chosen
 // so no value can carry a host, a prompt or PII: static methods, routes,
 // status codes and opaque ids.
+//
+// The http.* pairs: otelhttp v0.69 emits the STABLE semconv names
+// (http.request.method, http.response.status_code); the legacy spellings
+// (http.method, http.status_code) stay for hand-set attributes and older
+// instrumentation. temporal.activity.type, workflow.name and run.id are
+// attached by internal/observability/temporal (activity spans carry the
+// real workflow identity). No key exists for something nothing emits:
+// job.id and agentrace.trace_id were on an earlier list and are gone —
+// add a key the moment real instrumentation attaches it, never before.
 var AllowedKeys = map[string]struct{}{
-	"temporal.activity.type": {},
-	"workflow.name":          {},
-	"http.method":            {},
-	"http.route":             {},
-	"http.status_code":       {},
-	"run.id":                 {},
-	"job.id":                 {},
-	"agentrace.trace_id":     {},
+	"temporal.activity.type":    {},
+	"workflow.name":             {},
+	"run.id":                    {},
+	"http.method":               {},
+	"http.route":                {},
+	"http.status_code":          {},
+	"http.request.method":       {},
+	"http.response.status_code": {},
 }
 
 // Setup installs a global TracerProvider exporting OTLP/HTTP to endpoint.
