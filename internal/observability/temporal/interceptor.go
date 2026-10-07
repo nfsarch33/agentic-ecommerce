@@ -15,8 +15,14 @@ import (
 )
 
 // activityInfo is a seam so tests can drive ExecuteActivity without a
-// live Temporal worker: production reads the real activity context.
-var activityInfo = activity.GetInfo
+// live Temporal worker. activity.GetInfo PANICS on a context that is not
+// a Temporal activity environment (unit tests, dry runs) — the
+// interceptor must tolerate those, so the production implementation
+// recovers and reports no identity.
+var activityInfo = func(ctx context.Context) (info activity.Info) {
+	defer func() { _ = recover() }()
+	return activity.GetInfo(ctx)
+}
 
 // TemporalInterceptor returns a Temporal worker interceptor that
 // creates spans for workflow executions and activity invocations,
