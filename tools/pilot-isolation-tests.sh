@@ -31,6 +31,8 @@ check "the overlay caps the data-bearing services (postgres, redis, mc-api) — 
   '( for s in postgres redis mc-api; do grep -A2 "^  $s:" docker-compose.pilot.yml | grep -qE "^[[:space:]]+mem_limit:" || exit 1; done )'
 check "the runner is podman-only (the raw container word appears on no executable line — only in the prohibition comment)" \
   '! grep -vE "^[[:space:]]*#" scripts/pilot-instance.sh | grep -qiE "(^|[^a-z-])doc?ker?([[:space:]]| compose |-compose |.*prohibited)" '
+check "create refuses a pilot name outside [a-z0-9-] (the name reaches paths, env values, container names)" \
+  'grep -q "a-z0-9][a-z0-9-]" scripts/pilot-instance.sh'
 check "isolation-test has both arms and an always-teardown trap" \
   'grep -q "ARM 1 FAILED" scripts/pilot-instance.sh && grep -q "ARM 2 FAILED" scripts/pilot-instance.sh && grep -q "trap cleanup EXIT" scripts/pilot-instance.sh'
 check "backup writes per-pilot gz dumps under backups/" \

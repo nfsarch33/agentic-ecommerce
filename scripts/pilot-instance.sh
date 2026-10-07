@@ -37,6 +37,9 @@ pc() { # pc <name> <compose args…>
 case "$cmd" in
   create)
     [ -n "$name" ] || die "create needs a pilot name"
+    # The name lands in file paths, env values and container names:
+    # [a-z0-9-] only — nothing that sed or a shell could reinterpret.
+    printf '%s' "$name" | grep -qE '^[a-z0-9][a-z0-9-]{1,30}$' || die "pilot name must be [a-z0-9-] (2-31 chars), got '$name'"
     [ -e "$env_file" ] && die "pilots/$name.env already exists"
     sed "s/NAME/$name/g" "$pilots_dir/example.env" > "$env_file"
     chmod 600 "$env_file"
