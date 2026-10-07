@@ -43,6 +43,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/media/intelligence"
 	"github.com/nfsarch33/agentic-ecommerce/internal/metrics"
 	"github.com/nfsarch33/agentic-ecommerce/internal/observability/hooks"
+	"github.com/nfsarch33/agentic-ecommerce/internal/observability/otelprovider"
 	"github.com/nfsarch33/agentic-ecommerce/internal/port"
 	"github.com/nfsarch33/agentic-ecommerce/internal/publishgate"
 	"github.com/nfsarch33/agentic-ecommerce/internal/rag"
@@ -331,11 +332,14 @@ func (n noopHeader) Header() http.Header { return http.Header{} }
 func (n noopHeader) WriteHeader(int)     {}
 
 func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.OrderRepository, cartRepo port.CartRepository) *server {
+	// the approve-to-publish trace needs the WooCommerce PUT as
+	// a client span; the transport is a pure wrapper, inert when tracing
+	// is off (the noop provider emits nothing).
 	wcClient := woocommerce.NewClient(woocommerce.Config{
 		BaseURL:        getenv("ECOMMERCE_WC_STORE_URL", ""),
 		ConsumerKey:    getenv("ECOMMERCE_WC_CONSUMER_KEY", ""),
 		ConsumerSecret: getenv("ECOMMERCE_WC_CONSUMER_SECRET", ""),
-	}, nil)
+	}, tracedHTTPClient())
 	var generator contentGenerator
 	if bridgeURL := firstNonEmpty(getenv("ECOMMERCE_AI_BRIDGE_URL", ""), getenv("MINIMAX_BRIDGE_URL", "")); bridgeURL != "" {
 		bridge, err := minimax.NewClient(minimax.Config{
@@ -365,6 +369,13 @@ func newServer(logger *slog.Logger, repo port.ProductRepository, orderRepo port.
 	otelEnabled := parseBoolEnv("ECOMMERCE_OTEL_ENABLED", false)
 	if otelEnabled {
 		configureTelemetry()
+		// the OTLP exporter is fail-open — Setup never fails the
+		// boot on a down backend; the batch processor drops, it does not block.
+		if sd, err := otelprovider.Setup(context.Background(), getenv("ECOMMERCE_OTEL_OTLP_ENDPOINT", ""), "agentic-ecommerce-mc-api"); err == nil {
+			cleanup = append(cleanup, func() { _ = sd(context.Background()) })
+		} else {
+			logger.Warn("otel provider setup failed; tracing stays off", "error", err.Error())
+		}
 	}
 	temporalAddr := getenv("ECOMMERCE_TEMPORAL_ADDR", "")
 	workflowClient, workflowCleanup := newTemporalWorkflowClient(logger, temporalAddr)
