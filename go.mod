@@ -1,6 +1,6 @@
 module github.com/nfsarch33/agentic-ecommerce
 
-go 1.26.6
+go 1.26.9
 
 require (
 	github.com/cloudwego/eino v0.8.13
