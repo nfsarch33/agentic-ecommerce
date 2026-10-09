@@ -15,6 +15,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
@@ -120,6 +121,19 @@ func (s *server) signalProductPublishReview(w http.ResponseWriter, r *http.Reque
 	var signal ecworkflow.ReviewSignal
 	if err := json.NewDecoder(r.Body).Decode(&signal); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		return
+	}
+	// An unknown workflow id is a 404, exactly as on the GET path. Without
+	// this the Update below surfaces Temporal's not-found as a 502
+	// "workflow_update_failed" — the pilot-approver acceptance caught a
+	// cross-tenant id coming back as upstream trouble instead of not-found.
+	if _, err := s.workflowDetail(r.Context(), workflowID); err != nil {
+		if errors.Is(err, errWorkflowNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+			return
+		}
+		s.log.Error("describe workflow", "workflow_id", workflowID, "error", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "workflow_describe_failed"})
 		return
 	}
 
@@ -242,6 +256,14 @@ var errWorkflowNotFound = errors.New("workflow not found")
 func (s *server) workflowDetail(ctx context.Context, workflowID string) (workflowDetailResponse, error) {
 	resp, err := s.workflowClient.DescribeWorkflowExecution(ctx, workflowID, "")
 	if err != nil {
+		// Temporal answers an unknown execution with a typed NotFound
+		// gRPC error; surface it as the handler-level not-found so both
+		// the GET and the review-signal paths answer 404 instead of a
+		// 502 "upstream trouble" for an id this instance never ran.
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return workflowDetailResponse{}, errWorkflowNotFound
+		}
 		return workflowDetailResponse{}, err
 	}
 	info := resp.GetWorkflowExecutionInfo()

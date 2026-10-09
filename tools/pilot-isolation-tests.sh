@@ -12,6 +12,11 @@
 # delete the overlay's mem_limit block and the caps row goes red; point
 # POSTGRES_HOST_PORT at one shared value and the distinct-ports row goes
 # red (the isolation test itself then fails arm 1 or hangs on the port).
+# MUTANT: replace the inbox bind's 127.0.0.1 fallback with 0.0.0.0 in
+# docker-compose.yml (the INBOX_BIND_HOST line) and the one-port-share
+# row goes red — a bare 0.0.0.0 inbox would publish to every interface,
+# exactly what the pilot-approver share forbids; drop the frontend
+# mem_limit from the overlay and the inbox-cap row goes red.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || { echo "FAIL: cannot cd"; exit 1; }
@@ -20,7 +25,7 @@ check() { local n="$1" c="$2"; if eval "$c" >/dev/null 2>&1; then PASS=$((PASS+1
 
 # Shape rows.
 check "example.env stamps a per-pilot COMPOSE_PROJECT_NAME (own project = own volumes/networks)" \
-  'grep -q "^COMPOSE_PROJECT_NAME=pilot-NAME$" pilots/example.env'
+  'grep -q "^COMPOSE_PROJECT_NAME=pilot-PNAME$" pilots/example.env'
 check "example.env carries NO default password (the template word stays, and create refuses it)" \
   'grep -q "generate-one-per-pilot" pilots/example.env && grep -q "generate-one-per-pilot" scripts/pilot-instance.sh'
 check "every pilot gets its own host port pair (loopback-bound)" \
@@ -37,6 +42,16 @@ check "isolation-test has both arms and an always-teardown trap" \
   'grep -q "ARM 1 FAILED" scripts/pilot-instance.sh && grep -q "ARM 2 FAILED" scripts/pilot-instance.sh && grep -q "trap cleanup EXIT" scripts/pilot-instance.sh'
 check "backup writes per-pilot gz dumps under backups/" \
   'grep -q "pg_dump" scripts/pilot-instance.sh && grep -qE "backups_dir/\\\$name-" scripts/pilot-instance.sh'
+check "the inbox is the only service with its own off-loopback bind knob, defaulting to loopback (one-port share)" \
+  'grep -q "INBOX_BIND_HOST:-127.0.0.1}" docker-compose.yml && ! grep -q "INBOX_BIND_HOST:-0.0.0.0}" docker-compose.yml'
+check "example.env documents the one-port share: inbox bind knob + unique inbox port + per-pilot approver login" \
+  'grep -q "^INBOX_BIND_HOST=127.0.0.1$" pilots/example.env && grep -q "^WEB_HOST_PORT=" pilots/example.env && grep -q "^ECOMMERCE_ADMIN_USERNAME=approver-PNAME@pilot.test$" pilots/example.env'
+check "the overlay caps the inbox too (the shared surface is capped like the data-bearing services)" \
+  'grep -A2 "^  frontend:" docker-compose.pilot.yml | grep -qE "^[[:space:]]+mem_limit:"'
+check "the overlay wires mc-api to the pilot's own temporal (the approvals loop is workflow-backed)" \
+  'grep -A5 "^  mc-api:" docker-compose.pilot.yml | grep -q "ECOMMERCE_TEMPORAL_ADDR: temporal:7233"'
+check "approver-access-test has all five arms and an always-teardown trap" \
+  'for arm in "ARM L1 FAILED" "ARM L2 FAILED" "ARM E1 FAILED" "ARM E2 FAILED" "ARM P1 FAILED"; do grep -q "$arm" scripts/pilot-instance.sh || exit 1; done; grep -q "trap cleanup EXIT" scripts/pilot-instance.sh'
 
 # Live rows (the acceptance): only when podman is usable and the operator
 # asked for them — CI runners have no podman socket.
@@ -47,6 +62,14 @@ if [ "${HLXN_PILOT_LIVE:-0}" = 1 ] && command -v podman >/dev/null 2>&1; then
     '[ "$rc" = 0 ] && printf "%s" "$out" | grep -q "ISOLATION TEST PASSED"'
 else
   echo "  [SKIP] live isolation test (set HLXN_PILOT_LIVE=1 with a podman socket to run it)"
+fi
+if [ "${HLXN_PILOT_APPROVER_LIVE:-0}" = 1 ] && command -v podman >/dev/null 2>&1; then
+  out=$(bash scripts/pilot-instance.sh approver-access-test 2>&1); rc=$?
+  echo "$out" | sed 's/^/    /'
+  check "LIVE ACCEPTANCE: approver reaches only their own inbox (login, list, 404, one port)" \
+    '[ "$rc" = 0 ] && printf "%s" "$out" | grep -q "APPROVER ACCESS TEST PASSED"'
+else
+  echo "  [SKIP] live approver-access test (set HLXN_PILOT_APPROVER_LIVE=1 with a podman socket and a web checkout to run it)"
 fi
 
 echo

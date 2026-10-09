@@ -69,6 +69,7 @@ func postReview(srv *server) *httptest.ResponseRecorder {
 func TestReviewUpdateTypedRejectionMaps409WithStoredDecision(t *testing.T) {
 	srv, _ := testServer(t)
 	srv.workflowClient = &fakeTemporalWorkflowClient{
+		describe:     describeOfWorkflow("wf-123"),
 		updateHandle: &fakeUpdateHandle{getErr: temporal.NewNonRetryableApplicationError("already decided", "ReviewAlreadyDecided", nil)},
 	}
 	srv.approvals = fakeApprovalStore{byWorkflow: map[string]publishgate.Decision{
@@ -102,6 +103,7 @@ func TestReviewUpdateTypedRejectionMaps409WithStoredDecision(t *testing.T) {
 func TestReviewUpdateOtherErrorsMap502(t *testing.T) {
 	srv, _ := testServer(t)
 	srv.workflowClient = &fakeTemporalWorkflowClient{
+		describe:     describeOfWorkflow("wf-123"),
 		updateHandle: &fakeUpdateHandle{getErr: context.DeadlineExceeded},
 	}
 	srv.approvals = fakeApprovalStore{byWorkflow: map[string]publishgate.Decision{
