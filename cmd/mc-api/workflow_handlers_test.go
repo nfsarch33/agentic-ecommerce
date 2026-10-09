@@ -12,10 +12,10 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/converter"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -415,7 +415,6 @@ func TestGetWorkflowStatusHandlesEmptyTemporalInfo(t *testing.T) {
 		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
 	}
 }
-
 
 // describeOfWorkflow: the minimal Describe fixture that makes a workflow
 // id EXIST for the review-signal pre-check (an unset describe means the
