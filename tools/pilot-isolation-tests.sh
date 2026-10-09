@@ -49,7 +49,7 @@ check "example.env documents the one-port share: inbox bind knob + unique inbox 
 check "the overlay caps the inbox too (the shared surface is capped like the data-bearing services)" \
   'grep -A2 "^  frontend:" docker-compose.pilot.yml | grep -qE "^[[:space:]]+mem_limit:"'
 check "the overlay wires mc-api to the pilot's own temporal (the approvals loop is workflow-backed)" \
-  'grep -A5 "^  mc-api:" docker-compose.pilot.yml | grep -q "ECOMMERCE_TEMPORAL_ADDR: temporal:7233"'
+  'awk "/^  mc-api:/{f=1} /^  [a-z]/ && !/^  mc-api:/ && f{exit} f" docker-compose.pilot.yml | grep -q "ECOMMERCE_TEMPORAL_ADDR: .*temporal:7233}"'
 check "approver-access-test has all five arms and an always-teardown trap" \
   'for arm in "ARM L1 FAILED" "ARM L2 FAILED" "ARM E1 FAILED" "ARM E2 FAILED" "ARM P1 FAILED"; do grep -q "$arm" scripts/pilot-instance.sh || exit 1; done; grep -q "trap cleanup EXIT" scripts/pilot-instance.sh'
 
