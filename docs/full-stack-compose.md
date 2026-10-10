@@ -134,7 +134,7 @@ This keeps local CD loopback-bound without requiring GHCR image promotion.
 
 ## Security Boundaries
 
-Default `BIND_HOST=127.0.0.1` keeps every published port on loopback. Change this only behind a trusted reverse proxy or firewall.
+Default `BIND_HOST=127.0.0.1` keeps every published port on loopback. Change this only behind a trusted reverse proxy or firewall. The frontend (the approvals inbox) is the one service with its own knob: `INBOX_BIND_HOST` falls back to `BIND_HOST`, and a pilot that shares the inbox pins it to one interface deliberately (see `pilots/example.env`).
 
 Keep `.env.compose` untracked. The committed `.env.compose.example` contains placeholders only. Do not commit WooCommerce credentials, MiniMax keys, Grafana passwords, browser profiles, private hostnames, or internal IPs.
 

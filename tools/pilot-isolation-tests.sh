@@ -42,8 +42,8 @@ check "isolation-test has both arms and an always-teardown trap" \
   'grep -q "ARM 1 FAILED" scripts/pilot-instance.sh && grep -q "ARM 2 FAILED" scripts/pilot-instance.sh && grep -q "trap cleanup EXIT" scripts/pilot-instance.sh'
 check "backup writes per-pilot gz dumps under backups/" \
   'grep -q "pg_dump" scripts/pilot-instance.sh && grep -qE "backups_dir/\\\$name-" scripts/pilot-instance.sh'
-check "the inbox is the only service with its own off-loopback bind knob, defaulting to loopback (one-port share)" \
-  'grep -q "INBOX_BIND_HOST:-127.0.0.1}" docker-compose.yml && ! grep -q "INBOX_BIND_HOST:-0.0.0.0}" docker-compose.yml'
+check "the inbox is the only service with its own off-loopback bind knob, defaulting to BIND_HOST (one-port share)" \
+  'grep -q "INBOX_BIND_HOST:-\${BIND_HOST:-127.0.0.1}}" docker-compose.yml && ! grep -q "INBOX_BIND_HOST:-0.0.0.0}" docker-compose.yml'
 check "example.env documents the one-port share: inbox bind knob + unique inbox port + per-pilot approver login" \
   'grep -q "^INBOX_BIND_HOST=127.0.0.1$" pilots/example.env && grep -q "^WEB_HOST_PORT=" pilots/example.env && grep -q "^ECOMMERCE_ADMIN_USERNAME=approver-PNAME@pilot.test$" pilots/example.env'
 check "the overlay caps the inbox too (the shared surface is capped like the data-bearing services)" \
