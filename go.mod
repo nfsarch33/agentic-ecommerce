@@ -1,6 +1,6 @@
 module github.com/nfsarch33/agentic-ecommerce
 
-go 1.26.6
+go 1.26.9
 
 require (
 	github.com/cloudwego/eino v0.8.13
@@ -17,7 +17,7 @@ require (
 	go.temporal.io/api v1.62.11
 	go.temporal.io/sdk v1.43.0
 	go.uber.org/goleak v1.3.0
-	golang.org/x/net v0.57.0
+	golang.org/x/net v0.60.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/dnaeon/go-vcr.v3 v3.2.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -100,10 +100,10 @@ require (
 	go.opentelemetry.io/otel/metric v1.45.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
 	golang.org/x/arch v0.11.0 // indirect
-	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8 // indirect
 	golang.org/x/sync v0.23.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d // indirect

@@ -236,9 +236,18 @@ services:
     environment:
       NODE_ENV: production
       MC_API_BASE_URL: ${MC_API_BASE_URL:-http://mc-api:8080}
+      # Session cookie flags: unset reproduces the production default
+      # (secure over https); a plain-http share sets AUTH_COOKIE_SECURE=false
+      # or browsers silently drop the session cookie.
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-}
       FLEET_AI_BRIDGE_URL: ${FLEET_AI_BRIDGE_URL:-}
     ports:
-      - "${BIND_HOST:-127.0.0.1}:${WEB_HOST_PORT:-3000}:3000"
+      # The inbox is the one service a pilot ever shares off-loopback, so it
+      # carries its own bind knob: every other service follows BIND_HOST
+      # (loopback by default), the inbox follows INBOX_BIND_HOST. Setting it
+      # to the tailnet interface IP publishes exactly this one port to the
+      # private network — that single off-loopback port is the whole ACL.
+      - "${INBOX_BIND_HOST:-127.0.0.1}:${WEB_HOST_PORT:-3000}:3000"
     healthcheck:
       test:
         [

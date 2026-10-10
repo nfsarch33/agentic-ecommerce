@@ -12,6 +12,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
@@ -415,10 +416,45 @@ func TestGetWorkflowStatusHandlesEmptyTemporalInfo(t *testing.T) {
 	}
 }
 
+// describeOfWorkflow: the minimal Describe fixture that makes a workflow
+// id EXIST for the review-signal pre-check (an unset describe means the
+// id is unknown — 404 before any update is attempted).
+func describeOfWorkflow(id string) *workflowservicepb.DescribeWorkflowExecutionResponse {
+	return &workflowservicepb.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+			Type:      &commonpb.WorkflowType{Name: "ProductPublishWorkflow"},
+		},
+	}
+}
+
+func TestSignalWorkflowReviewUnknownWorkflowIs404(t *testing.T) {
+	t.Parallel()
+
+	// The live shape: Temporal answers the describe with a typed NotFound
+	// gRPC error (the nil-info branch only fires on empty responses).
+	fake := &fakeTemporalWorkflowClient{describeErr: serviceerror.NewNotFound("workflow not found")}
+	srv, _ := testServer(t)
+	srv.workflowClient = fake
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-unknown/signals/review", bytes.NewBufferString(`{"approved":true}`))
+	rec := httptest.NewRecorder()
+	srv.mux().ServeHTTP(rec, req)
+
+	// Mutant this kills: without the existence pre-check, the unknown id
+	// falls into the update path and comes back 502 workflow_update_failed
+	// (the fake supports no update) instead of not-found.
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.signalWorkflowID != "" {
+		t.Fatalf("signal fallback fired for an unknown workflow: %q", fake.signalWorkflowID)
+	}
+}
+
 func TestSignalWorkflowReviewSendsTemporalSignal(t *testing.T) {
 	t.Parallel()
 
-	fake := &fakeTemporalWorkflowClient{}
+	fake := &fakeTemporalWorkflowClient{describe: describeOfWorkflow("wf-123")}
 	srv, _ := testServer(t)
 	srv.workflowClient = fake
 
@@ -488,7 +524,7 @@ func TestSignalWorkflowReviewMapsTemporalFailure(t *testing.T) {
 	t.Parallel()
 
 	srv, _ := testServer(t)
-	srv.workflowClient = &fakeTemporalWorkflowClient{signalErr: errors.New("signal rejected")}
+	srv.workflowClient = &fakeTemporalWorkflowClient{describe: describeOfWorkflow("wf-123"), signalErr: errors.New("signal rejected")}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/workflows/wf-123/signals/review", bytes.NewBufferString(`{"approved":true}`))
 	rec := httptest.NewRecorder()
 	srv.mux().ServeHTTP(rec, req)

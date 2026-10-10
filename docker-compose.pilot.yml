@@ -6,8 +6,20 @@
 # adds what a multi-tenant host owes every tenant: hard resource caps on
 # the data-bearing services. A pilot cannot starve its neighbours.
 #
+# Start gating: the base gates starts on service_healthy, which needs
+# schedulable container healthchecks. On hosts where the rootless podman
+# systemd healthcheck path is unavailable, a healthy-gated `up` hangs
+# with the containers already running. Pilots gate on service_started
+# instead and rely on restart-until-ready: mc-api retries until postgres
+# accepts connections (restart: unless-stopped), and pilot-instance.sh
+# polls real API health before it acts. Measured on the fleet host:
+# healthy-gated phase-2 up wedged 8+ minutes with every container
+# "(starting)" and podman logging "unable to get systemd connection to
+# start healthchecks" on each one.
+#
 # Caps are deliberately coarse (a pilot is a small shop, not the main
-# deployment): postgres 1g/1.5 cpu, redis 256m/0.5, the API 1g/1.
+# deployment): postgres 1g/1.5 cpu, redis 256m/0.5, the API 1g/1, the
+# inbox (the one shared surface) 512m/0.5.
 services:
   postgres:
     mem_limit: 1g
@@ -18,3 +30,42 @@ services:
   mc-api:
     mem_limit: 1g
     cpus: 1.0
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      # The approvals loop is Temporal-backed: the inbox lists and reviews
+      # workflows through mc-api's workflow client, so a pilot that serves
+      # an approver points at its own temporal instance (same compose
+      # project, "temporal" profile). The dial is lazy — a pilot running
+      # without temporal starts fine and its workflow endpoints fail
+      # closed exactly as they do with the client unset. Interpolated so
+      # an operator can pin the address explicitly (pilot-instance.sh does
+      # exactly that on DNS-less podman backends).
+      ECOMMERCE_TEMPORAL_ADDR: ${ECOMMERCE_TEMPORAL_ADDR:-temporal:7233}
+      # Same pinning escape hatch for the data addresses: defaults
+      # reproduce the base file exactly.
+      ECOMMERCE_DB_URL: ${ECOMMERCE_DB_URL:-postgres://${POSTGRES_USER:-ecommerce}:${POSTGRES_PASSWORD:-change-me-postgres}@postgres:5432/${POSTGRES_DB:-ecommerce}?sslmode=disable}
+      ECOMMERCE_REDIS_ADDR: ${ECOMMERCE_REDIS_ADDR:-redis:6379}
+      ECOMMERCE_EVENTBUS_REDIS_ADDR: ${ECOMMERCE_EVENTBUS_REDIS_ADDR:-redis:6379}
+  frontend:
+    mem_limit: 512m
+    cpus: 0.5
+    depends_on:
+      mc-api:
+        condition: service_started
+  temporal-worker:
+    depends_on:
+      temporal:
+        condition: service_started
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      # Address pinning, as on mc-api (defaults reproduce the base file).
+      ECOMMERCE_DB_URL: ${ECOMMERCE_DB_URL:-postgres://${POSTGRES_USER:-ecommerce}:${POSTGRES_PASSWORD:-change-me-postgres}@postgres:5432/${POSTGRES_DB:-ecommerce}?sslmode=disable}
+      ECOMMERCE_REDIS_ADDR: ${ECOMMERCE_REDIS_ADDR:-redis:6379}
+      ECOMMERCE_EVENTBUS_REDIS_ADDR: ${ECOMMERCE_EVENTBUS_REDIS_ADDR:-redis:6379}
