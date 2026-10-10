@@ -47,6 +47,13 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
+      # Shape rows for the pilot surface: committed files say what they must
+      # (the live two-instance rows skip themselves without HLXN_PILOT_LIVE).
+      # This is the gate that would have caught a pilot-isolation claim whose
+      # compose change never reached the branch.
+      - name: Run pilot isolation shape rows
+        run: bash tools/pilot-isolation-tests.sh
+
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
 
