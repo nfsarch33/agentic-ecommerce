@@ -244,10 +244,13 @@ services:
     ports:
       # The inbox is the one service a pilot ever shares off-loopback, so it
       # carries its own bind knob: every other service follows BIND_HOST
-      # (loopback by default), the inbox follows INBOX_BIND_HOST. Setting it
-      # to the tailnet interface IP publishes exactly this one port to the
-      # private network — that single off-loopback port is the whole ACL.
-      - "${INBOX_BIND_HOST:-127.0.0.1}:${WEB_HOST_PORT:-3000}:3000"
+      # (loopback by default), the inbox follows INBOX_BIND_HOST and falls
+      # back to BIND_HOST, so a stack that intentionally publishes on an
+      # interface keeps the inbox with it unless the inbox is pinned
+      # separately. Setting INBOX_BIND_HOST to the tailnet interface IP
+      # publishes exactly this one port to the private network — that single
+      # off-loopback port is the whole ACL.
+      - "${INBOX_BIND_HOST:-${BIND_HOST:-127.0.0.1}}:${WEB_HOST_PORT:-3000}:3000"
     healthcheck:
       test:
         [
