@@ -29,6 +29,8 @@ func runApp(ctx context.Context, args []string, deps appDeps) int {
 		return runVersion(deps)
 	case "onboard":
 		return runOnboard(ctx, args[1:], deps)
+	case "listing":
+		return runListing(ctx, args[2:], deps)
 	case "help", "--help", "-h":
 		printUsage(deps.stdout)
 		return 0
@@ -51,6 +53,8 @@ Subcommands:
                                   provision a tenant via the registration API
   plugin validate --path <dir>    validate a plugin's manifest and run sandbox smoke
   onboard check --config <file>   verify a customer-store onboarding record against the live store
+  listing check --file <draft>    run the deterministic constraint gate on a listing draft
+  listing publish --file <draft>  gate + create the listing through the WooCommerce adapter
   skill quality-check <path>      validate a SKILL.md against quality criteria
   skill codex-gen <path> <outdir> generate a Codex-compatible skill variant
   version                         print binary metadata
@@ -59,6 +63,8 @@ Subcommands:
 Env:
   EC_API_URL                      mc-api base URL (default http://127.0.0.1:8080)
   EC_ADMIN_TOKEN                  admin bearer token (required by tenant create)
+  EC_STORE_URL                    WooCommerce store base URL (listing publish)
+  EC_STORE_KEY / EC_STORE_SECRET  WooCommerce REST credentials (listing publish)
   ECOMMERCE_DB_URL                postgres dsn (used by doctor)
   ECOMMERCE_REDIS_URL             redis url (used by doctor)
   ECOMMERCE_TEMPORAL_ADDR         temporal address (used by doctor)

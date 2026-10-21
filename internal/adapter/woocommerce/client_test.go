@@ -242,3 +242,63 @@ func TestWriteCarriesApprovalHeaderFromContext(t *testing.T) {
 		t.Fatalf("a read without approval context carried %q — reads are not gated", headerOnGet)
 	}
 }
+
+// The image payload (v18960-141): a domain product carrying images must
+// reach the store as the wire images array — src first, alt beside it —
+// and an image-less product must omit the key entirely.
+func TestClient_UpsertProductSendsImagesWhenPresent(t *testing.T) {
+	t.Parallel()
+
+	var payloads []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var got map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		payloads = append(payloads, got)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	t.Cleanup(server.Close)
+
+	price, _ := catalog.NewMoney(2990, "AUD")
+	withImages, err := catalog.NewProduct(catalog.ProductInput{
+		SKU:         "bdo-5c-001",
+		Title:       "Bamboo Desk Organizer",
+		Description: "Five compartments plus a drawer",
+		Price:       price,
+		Stock:       25,
+		Images: []catalog.Image{
+			{URL: "https://store.example/wp-content/uploads/product.jpg", Alt: "organizer on a desk", SortOrder: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("product: %v", err)
+	}
+
+	client := NewClient(Config{BaseURL: server.URL}, server.Client())
+	if err := client.UpsertProduct(context.Background(), withImages); err != nil {
+		t.Fatalf("upsert product: %v", err)
+	}
+	got := payloads[0]
+	images, ok := got["images"].([]any)
+	if !ok || len(images) != 1 {
+		t.Fatalf("payload images = %#v, want one entry", got["images"])
+	}
+	first := images[0].(map[string]any)
+	if first["src"] != "https://store.example/wp-content/uploads/product.jpg" || first["alt"] != "organizer on a desk" {
+		t.Fatalf("payload image = %#v", first)
+	}
+
+	withoutImages, err := catalog.NewProduct(catalog.ProductInput{
+		SKU: "plain-001", Title: "Plain", Description: "d", Price: price, Stock: 1,
+	})
+	if err != nil {
+		t.Fatalf("product: %v", err)
+	}
+	if err := client.UpsertProduct(context.Background(), withoutImages); err != nil {
+		t.Fatalf("upsert product: %v", err)
+	}
+	if _, present := payloads[1]["images"]; present {
+		t.Fatalf("image-less product must omit the images key, got %#v", got["images"])
+	}
+}
