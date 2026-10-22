@@ -131,7 +131,6 @@ func (c Client) ListOrders(ctx context.Context, opts ListOptions) ([]Order, erro
 	return orders, nil
 }
 
-
 // setAuth carries the credentials as HTTP Basic alongside the legacy
 // query-string pair. Basic is the documented WooCommerce REST mode and
 // the only one that works over plain http against a store running as a
