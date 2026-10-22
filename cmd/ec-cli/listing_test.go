@@ -13,7 +13,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 )
 
-// The v1 listing flow's gate (v18960-141): every constraint row is
+// The v1 listing flow's gate: every constraint row is
 // deterministic — no model, no network — and publish rides the gate plus
 // an exactly-once SKU guard against a fake WooCommerce store.
 

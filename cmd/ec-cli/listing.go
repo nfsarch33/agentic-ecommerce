@@ -15,7 +15,7 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/domain/catalog"
 )
 
-// listing.go — the v1 listing flow's executable form (v18960-141):
+// listing.go — the v1 listing flow's executable form:
 // `ec-cli listing check --file draft.json` runs the deterministic
 // constraint gate on a model-drafted listing; `ec-cli listing publish
 // --file draft.json` re-runs the gate, then creates the product through

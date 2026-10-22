@@ -4,6 +4,7 @@
 /mc-api
 /wc-sync
 /content-worker
+/ec-cli
 
 # secrets and local configuration
 .env

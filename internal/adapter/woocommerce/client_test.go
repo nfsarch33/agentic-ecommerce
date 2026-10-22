@@ -243,7 +243,7 @@ func TestWriteCarriesApprovalHeaderFromContext(t *testing.T) {
 	}
 }
 
-// The image payload (v18960-141): a domain product carrying images must
+// The image payload: a domain product carrying images must
 // reach the store as the wire images array — src first, alt beside it —
 // and an image-less product must omit the key entirely.
 func TestClient_UpsertProductSendsImagesWhenPresent(t *testing.T) {
