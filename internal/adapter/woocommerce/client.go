@@ -49,6 +49,13 @@ func (c Client) UpsertProduct(ctx context.Context, product catalog.Product) erro
 		"stock_quantity":    product.Stock(),
 		"status":            wcStatus(product.Status()),
 	}
+	if images := product.Images(); len(images) > 0 {
+		wire := make([]Image, 0, len(images))
+		for _, img := range images {
+			wire = append(wire, Image{Src: img.URL, Alt: img.Alt})
+		}
+		payload["images"] = wire
+	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -65,6 +72,7 @@ func (c Client) UpsertProduct(ctx context.Context, product catalog.Product) erro
 		return fmt.Errorf("build product request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	c.setAuth(req)
 	if id := approvalid.From(ctx); id != "" {
 		req.Header.Set(approvalid.Header, id)
 	}
@@ -123,6 +131,17 @@ func (c Client) ListOrders(ctx context.Context, opts ListOptions) ([]Order, erro
 	return orders, nil
 }
 
+// setAuth carries the credentials as HTTP Basic alongside the legacy
+// query-string pair. Basic is the documented WooCommerce REST mode and
+// the only one that works over plain http against a store running as a
+// local environment (application-password or key pair as user:pass);
+// the query pair stays for https stores that read it there.
+func (c Client) setAuth(req *http.Request) {
+	if c.consumerKey != "" || c.consumerSecret != "" {
+		req.SetBasicAuth(c.consumerKey, c.consumerSecret)
+	}
+}
+
 func (c Client) doJSON(ctx context.Context, method string, endpoint *url.URL, payload any, dest any) error {
 	var body *bytes.Reader
 	if payload != nil {
@@ -141,6 +160,7 @@ func (c Client) doJSON(ctx context.Context, method string, endpoint *url.URL, pa
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	c.setAuth(req)
 	if id := approvalid.From(ctx); id != "" {
 		req.Header.Set(approvalid.Header, id)
 	}
