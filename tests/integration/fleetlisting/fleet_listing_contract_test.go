@@ -147,6 +147,21 @@ func writeDraftFile(t *testing.T, draft any) string {
 	return path
 }
 
+// runListingFlow is THE harness the fleet agent runs, in one place: gate
+// the draft, then publish ONLY when every gate row passed. A red gate is
+// terminal — publish is never attempted (publishRC -1). The named mutant
+// is the gate going always-green: the helper then publishes the corrupted
+// draft, the store fills, and the store-empty assertions go red.
+func runListingFlow(t *testing.T, draftPath string) (gateRC, publishRC int, gateOut, publishOut string) {
+	t.Helper()
+	gateRC, gateOut = ecCli(t, "listing", "check", "--file", draftPath)
+	if gateRC != 0 {
+		return gateRC, -1, gateOut, ""
+	}
+	publishRC, publishOut = ecCli(t, "listing", "publish", "--file", draftPath)
+	return gateRC, publishRC, gateOut, publishOut
+}
+
 type draft struct {
 	SKU            string   `json:"sku"`
 	Title          string   `json:"title"`
@@ -178,21 +193,21 @@ func TestFleetListingContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("draft call: %v", err)
 	}
-	var copy struct {
+	var draftCopy struct {
 		Title          string   `json:"title"`
 		Bullets        []string `json:"bullets"`
 		Description    string   `json:"description"`
 		SearchKeywords string   `json:"search_keywords"`
 	}
-	if err := json.Unmarshal([]byte(resp.Content), &copy); err != nil {
+	if err := json.Unmarshal([]byte(resp.Content), &draftCopy); err != nil {
 		t.Fatalf("draft copy is not JSON: %v", err)
 	}
 	d := draft{
 		SKU:            "bdo-5c-002", // the harness owns the commerce fields; the model owns the copy
-		Title:          copy.Title,
-		Bullets:        copy.Bullets,
-		Description:    copy.Description,
-		SearchKeywords: copy.SearchKeywords,
+		Title:          draftCopy.Title,
+		Bullets:        draftCopy.Bullets,
+		Description:    draftCopy.Description,
+		SearchKeywords: draftCopy.SearchKeywords,
 		PriceCents:     2990,
 		Currency:       "AUD",
 		Stock:          25,
@@ -210,28 +225,25 @@ func TestFleetListingContract(t *testing.T) {
 		t.Fatalf("ledger row must carry tokens in/out, got %+v", row)
 	}
 
-	// 2. Gate: the real CLI, the real constraint rows.
-	rc, out := ecCli(t, "listing", "check", "--file", writeDraftFile(t, d))
-	if rc != 0 {
-		t.Fatalf("gate rc = %d, want 0; output:\n%s", rc, out)
-	}
-	for _, rowName := range []string{"PASS sku", "PASS title", "PASS bullets", "PASS description", "PASS search_keywords", "PASS price", "PASS stock", "PASS image_src"} {
-		if !strings.Contains(out, rowName) {
-			t.Fatalf("gate output missing %q:\n%s", rowName, out)
-		}
-	}
-
-	// 3. Publish: the store accepts, the LISTED line carries the row.
+	// 2+3. The flow helper: gate, then publish only on a green gate.
 	store, stored := fakeStore(t)
 	t.Setenv("EC_STORE_URL", store.URL)
 	t.Setenv("EC_STORE_KEY", "ck_test")
 	t.Setenv("EC_STORE_SECRET", "cs_test")
-	rc, out = ecCli(t, "listing", "publish", "--file", writeDraftFile(t, d))
-	if rc != 0 {
-		t.Fatalf("publish rc = %d, want 0; output:\n%s", rc, out)
+	gateRC, publishRC, gateOut, publishOut := runListingFlow(t, writeDraftFile(t, d))
+	if gateRC != 0 {
+		t.Fatalf("gate rc = %d, want 0; output:\n%s", gateRC, gateOut)
 	}
-	if !strings.Contains(out, "LISTED id=15 sku=BDO-5C-002 status=publish price=29.90 images=1") {
-		t.Fatalf("publish output missing the verified LISTED line:\n%s", out)
+	for _, rowName := range []string{"PASS sku", "PASS title", "PASS bullets", "PASS description", "PASS search_keywords", "PASS price", "PASS stock", "PASS image_src"} {
+		if !strings.Contains(gateOut, rowName) {
+			t.Fatalf("gate output missing %q:\n%s", rowName, gateOut)
+		}
+	}
+	if publishRC != 0 {
+		t.Fatalf("publish rc = %d, want 0; output:\n%s", publishRC, publishOut)
+	}
+	if !strings.Contains(publishOut, "LISTED id=15 sku=BDO-5C-002 status=publish price=29.90 images=1") {
+		t.Fatalf("publish output missing the verified LISTED line:\n%s", publishOut)
 	}
 	if n := len(*stored); n != 1 {
 		t.Fatalf("store rows = %d, want exactly 1", n)
@@ -239,7 +251,7 @@ func TestFleetListingContract(t *testing.T) {
 
 	// 4. Exactly-once: the same SKU again is REFUSED, and the refusal
 	// names the guard; the store still holds exactly one row.
-	rc, out = ecCli(t, "listing", "publish", "--file", writeDraftFile(t, d))
+	rc, out := ecCli(t, "listing", "publish", "--file", writeDraftFile(t, d))
 	if rc != 1 {
 		t.Fatalf("second publish rc = %d, want 1 (exactly-once refuses); output:\n%s", rc, out)
 	}
@@ -251,16 +263,20 @@ func TestFleetListingContract(t *testing.T) {
 	}
 }
 
-// serverImageURL is set once the fake store exists; sandbox stores serve
-// plain http on loopback, which the gate accepts by design.
+// serverImageURL is a FIXED sandbox shape: plain http on loopback is what
+// the gate accepts for sandbox stores, and the fake store never serves
+// images itself (the adapter hands the URL to the store, which would fetch
+// it in a real sandbox).
 var serverImageURL = "http://127.0.0.1:8181/wp-content/uploads/bdo-5c-002.jpg"
 
 // TestFleetListingContract_RefusesToPublishThroughARedGate is the named
 // mutant's death: "the verifier is always green". A corrupted draft (the
-// title over the limit) must FAIL the gate, and the flow harness must
-// treat that as terminal — nothing reaches the store. A harness that
-// publishes anyway (the one-line mutant: ignore the gate's exit code)
-// turns the store-empty assertion at the bottom red.
+// title over the limit) must FAIL the gate, and runListingFlow treats that
+// as terminal — publish is never attempted (publishRC -1) and nothing
+// reaches the store. The one-line mutant is checkListing returning true
+// unconditionally: the helper then publishes the corrupted draft (publish
+// re-runs the same mutated gate), the store fills, and both the publishRC
+// and the store-empty assertions below go red.
 func TestFleetListingContract_RefusesToPublishThroughARedGate(t *testing.T) {
 	bad := draft{
 		SKU:            "bdo-5c-bad",
@@ -274,19 +290,26 @@ func TestFleetListingContract_RefusesToPublishThroughARedGate(t *testing.T) {
 		ImageSrc:       serverImageURL,
 		ImageAlt:       "alt",
 	}
-	rc, out := ecCli(t, "listing", "check", "--file", writeDraftFile(t, bad))
-	if rc != 1 {
-		t.Fatalf("corrupted draft gate rc = %d, want 1; output:\n%s", rc, out)
-	}
-	if !strings.Contains(out, "FAIL title") {
-		t.Fatalf("gate must print the FAIL row:\n%s", out)
-	}
-
-	// The harness half of the contract: a red gate is TERMINAL — the flow
-	// makes no publish call, so a fresh store stays empty. The mutant
-	// publishes anyway and this count goes to 1.
+	// The whole flow through the ONE helper: a red gate is terminal —
+	// publish is never attempted (publishRC -1), the FAIL row names the
+	// violated constraint, and the store stays empty. Under the mutant
+	// (checkListing always true) the helper's gate passes, publish runs
+	// with the same mutated gate inside it, and BOTH the publishRC and
+	// the store-count assertions go red.
 	store, stored := fakeStore(t)
-	_ = store
+	t.Setenv("EC_STORE_URL", store.URL)
+	t.Setenv("EC_STORE_KEY", "ck_test")
+	t.Setenv("EC_STORE_SECRET", "cs_test")
+	gateRC, publishRC, gateOut, _ := runListingFlow(t, writeDraftFile(t, bad))
+	if gateRC != 1 {
+		t.Fatalf("corrupted draft gate rc = %d, want 1; output:\n%s", gateRC, gateOut)
+	}
+	if !strings.Contains(gateOut, "FAIL title") {
+		t.Fatalf("gate must print the FAIL row:\n%s", gateOut)
+	}
+	if publishRC != -1 {
+		t.Fatalf("a red gate is TERMINAL: the flow must not attempt publish, got publish rc %d", publishRC)
+	}
 	if n := len(*stored); n != 0 {
 		t.Fatalf("a red-gated draft reached the store (%d rows) — the always-green mutant is live", n)
 	}
