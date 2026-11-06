@@ -1,0 +1,11 @@
+{
+  "sku": "AWB-001",
+  "fields": {
+    "title": "Aluminium Water Bottle",
+    "price": "29.00",
+    "image_count": "2",
+    "stock": "in_stock"
+  },
+  "listing_url_path": "/woo-admin/listing.html",
+  "notes": "The publishgate record shape the listing verification checks the live page against: the gate's write result carries the product's fields (title, price, image count, stock), and the nightly's listing-verify scenario holds the same values in its verify block. The fixture listing publishes the matching schema.org Product+Offer record, so the nightly measures the verification itself, never a hand-copied expectation."
+}
