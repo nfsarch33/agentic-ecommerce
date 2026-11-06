@@ -1,5 +1,5 @@
-# v18960-685 PLACEHOLDER margin table - every number is a stand-in until
-# the founder's rule lands on the ticket (the ask is posted there).
+# PLACEHOLDER margin table - every number is a stand-in until
+# the founder's rule lands; the ask rides the work tracking board.
 # The rule SHAPE is the contract: floor, band steering, ceiling cap,
 # and the no-competitor fallback. Replace values only.
 rule_name: placeholder-margin-v0

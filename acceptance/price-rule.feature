@@ -1,4 +1,4 @@
-Feature: The price rule - margin floor and competitor band (v18960-685, the NewCo gate)
+Feature: The price rule - margin floor and competitor band
   The price rule turns one landed cost into a listing price: the margin
   floor sets the minimum, the competitor band steers inside it, and the
   price names the rule that produced it. The founder's margin numbers are
