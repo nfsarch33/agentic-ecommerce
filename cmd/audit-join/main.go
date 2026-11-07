@@ -58,7 +58,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	res := auditjoin.Join(context.Background(), logPath, pgApprovals{pool}, since)
+	res := auditjoin.Join(context.Background(), logPath, auditjoin.PGApprovals{Pool: pool}, since)
 	writeTextfile(textfile, res)
 	fmt.Printf("status=%s reads=%d writes=%d unmatched=%d\n", res.Status, res.Reads, res.Writes, len(res.Unmatched))
 	for _, u := range res.Unmatched {
