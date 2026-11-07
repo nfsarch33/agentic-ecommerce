@@ -15,7 +15,7 @@ The real comparison fixtures live in
 mounts at `/work/example-scenarios:ro` via
 `UIAUTO_EXAMPLE_SCENARIOS_PATH` (see `docker-compose.dev.yml`).
 
-## Listing verification (the 680c capability)
+## Listing verification
 
 After publish, the listing itself is verified rather than trusted: a
 uiauto-framework nightly scenario (`listing-verify`, in that repo's

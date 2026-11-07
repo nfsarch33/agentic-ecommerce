@@ -3,7 +3,7 @@
   "fields": {
     "title": "Aluminium Water Bottle",
     "price": "29.00",
-    "image_count": "2",
+    "image_count": 2,
     "stock": "in_stock"
   },
   "listing_url_path": "/woo-admin/listing.html",
