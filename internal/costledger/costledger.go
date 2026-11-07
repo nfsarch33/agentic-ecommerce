@@ -19,6 +19,7 @@ import (
 // Row is one ledger entry.
 type Row struct {
 	JobID     string
+	RunID     string
 	TenantID  string
 	Action    string
 	Model     string
@@ -43,9 +44,9 @@ func NewPGRecorder(pool *pgxpool.Pool) *PGRecorder { return &PGRecorder{pool: po
 // Record inserts one row.
 func (r *PGRecorder) Record(ctx context.Context, row Row) error {
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO cost_ledger (job_id, tenant_id, action, model, tokens_in, tokens_out, cost_cents, status, error_text)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		row.JobID, row.TenantID, row.Action, row.Model, row.TokensIn, row.TokensOut, row.CostCents, row.Status, row.ErrorText)
+		`INSERT INTO cost_ledger (job_id, run_id, tenant_id, action, model, tokens_in, tokens_out, cost_cents, status, error_text)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		row.JobID, row.RunID, row.TenantID, row.Action, row.Model, row.TokensIn, row.TokensOut, row.CostCents, row.Status, row.ErrorText)
 	if err != nil {
 		return fmt.Errorf("costledger insert: %w", err)
 	}
@@ -75,6 +76,7 @@ func (g *RecordingGenerator) Complete(ctx context.Context, req port.AICompletion
 	resp, err := g.Inner.Complete(ctx, req)
 	row := Row{
 		JobID:    att.JobID,
+		RunID:    att.RunID,
 		TenantID: att.TenantID,
 		Action:   att.Action,
 		Model:    req.Model,

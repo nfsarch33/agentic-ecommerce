@@ -25,11 +25,12 @@ func TestSummarizeFoldsRowsAndCountsErrors(t *testing.T) {
 func TestMemLedgerReadsBackOneJobsStep(t *testing.T) {
 	m := NewMemLedger()
 	ctx := context.Background()
-	_ = m.Record(ctx, Row{JobID: "j1", Action: "research", CostCents: 1})
-	_ = m.Record(ctx, Row{JobID: "j1", Action: "price", CostCents: 2})
-	_ = m.Record(ctx, Row{JobID: "j2", Action: "research", CostCents: 4})
-	_ = m.Record(ctx, Row{JobID: "j1", Action: "research", CostCents: 8})
-	rows, err := m.Rows(ctx, "j1", "research")
+	_ = m.Record(ctx, Row{JobID: "j1", RunID: "r1", Action: "research", CostCents: 1})
+	_ = m.Record(ctx, Row{JobID: "j1", RunID: "r1", Action: "price", CostCents: 2})
+	_ = m.Record(ctx, Row{JobID: "j2", RunID: "r1", Action: "research", CostCents: 4})
+	_ = m.Record(ctx, Row{JobID: "j1", RunID: "r2", Action: "research", CostCents: 16})
+	_ = m.Record(ctx, Row{JobID: "j1", RunID: "r1", Action: "research", CostCents: 8})
+	rows, err := m.Rows(ctx, "j1", "r1", "research")
 	if err != nil || len(rows) != 2 || rows[0].CostCents != 1 || rows[1].CostCents != 8 {
 		t.Fatalf("rows = %+v, %v", rows, err)
 	}

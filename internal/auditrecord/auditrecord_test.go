@@ -250,15 +250,54 @@ func TestRunAttributesModelCallsToTheStep(t *testing.T) {
 		_, err := gen.Complete(ctx, port.AICompletionRequest{Model: "test-model"})
 		return "", err
 	})
-	rows, _ := ledger.Rows(context.Background(), "job-7", "verify")
+	rows, _ := ledger.Rows(context.Background(), "job-7", "run-42", "verify")
 	if len(rows) != 1 || rows[0].TenantID != "own-shop" {
 		t.Fatalf("verify rows = %+v, want one row attributed to job-7/verify/own-shop", rows)
 	}
 }
 
+// Two runs of one job are two costs (rev397 finding 1): each run makes one
+// model call in research, so each run's research note says calls=1 and the
+// KPI row for each run carries only its own cost. A MUTANT that drops the
+// run filter (ledger read or Run's attribution) reports calls=2 on the
+// second run, or calls=0 on both.
+func TestTwoRunsOfOneJobEachReportOnlyTheirOwnCalls(t *testing.T) {
+	now := time.Date(2026, 11, 8, 4, 0, 0, 0, time.UTC)
+	board := newFakeBoard(now)
+	ledger := costledger.NewMemLedger()
+	gen := &costledger.RecordingGenerator{Inner: fakeGen{in: 1000, out: 1000}, Recorder: ledger, Prices: testPrices}
+	for _, run := range []string{"run-a", "run-b"} {
+		r := newRecorder(board, ledger, nil, now)
+		r.RunID = run
+		if err := r.Run(context.Background(), Research, func(ctx context.Context) (string, error) {
+			_, err := gen.Complete(ctx, port.AICompletionRequest{Model: "test-model"})
+			return "1 candidate", err
+		}); err != nil {
+			t.Fatalf("%s: %v", run, err)
+		}
+	}
+	comments, _ := board.Comments(context.Background(), ticket)
+	seen := map[string]Note{}
+	for _, c := range comments {
+		if n, ok := ParseNote(c.Body); ok {
+			seen[n.RunID] = n
+		}
+	}
+	for _, run := range []string{"run-a", "run-b"} {
+		n, ok := seen[run]
+		if !ok || n.Cost.Calls != 1 {
+			t.Fatalf("%s research note = %+v (found %v), want calls=1", run, n.Cost, ok)
+		}
+	}
+	kpi := KPI(comments, now.Add(time.Minute), 24*time.Hour)
+	if len(kpi) != 2 || kpi[0].CostCents != kpi[1].CostCents || kpi[0].CostCents != seen["run-a"].Cost.CostCents {
+		t.Fatalf("kpi = %+v, want two rows each with one call's cost", kpi)
+	}
+}
+
 type failingLedger struct{}
 
-func (failingLedger) Rows(context.Context, string, string) ([]costledger.Row, error) {
+func (failingLedger) Rows(context.Context, string, string, string) ([]costledger.Row, error) {
 	return nil, errors.New("ledger down")
 }
 

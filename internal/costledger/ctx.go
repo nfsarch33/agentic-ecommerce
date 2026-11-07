@@ -2,10 +2,13 @@ package costledger
 
 import "context"
 
-// Attrs carries the job/tenant/action attribution for ledger rows, set
+// Attrs carries the job/run/tenant/action attribution for ledger rows, set
 // where a job runs (workflow activities) and read at the model-call seam.
+// RunID separates two runs of one job: a re-run must not inherit the first
+// run's model calls.
 type Attrs struct {
 	JobID    string
+	RunID    string
 	TenantID string
 	Action   string
 }

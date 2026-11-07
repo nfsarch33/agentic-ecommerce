@@ -42,16 +42,17 @@ func Summarize(rows []Row) Summary {
 	return s
 }
 
-// Reader reads ledger rows back for one job and action (the step).
+// Reader reads ledger rows back for one run of a job and one action (the
+// step). The run id is part of the key: two runs of one job are two costs.
 type Reader interface {
-	Rows(ctx context.Context, jobID, action string) ([]Row, error)
+	Rows(ctx context.Context, jobID, runID, action string) ([]Row, error)
 }
 
-// Rows returns the job's rows for one action, oldest first.
-func (r *PGRecorder) Rows(ctx context.Context, jobID, action string) ([]Row, error) {
+// Rows returns one run's rows for one action, oldest first.
+func (r *PGRecorder) Rows(ctx context.Context, jobID, runID, action string) ([]Row, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT job_id, tenant_id, action, model, tokens_in, tokens_out, cost_cents, status, error_text
-		   FROM cost_ledger WHERE job_id = $1 AND action = $2 ORDER BY id`, jobID, action)
+		`SELECT job_id, run_id, tenant_id, action, model, tokens_in, tokens_out, cost_cents, status, error_text
+		   FROM cost_ledger WHERE job_id = $1 AND run_id = $2 AND action = $3 ORDER BY id`, jobID, runID, action)
 	if err != nil {
 		return nil, fmt.Errorf("costledger read: %w", err)
 	}
@@ -59,7 +60,7 @@ func (r *PGRecorder) Rows(ctx context.Context, jobID, action string) ([]Row, err
 	var out []Row
 	for rows.Next() {
 		var row Row
-		if err := rows.Scan(&row.JobID, &row.TenantID, &row.Action, &row.Model,
+		if err := rows.Scan(&row.JobID, &row.RunID, &row.TenantID, &row.Action, &row.Model,
 			&row.TokensIn, &row.TokensOut, &row.CostCents, &row.Status, &row.ErrorText); err != nil {
 			return nil, fmt.Errorf("costledger scan: %w", err)
 		}
@@ -89,13 +90,13 @@ func (m *MemLedger) Record(_ context.Context, row Row) error {
 	return nil
 }
 
-// Rows returns the job's rows for one action, oldest first.
-func (m *MemLedger) Rows(_ context.Context, jobID, action string) ([]Row, error) {
+// Rows returns one run's rows for one action, oldest first.
+func (m *MemLedger) Rows(_ context.Context, jobID, runID, action string) ([]Row, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []Row
 	for _, r := range m.rows {
-		if r.JobID == jobID && r.Action == action {
+		if r.JobID == jobID && r.RunID == runID && r.Action == action {
 			out = append(out, r)
 		}
 	}

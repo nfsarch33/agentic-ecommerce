@@ -245,7 +245,7 @@ func (r *Recorder) Run(ctx context.Context, step Step, fn StepFunc) error {
 	if err := r.check(step); err != nil {
 		return err
 	}
-	stepCtx := costledger.WithAttrs(ctx, costledger.Attrs{JobID: r.JobID, TenantID: r.TenantID, Action: string(step)})
+	stepCtx := costledger.WithAttrs(ctx, costledger.Attrs{JobID: r.JobID, RunID: r.RunID, TenantID: r.TenantID, Action: string(step)})
 	detail, err := fn(stepCtx)
 	status := StatusOK
 	if err != nil {
@@ -324,7 +324,7 @@ func (r *Recorder) costOf(ctx context.Context, step Step) (costledger.Summary, s
 	if r.Ledger == nil {
 		return costledger.Summary{}, "no ledger configured"
 	}
-	rows, err := r.Ledger.Rows(ctx, r.JobID, string(step))
+	rows, err := r.Ledger.Rows(ctx, r.JobID, r.RunID, string(step))
 	if err != nil {
 		return costledger.Summary{}, err.Error()
 	}
