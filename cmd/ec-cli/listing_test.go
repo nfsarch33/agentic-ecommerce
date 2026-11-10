@@ -174,7 +174,7 @@ func TestListingPublish_RequiresStoreEnv(t *testing.T) {
 }
 
 func TestListingPublish_GateRunsBeforeTheStore(t *testing.T) {
-	server, _ := fakeStore(t, nil)
+	server, stored := fakeStore(t, nil)
 	draft := validDraft()
 	draft.Bullets = draft.Bullets[:3] // the gate must refuse before any HTTP call
 	var out strings.Builder
@@ -183,5 +183,38 @@ func TestListingPublish_GateRunsBeforeTheStore(t *testing.T) {
 	rc := runListing(context.Background(), []string{"publish", "--file", writeDraft(t, draft)}, deps)
 	if rc != 1 || !strings.Contains(out.String(), "FAIL bullets") {
 		t.Fatalf("rc = %d, want 1 with the gate row; output:\n%s", rc, out.String())
+	}
+	if len(*stored) != 0 { // E2 S02 acceptance 3: a failed gate writes nothing
+		t.Fatalf("a failed gate must write nothing to the store; stored = %#v", *stored)
+	}
+}
+
+// E2 S02 acceptance 1: a draft with two description paragraphs and two
+// categories publishes through the adapter and the stored wc/v3 product
+// carries both paragraphs and both category names.
+func TestListingPublish_SendsLongCopyAndCategories(t *testing.T) {
+	server, stored := fakeStore(t, nil)
+	draft := validDraft()
+	draft.Description = "First paragraph carries the promise.\n\nSecond paragraph carries the proof."
+	draft.Categories = []string{"Mobility", "Recovery"}
+	var out strings.Builder
+	env := map[string]string{"EC_STORE_URL": server.URL, "EC_STORE_KEY": "ck", "EC_STORE_SECRET": "cs"}
+	deps := appDeps{stdout: &out, stderr: &out, getenv: func(k string) string { return env[k] }}
+	rc := runListing(context.Background(), []string{"publish", "--file", writeDraft(t, draft)}, deps)
+	if rc != 0 {
+		t.Fatalf("rc = %d, want 0; output:\n%s", rc, out.String())
+	}
+	if len(*stored) != 1 {
+		t.Fatalf("stored %d products, want 1", len(*stored))
+	}
+	got := (*stored)[0]
+	if got.Description != draft.Description {
+		t.Fatalf("stored description = %q, want the draft's two paragraphs verbatim", got.Description)
+	}
+	if len(got.Categories) != 2 || got.Categories[0].Name != "Mobility" || got.Categories[1].Name != "Recovery" {
+		t.Fatalf("stored categories = %#v, want both names", got.Categories)
+	}
+	if got.ShortDesc == "" {
+		t.Fatal("the short description must still be sent (the admin/list view's one-liner)")
 	}
 }

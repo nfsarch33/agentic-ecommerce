@@ -49,6 +49,16 @@ func (c Client) UpsertProduct(ctx context.Context, product catalog.Product) erro
 		"stock_quantity":    product.Stock(),
 		"status":            wcStatus(product.Status()),
 	}
+	if long := product.LongDescription(); long != "" {
+		payload["description"] = long
+	}
+	if categories := product.Categories(); len(categories) > 0 {
+		wire := make([]IDRef, 0, len(categories))
+		for _, c := range categories {
+			wire = append(wire, IDRef{Name: c.Name})
+		}
+		payload["categories"] = wire
+	}
 	if images := product.Images(); len(images) > 0 {
 		wire := make([]Image, 0, len(images))
 		for _, img := range images {
