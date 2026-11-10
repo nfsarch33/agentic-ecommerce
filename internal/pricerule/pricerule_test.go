@@ -77,3 +77,15 @@ func TestBandEdgeIsContained(t *testing.T) {
 		t.Fatalf("got %d %q, want the midpoint 8886 inside band", got.PriceCents, got.Reason)
 	}
 }
+
+// rev547 finding 1, red row: a band containing the floor must never steer
+// BELOW the floor - cost 6000, floor 30 percent, band 8000..8700 has its
+// floor price at 8572 inside the band, so the midpoint 8350 (a 28.1
+// percent margin) must not be returned.
+func TestInsideBandNeverPricesUnderTheFloor(t *testing.T) {
+	r := Rule{RuleName: "r", MarginFloorPct: 30, BandSteering: "midpoint", BandCeilingCap: true, Currency: "AUD"}
+	got := Apply(r, 6000, &Band{Low: 8000, High: 8700})
+	if got.PriceCents < 8572 {
+		t.Fatalf("price = %d, want at least the floor price 8572 (the floor sets the minimum)", got.PriceCents)
+	}
+}

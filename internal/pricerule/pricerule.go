@@ -55,7 +55,13 @@ func Apply(r Rule, costCents int64, band *Band) Result {
 		res.PriceCents = band.High
 		res.Reason = "above band: capped"
 	default:
-		res.PriceCents = (band.Low + band.High) / 2
+		// rev547 finding 1: the floor sets the minimum, so a midpoint that
+		// lands below the floor price steers UP to the floor.
+		mid := (band.Low + band.High) / 2
+		res.PriceCents = mid
+		if floor > mid {
+			res.PriceCents = floor
+		}
 		res.Reason = "inside band"
 	}
 	return res

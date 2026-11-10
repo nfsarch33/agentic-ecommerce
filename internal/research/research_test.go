@@ -1,7 +1,6 @@
 package research
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -22,7 +21,7 @@ func TestFivePricedCandidates(t *testing.T) {
 		t.Fatalf("candidates = %d, want at least five", len(res.Candidates))
 	}
 	for _, c := range res.Candidates {
-		if c.CostCents == 0 || c.LandedCents == 0 || c.SourceURL == "" || c.Confidence == 0 {
+		if c.CostCents == 0 || c.LandedPriceCents == 0 || c.SourceURL == "" || c.Confidence == 0 {
 			t.Fatalf("candidate %+v missing a field the feature names", c)
 		}
 		if c.ID == "" {
@@ -78,11 +77,10 @@ func TestMarginUsesLandedPrice(t *testing.T) {
 	if len(res.Candidates) != 1 {
 		t.Fatalf("candidates = %d, want the landed-margin candidate kept", len(res.Candidates))
 	}
-	if got := res.Candidates[0].MarginPct(30); got < 49.9 || got > 50.1 {
+	if got := res.Candidates[0].MarginPct(); got < 49.9 || got > 50.1 {
 		t.Fatalf("margin = %v, want 50 on the landed price", got)
 	}
 	if !strings.HasPrefix(res.Candidates[0].ID, "apparel-") {
 		t.Fatalf("id = %q, want the category prefix", res.Candidates[0].ID)
 	}
-	_ = fmt.Sprint()
 }
