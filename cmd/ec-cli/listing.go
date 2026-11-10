@@ -37,6 +37,7 @@ type listingDraft struct {
 	Stock          int      `json:"stock"`
 	ImageSrc       string   `json:"image_src"`
 	ImageAlt       string   `json:"image_alt"`
+	Categories     []string `json:"categories"`
 }
 
 func runListing(ctx context.Context, args []string, deps appDeps) int {
@@ -188,14 +189,22 @@ func publishListing(ctx context.Context, d listingDraft, deps appDeps) int {
 		fmt.Fprintf(deps.stderr, "ec-cli listing publish: price: %v\n", err)
 		return 1
 	}
+	categories := make([]catalog.Category, 0, len(d.Categories))
+	for _, name := range d.Categories {
+		if name = strings.TrimSpace(name); name != "" {
+			categories = append(categories, catalog.Category{Name: name})
+		}
+	}
 	product, err := catalog.NewProduct(catalog.ProductInput{
-		SKU:         d.SKU,
-		Title:       d.Title,
-		Description: d.Title + " — " + strings.Join(d.Bullets, " "),
-		Price:       money,
-		Stock:       d.Stock,
-		Status:      catalog.StatusActive,
-		Images:      []catalog.Image{{URL: d.ImageSrc, Alt: d.ImageAlt}},
+		SKU:             d.SKU,
+		Title:           d.Title,
+		Description:     d.Title + " — " + strings.Join(d.Bullets, " "),
+		LongDescription: d.Description,
+		Price:           money,
+		Stock:           d.Stock,
+		Status:          catalog.StatusActive,
+		Images:          []catalog.Image{{URL: d.ImageSrc, Alt: d.ImageAlt}},
+		Categories:      categories,
 	})
 	if err != nil {
 		fmt.Fprintf(deps.stderr, "ec-cli listing publish: build product: %v\n", err)

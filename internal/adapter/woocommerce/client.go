@@ -49,6 +49,20 @@ func (c Client) UpsertProduct(ctx context.Context, product catalog.Product) erro
 		"stock_quantity":    product.Stock(),
 		"status":            wcStatus(product.Status()),
 	}
+	if long := product.LongDescription(); long != "" {
+		payload["description"] = long
+	}
+	if categories := product.Categories(); len(categories) > 0 {
+		names := make([]string, 0, len(categories))
+		for _, c := range categories {
+			names = append(names, c.Name)
+		}
+		wire, err := c.resolveCategoryIDs(ctx, names)
+		if err != nil {
+			return fmt.Errorf("resolve categories for product %s: %w", product.SKU(), err)
+		}
+		payload["categories"] = wire
+	}
 	if images := product.Images(); len(images) > 0 {
 		wire := make([]Image, 0, len(images))
 		for _, img := range images {
@@ -88,6 +102,43 @@ func (c Client) UpsertProduct(ctx context.Context, product catalog.Product) erro
 	}
 
 	return nil
+}
+
+// resolveCategoryIDs maps category names onto store category ids:
+// WooCommerce attaches a product category by id - a name-only ref is
+// silently dropped by a real store - so names the store already knows
+// are resolved from the listing and a name it does not know is created
+// first.
+func (c Client) resolveCategoryIDs(ctx context.Context, names []string) ([]IDRef, error) {
+	listEndpoint, err := c.endpoint("/products/categories", url.Values{"per_page": []string{"100"}})
+	if err != nil {
+		return nil, err
+	}
+	createEndpoint, err := c.endpoint("/products/categories", nil)
+	if err != nil {
+		return nil, err
+	}
+	var known []IDRef
+	if err := c.doJSON(ctx, http.MethodGet, listEndpoint, nil, &known); err != nil {
+		return nil, fmt.Errorf("list product categories: %w", err)
+	}
+	byName := make(map[string]int, len(known))
+	for _, k := range known {
+		byName[k.Name] = k.ID
+	}
+	wire := make([]IDRef, 0, len(names))
+	for _, name := range names {
+		if id, ok := byName[name]; ok {
+			wire = append(wire, IDRef{ID: id})
+			continue
+		}
+		var created IDRef
+		if err := c.doJSON(ctx, http.MethodPost, createEndpoint, map[string]string{"name": name}, &created); err != nil {
+			return nil, fmt.Errorf("create product category %q: %w", name, err)
+		}
+		wire = append(wire, IDRef{ID: created.ID})
+	}
+	return wire, nil
 }
 
 func (c Client) ListProducts(ctx context.Context, opts ListOptions) ([]Product, error) {

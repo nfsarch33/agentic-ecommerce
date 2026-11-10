@@ -96,16 +96,33 @@ func TestListingCheck_EachViolationFailsItsRow(t *testing.T) {
 	}
 }
 
-// fakeStore serves the two GET /products?sku= lookups and the POST create
-// a publish drives, against per-test state.
+// fakeStore serves the GET /products?sku= lookup, the category listing and
+// create, and the POST create a publish drives, against per-test state.
+// Categories follow the real store's rule: a product attaches categories
+// by id - a name-only ref is dropped - and the read-back fills each name
+// from the store's own category list.
 func fakeStore(t *testing.T, existing *woocommerce.Product) (*httptest.Server, *[]woocommerce.Product) {
 	t.Helper()
 	stored := []woocommerce.Product{}
 	if existing != nil {
 		stored = append(stored, *existing)
 	}
+	categories := []woocommerce.IDRef{{ID: 11, Name: "Mobility"}, {ID: 12, Name: "Recovery"}}
+	nextCategoryID := 100
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/wp-json/wc/v3/products/categories":
+			_ = json.NewEncoder(w).Encode(categories)
+		case r.Method == http.MethodPost && r.URL.Path == "/wp-json/wc/v3/products/categories":
+			var incoming woocommerce.IDRef
+			if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
+				t.Fatalf("fake store category decode: %v", err)
+			}
+			incoming.ID = nextCategoryID
+			nextCategoryID++
+			categories = append(categories, incoming)
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(incoming)
 		case r.Method == http.MethodGet && r.URL.Path == "/wp-json/wc/v3/products":
 			sku := r.URL.Query().Get("sku")
 			for _, p := range stored {
@@ -120,6 +137,20 @@ func fakeStore(t *testing.T, existing *woocommerce.Product) (*httptest.Server, *
 			if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
 				t.Fatalf("fake store decode: %v", err)
 			}
+			attached := []woocommerce.IDRef{}
+			for _, ref := range incoming.Categories {
+				if ref.ID == 0 {
+					continue // the real store drops a name-only ref
+				}
+				name := ""
+				for _, c := range categories {
+					if c.ID == ref.ID {
+						name = c.Name
+					}
+				}
+				attached = append(attached, woocommerce.IDRef{ID: ref.ID, Name: name})
+			}
+			incoming.Categories = attached
 			incoming.ID = 42
 			incoming.Status = "publish"
 			stored = append(stored, incoming)
@@ -174,7 +205,7 @@ func TestListingPublish_RequiresStoreEnv(t *testing.T) {
 }
 
 func TestListingPublish_GateRunsBeforeTheStore(t *testing.T) {
-	server, _ := fakeStore(t, nil)
+	server, stored := fakeStore(t, nil)
 	draft := validDraft()
 	draft.Bullets = draft.Bullets[:3] // the gate must refuse before any HTTP call
 	var out strings.Builder
@@ -183,5 +214,41 @@ func TestListingPublish_GateRunsBeforeTheStore(t *testing.T) {
 	rc := runListing(context.Background(), []string{"publish", "--file", writeDraft(t, draft)}, deps)
 	if rc != 1 || !strings.Contains(out.String(), "FAIL bullets") {
 		t.Fatalf("rc = %d, want 1 with the gate row; output:\n%s", rc, out.String())
+	}
+	if len(*stored) != 0 { // E2 S02 acceptance 3: a failed gate writes nothing
+		t.Fatalf("a failed gate must write nothing to the store; stored = %#v", *stored)
+	}
+}
+
+// E2 S02 acceptance 1: a draft with two description paragraphs and two
+// categories publishes through the adapter and the stored wc/v3 product
+// carries both paragraphs and both category names - attached through store
+// ids, one resolved from the store's list and one created on the fly,
+// because the real store drops a name-only ref.
+func TestListingPublish_SendsLongCopyAndCategories(t *testing.T) {
+	server, stored := fakeStore(t, nil)
+	draft := validDraft()
+	draft.Description = "First paragraph carries the promise.\n\nSecond paragraph carries the proof."
+	draft.Categories = []string{"Mobility", "Desk Organisers"}
+	var out strings.Builder
+	env := map[string]string{"EC_STORE_URL": server.URL, "EC_STORE_KEY": "ck", "EC_STORE_SECRET": "cs"}
+	deps := appDeps{stdout: &out, stderr: &out, getenv: func(k string) string { return env[k] }}
+	rc := runListing(context.Background(), []string{"publish", "--file", writeDraft(t, draft)}, deps)
+	if rc != 0 {
+		t.Fatalf("rc = %d, want 0; output:\n%s", rc, out.String())
+	}
+	if len(*stored) != 1 {
+		t.Fatalf("stored %d products, want 1", len(*stored))
+	}
+	got := (*stored)[0]
+	if got.Description != draft.Description {
+		t.Fatalf("stored description = %q, want the draft's two paragraphs verbatim", got.Description)
+	}
+	want := []woocommerce.IDRef{{ID: 11, Name: "Mobility"}, {ID: 100, Name: "Desk Organisers"}}
+	if len(got.Categories) != 2 || got.Categories[0] != want[0] || got.Categories[1] != want[1] {
+		t.Fatalf("stored categories = %#v, want both attached through store ids (one resolved, one created)", got.Categories)
+	}
+	if got.ShortDesc == "" {
+		t.Fatal("the short description must still be sent (the admin/list view's one-liner)")
 	}
 }

@@ -22,30 +22,32 @@ var (
 var slugRe = regexp.MustCompile(`[^a-z0-9-]+`)
 
 type ProductInput struct {
-	SKU         string
-	Title       string
-	Slug        string
-	Description string
-	Price       Money
-	Stock       int
-	Status      ProductStatus
-	Images      []Image
-	Categories  []Category
+	SKU             string
+	Title           string
+	Slug            string
+	Description     string
+	LongDescription string
+	Price           Money
+	Stock           int
+	Status          ProductStatus
+	Images          []Image
+	Categories      []Category
 }
 
 type Product struct {
-	id          uuid.UUID
-	sku         string
-	title       string
-	slug        string
-	description string
-	price       Money
-	stock       int
-	status      ProductStatus
-	images      []Image
-	categories  []Category
-	createdAt   time.Time
-	updatedAt   time.Time
+	id              uuid.UUID
+	sku             string
+	title           string
+	slug            string
+	description     string
+	longDescription string
+	price           Money
+	stock           int
+	status          ProductStatus
+	images          []Image
+	categories      []Category
+	createdAt       time.Time
+	updatedAt       time.Time
 }
 
 func NewProduct(input ProductInput) (Product, error) {
@@ -77,18 +79,19 @@ func NewProduct(input ProductInput) (Product, error) {
 	now := time.Now().UTC()
 
 	return Product{
-		id:          uuid.New(),
-		sku:         sku,
-		title:       title,
-		slug:        slug,
-		description: description,
-		price:       input.Price,
-		stock:       input.Stock,
-		status:      status,
-		images:      input.Images,
-		categories:  input.Categories,
-		createdAt:   now,
-		updatedAt:   now,
+		id:              uuid.New(),
+		sku:             sku,
+		title:           title,
+		slug:            slug,
+		description:     description,
+		price:           input.Price,
+		stock:           input.Stock,
+		status:          status,
+		images:          input.Images,
+		categories:      input.Categories,
+		longDescription: strings.TrimSpace(input.LongDescription),
+		createdAt:       now,
+		updatedAt:       now,
 	}, nil
 }
 
@@ -145,8 +148,13 @@ func (p Product) WithImages(images []Image) Product {
 	return p
 }
 func (p Product) Categories() []Category { return p.categories }
-func (p Product) CreatedAt() time.Time   { return p.createdAt }
-func (p Product) UpdatedAt() time.Time   { return p.updatedAt }
+
+// LongDescription is the listing's long copy: the draft's two paragraphs,
+// rendered on the storefront product page (the short description is the
+// admin/list view's one-liner).
+func (p Product) LongDescription() string { return p.longDescription }
+func (p Product) CreatedAt() time.Time    { return p.createdAt }
+func (p Product) UpdatedAt() time.Time    { return p.updatedAt }
 
 func generateSlug(title string) string {
 	s := strings.ToLower(title)
