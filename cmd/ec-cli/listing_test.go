@@ -2,13 +2,18 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/nfsarch33/agentic-ecommerce/internal/adapter/woocommerce"
 )
@@ -98,6 +103,10 @@ func TestListingCheck_EachViolationFailsItsRow(t *testing.T) {
 
 // fakeStore serves the two GET /products?sku= lookups and the POST create
 // a publish drives, against per-test state.
+// sourceImageBytes is the draft's source image the fake store serves
+// at /img/source.png; the media step fetches it, the sidecar edits it.
+var sourceImageBytes = []byte("source-image-bytes-for-the-organizer")
+
 func fakeStore(t *testing.T, existing *woocommerce.Product) (*httptest.Server, *[]woocommerce.Product) {
 	t.Helper()
 	stored := []woocommerce.Product{}
@@ -124,6 +133,9 @@ func fakeStore(t *testing.T, existing *woocommerce.Product) (*httptest.Server, *
 			incoming.Status = "publish"
 			stored = append(stored, incoming)
 			_ = json.NewEncoder(w).Encode(incoming)
+		case r.Method == http.MethodGet && r.URL.Path == "/img/source.png":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(sourceImageBytes)
 		default:
 			t.Fatalf("fake store saw %s %s", r.Method, r.URL.Path)
 		}
@@ -183,5 +195,157 @@ func TestListingPublish_GateRunsBeforeTheStore(t *testing.T) {
 	rc := runListing(context.Background(), []string{"publish", "--file", writeDraft(t, draft)}, deps)
 	if rc != 1 || !strings.Contains(out.String(), "FAIL bullets") {
 		t.Fatalf("rc = %d, want 1 with the gate row; output:\n%s", rc, out.String())
+	}
+}
+
+// fakeMediaSidecar serves the spec 2.3 /v1/process endpoint for the step
+// tests: mode "honest" reports the real sha256 of its deterministic
+// output, "lying" reports another checksum, and it records every hit.
+func fakeMediaSidecar(t *testing.T, mode string) (*httptest.Server, *[]string) {
+	t.Helper()
+	var mu sync.Mutex
+	jobIDs := &[]string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/process" {
+			t.Fatalf("sidecar saw %s %s, want POST /v1/process", r.Method, r.URL.Path)
+		}
+		var req struct {
+			JobID    string   `json:"job_id"`
+			ImageB64 string   `json:"image_b64"`
+			Ops      []string `json:"ops"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("sidecar decode: %v", err)
+		}
+		for _, op := range req.Ops {
+			if op != "bg" && op != "upscale" {
+				t.Fatalf("sidecar got op %q, want only bg and upscale", op)
+			}
+		}
+		mu.Lock()
+		*jobIDs = append(*jobIDs, req.JobID)
+		mu.Unlock()
+		out := []byte("edited:" + req.JobID)
+		sum := sha256.Sum256(out)
+		if mode == "lying" {
+			sum = sha256.Sum256([]byte("other-bytes-entirely"))
+		}
+		_ = json.NewEncoder(w).Encode(struct {
+			OutB64 string  `json:"out_b64"`
+			SHA256 string  `json:"sha256"`
+			Secs   float64 `json:"secs"`
+			Cached bool    `json:"cached"`
+		}{OutB64: base64.StdEncoding.EncodeToString(out), SHA256: hex.EncodeToString(sum[:]), Secs: 0.01})
+	}))
+	t.Cleanup(server.Close)
+	return server, jobIDs
+}
+
+func draftWithServedImage(server *httptest.Server) listingDraft {
+	draft := validDraft()
+	draft.ImageSrc = server.URL + "/img/source.png"
+	return draft
+}
+
+func publishEnv(storeURL, mediaURL string) func(string) string {
+	env := map[string]string{"EC_STORE_URL": storeURL, "EC_STORE_KEY": "ck", "EC_STORE_SECRET": "cs"}
+	if mediaURL != "" {
+		env["EC_MEDIA_URL"] = mediaURL
+	}
+	return func(k string) string { return env[k] }
+}
+
+// S6 acceptance 1: the sidecar returns bytes whose sha256 differs from
+// the reported one -> the edited image is rejected, the source image is
+// published and the record says image_edited false.
+func TestImageStep_MismatchFallsBackToSource(t *testing.T) {
+	store, stored := fakeStore(t, nil)
+	sidecar, jobIDs := fakeMediaSidecar(t, "lying")
+	var out strings.Builder
+	deps := appDeps{stdout: &out, stderr: &out, getenv: publishEnv(store.URL, sidecar.URL)}
+	rc := runListing(context.Background(), []string{"publish", "--file", writeDraft(t, draftWithServedImage(store))}, deps)
+	if rc != 0 {
+		t.Fatalf("rc = %d, want 0; output:\n%s", rc, out.String())
+	}
+	if len(*jobIDs) != 1 {
+		t.Fatalf("sidecar job ids = %v, want exactly one call", *jobIDs)
+	}
+	if !strings.Contains(out.String(), "IMAGE edited=false") || !strings.Contains(out.String(), "checksum-mismatch") {
+		t.Fatalf("output must record the rejected edit:\n%s", out.String())
+	}
+	if len(*stored) != 1 || (*stored)[0].Images[0].Src != store.URL+"/img/source.png" {
+		t.Fatalf("stored images = %#v, want the source image", (*stored)[0].Images)
+	}
+}
+
+// S6 acceptance 3: the sidecar is stopped -> the listing still publishes
+// with the source image, quickly enough to hold the S9 budget.
+func TestImageStep_OutageStillListsWithSource(t *testing.T) {
+	store, stored := fakeStore(t, nil)
+	// port 1 on loopback: refused immediately, nothing is listening there
+	var out strings.Builder
+	deps := appDeps{stdout: &out, stderr: &out, getenv: publishEnv(store.URL, "http://127.0.0.1:1")}
+	start := time.Now()
+	rc := runListing(context.Background(), []string{"publish", "--file", writeDraft(t, draftWithServedImage(store))}, deps)
+	if rc != 0 {
+		t.Fatalf("rc = %d, want 0; output:\n%s", rc, out.String())
+	}
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("the outage path took %s, over the step ceiling plus publish (S9 holds two minutes)", elapsed)
+	}
+	if !strings.Contains(out.String(), "IMAGE edited=false") || !strings.Contains(out.String(), "media-outage") {
+		t.Fatalf("output must record the outage fallback:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "LISTED id=42") {
+		t.Fatalf("the listing must still list:\n%s", out.String())
+	}
+	if len(*stored) != 1 || (*stored)[0].Images[0].Src != store.URL+"/img/source.png" {
+		t.Fatalf("stored images = %#v, want the source image", (*stored)[0].Images)
+	}
+}
+
+// S6 happy path: an honest sidecar -> the edited image is published (a
+// data URL built from the verified bytes) and the record names its
+// checksum and cache state; the job id is stable for the same draft.
+func TestImageStep_EditedImagePublishesWithChecksum(t *testing.T) {
+	store, stored := fakeStore(t, nil)
+	sidecar, jobIDs := fakeMediaSidecar(t, "honest")
+	var out strings.Builder
+	deps := appDeps{stdout: &out, stderr: &out, getenv: publishEnv(store.URL, sidecar.URL)}
+	rc := runListing(context.Background(), []string{"publish", "--file", writeDraft(t, draftWithServedImage(store))}, deps)
+	if rc != 0 {
+		t.Fatalf("rc = %d, want 0; output:\n%s", rc, out.String())
+	}
+	if len(*jobIDs) != 1 {
+		t.Fatalf("sidecar job ids = %v, want exactly one call", *jobIDs)
+	}
+	wantSum := sha256.Sum256([]byte("edited:" + (*jobIDs)[0]))
+	if !strings.Contains(out.String(), "IMAGE edited=true sha256="+hex.EncodeToString(wantSum[:])+" cached=false") {
+		t.Fatalf("output must record the verified checksum:\n%s", out.String())
+	}
+	if len(*stored) != 1 {
+		t.Fatalf("stored %d products, want 1", len(*stored))
+	}
+	got := (*stored)[0].Images[0].Src
+	if !strings.HasPrefix(got, "data:image/png;base64,") {
+		t.Fatalf("stored image src = %q, want a data URL built from the verified edited bytes", got)
+	}
+}
+
+// The job id is derived from the SKU and the source checksum: the same
+// draft replays the same id (the sidecar answers from its cache with the
+// same checksum); a different source changes it.
+func TestImageJobIDStableForSameDraft(t *testing.T) {
+	a := imageJobID("BDO-5C-001", "aa11")
+	b := imageJobID("BDO-5C-001", "aa11")
+	c := imageJobID("BDO-5C-001", "bb22")
+	if a == "" {
+		t.Fatal("imageJobID must not be empty")
+	}
+	if a != b {
+		t.Fatalf("same draft must replay the same job id: %q vs %q", a, b)
+	}
+	if a == c {
+		t.Fatal("a different source image must change the job id")
 	}
 }

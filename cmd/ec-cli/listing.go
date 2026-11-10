@@ -211,6 +211,13 @@ func publishListing(ctx context.Context, d listingDraft, deps appDeps) int {
 		fmt.Fprintf(deps.stderr, "ec-cli listing publish: sku %s is already listed as id %d — exactly-once refuses to duplicate (updates go through the publish gate)\n", product.SKU(), existing.ID)
 		return 1
 	}
+	editedImageURL, imageNote := runImageStep(ctx, d, deps)
+	if editedImageURL != "" {
+		product = product.WithImages([]catalog.Image{{URL: editedImageURL, Alt: d.ImageAlt}})
+	}
+	if imageNote != "" {
+		fmt.Fprintln(deps.stdout, imageNote)
+	}
 	if err := client.UpsertProduct(ctx, product); err != nil {
 		fmt.Fprintf(deps.stderr, "ec-cli listing publish: create failed: %v\n", err)
 		return 1
