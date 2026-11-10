@@ -5,8 +5,7 @@ import (
 	"testing"
 )
 
-// The template's own spike numbers (evidence/v18960-137-ecommerce-spike/
-// margin_check.py): retail 29.90, cost 5.00, fulfil 6.50, referral 15%,
+// The spike template's own numbers: retail 29.90, cost 5.00, fulfil 6.50, referral 15%,
 // fixed 120.00, batch 500 -> per-unit 13.915, net 46.5%, break-even 9
 // units = 1.8% of the batch. PASS.
 func TestTemplateNumbersPass(t *testing.T) {

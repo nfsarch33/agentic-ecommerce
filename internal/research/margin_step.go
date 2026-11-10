@@ -6,16 +6,6 @@ import (
 	"github.com/nfsarch33/agentic-ecommerce/internal/margingate"
 )
 
-// StepCalls are the driver-side effects this step owns none of: the model
-// caller, the store caller, the draft writer. They sit on this pure
-// boundary only so the tests can prove the not-established stop and the
-// gate reject call none of them - the step itself never calls.
-type StepCalls struct {
-	Model func()
-	Store func()
-	Draft func()
-}
-
 // StepKind is the research-and-margin-gate step's verdict.
 type StepKind string
 
@@ -25,16 +15,19 @@ const (
 	StepPass           StepKind = "pass"
 )
 
-// RecordRow is one number with its source url - the run record's shape.
+// RecordRow is one band's numbers - the low, the high, the MOQ - each
+// with its source url - the run record's shape.
 type RecordRow struct {
-	Number    int64
+	LowCents  int64
+	HighCents int64
+	MOQUnits  int64
 	SourceURL string
 	Kind      BandKind
 }
 
 // StepResult is the step's answer: the verdict kind, the run record (each
-// number with its source), the gate's verdict line, and the stop line on
-// the not-established path.
+// band's low, high and MOQ with its source), the gate's verdict line, and
+// the stop line on the not-established path.
 type StepResult struct {
 	Kind    StepKind
 	Record  []RecordRow
@@ -45,9 +38,11 @@ type StepResult struct {
 // Evaluate runs research-then-gate: establish the bands from the search
 // recordings (a missing band after four searches stops the scenario before
 // any draft, model or store call), then apply the deterministic margin
-// gate. On pass, the run record carries every number with its source url
-// and the gate's verdict.
-func Evaluate(records []BandRecord, gateInputs margingate.Inputs, calls StepCalls) StepResult {
+// gate. The step is a pure function of its recordings and its gate inputs
+// - no model, store or draft call exists to make, and the returned kind is
+// the whole proof. On pass, the run record carries every band's low, high
+// and MOQ with its source url, and the gate's verdict.
+func Evaluate(records []BandRecord, gateInputs margingate.Inputs) StepResult {
 	bands := Establish(records)
 	switch {
 	case bands.Defect != "":
@@ -63,13 +58,13 @@ func Evaluate(records []BandRecord, gateInputs margingate.Inputs, calls StepCall
 	}
 	record := []RecordRow{}
 	if bands.Wholesale != nil {
-		record = append(record, RecordRow{Number: bands.Wholesale.LowCents, SourceURL: bands.Wholesale.SourceURL, Kind: BandWholesale})
+		record = append(record, RecordRow{LowCents: bands.Wholesale.LowCents, HighCents: bands.Wholesale.HighCents, MOQUnits: bands.Wholesale.MOQUnits, SourceURL: bands.Wholesale.SourceURL, Kind: BandWholesale})
 	}
 	if bands.Retail != nil {
-		record = append(record, RecordRow{Number: bands.Retail.LowCents, SourceURL: bands.Retail.SourceURL, Kind: BandRetail})
+		record = append(record, RecordRow{LowCents: bands.Retail.LowCents, HighCents: bands.Retail.HighCents, MOQUnits: bands.Retail.MOQUnits, SourceURL: bands.Retail.SourceURL, Kind: BandRetail})
 	}
 	if bands.Demand != nil {
-		record = append(record, RecordRow{Number: bands.Demand.LowCents, SourceURL: bands.Demand.SourceURL, Kind: BandDemand})
+		record = append(record, RecordRow{LowCents: bands.Demand.LowCents, HighCents: bands.Demand.HighCents, MOQUnits: bands.Demand.MOQUnits, SourceURL: bands.Demand.SourceURL, Kind: BandDemand})
 	}
 	return StepResult{Kind: StepPass, Record: record, Verdict: v.Reason}
 }

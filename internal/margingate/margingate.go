@@ -1,8 +1,10 @@
 // Package margingate is the deterministic margin gate of the E2 listing
 // spec (section 2.1, criteria S1-S2): reject a net margin under 30 percent
 // or a break-even above 20 percent of the batch. It calls no model; the
-// arithmetic is the evidence/v18960-137-ecommerce-spike/margin_check.py
-// template - same fields, same order of operations - in integer cents.
+// arithmetic is per-unit = retail*(1-referral) - cost - fulfil, net
+// margin = per-unit over retail, break-even = batch-fixed over per-unit
+// rounded up - the spike template's fields and order of operations, in
+// integer cents.
 package margingate
 
 import (
