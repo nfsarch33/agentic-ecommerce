@@ -21,6 +21,24 @@ ECOMMERCE_AGENT_SCHEDULES_TASK_QUEUE=ec-workflows
 wiring. `temporal-worker` logs the same values at startup and polls
 `ECOMMERCE_TEMPORAL_TASK_QUEUE`, which defaults to `ec-workflows`.
 
+## Pinned Image
+
+The Temporal dev server image is pinned by version tag and sha256 digest in
+both compose files and in the `ec-temporal` user unit:
+
+```text
+temporalio/temporal:1.9.1@sha256:ad4c82c97bd12b417d1ea942610dbcd511afb250c4d5ed26c694009533df447e
+```
+
+- Version: 1.9.1 (server 1.32.0, UI 2.54.1) - the build that was running when
+  the pin landed.
+- Digest: resolved from the registry on 2026-11-12 and matched against the
+  running container's own image digest.
+- The `latest` tag pointed at a different digest on that day, so the tag alone
+  was not a pin.
+- `latest` is not permitted. To test another build, edit the image line in the
+  compose file or in the user unit; the pinned reference is the default.
+
 ## Compose Validation
 
 Validate the schedule-related profiles before starting workers:

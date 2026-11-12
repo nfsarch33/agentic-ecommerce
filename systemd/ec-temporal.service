@@ -1,0 +1,18 @@
+# The user unit for the Temporal dev server. Install it as
+# %h/.config/systemd/user/ec-temporal.service, then daemon-reload and restart
+# the unit. The image is pinned by version tag and sha256 digest, and
+# --pull=never keeps the running build exactly the pinned one.
+[Unit]
+Description=agentic-ecommerce Temporal dev server (persistent db on ext4, replaces the hand-started container)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStartPre=/usr/bin/bash -c 'mkdir -p %h/.local/state/ec-temporal'
+ExecStart=/usr/bin/podman run --rm --replace --name ec-temporal-u --pull=never --user 0:0 -p 127.0.0.1:7233:7233 -p 127.0.0.1:8233:8233 -v %h/.local/state/ec-temporal:/state docker.io/temporalio/temporal:1.9.1@sha256:ad4c82c97bd12b417d1ea942610dbcd511afb250c4d5ed26c694009533df447e server start-dev --ip 0.0.0.0 --port 7233 --ui-port 8233 --db-filename /state/temporal.db --namespace default
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=90
+
+[Install]
+WantedBy=default.target
