@@ -11,7 +11,10 @@ signal contract, and determinism rules, see `docs/temporal-workflow-specs.md`.
 ## Services
 
 - `temporal`: Temporal CLI dev server with SQLite persistence in the
-  `ec-temporaldata` or `temporal-data` compose volume.
+  `ec-temporaldata` or `temporal-data` compose volume. The image is pinned by
+  version tag and sha256 digest - both compose files and the `ec-temporal`
+  user unit carry the same reference, and the pin record is in
+  `docs/agent-schedules.md`.
 - `temporal` Web UI: served by the dev server on
   `http://127.0.0.1:${TEMPORAL_UI_HOST_PORT:-8233}`.
 - `temporal-worker`: backend worker under the `temporal-worker` profile. It
