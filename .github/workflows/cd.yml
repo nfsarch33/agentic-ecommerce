@@ -77,8 +77,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
+          cache: false
 
       - name: Run tests
         run: go test -race ./...
@@ -134,8 +133,6 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-${{ matrix.binary }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.determine-env.outputs.environment }}-${{ matrix.binary }}
-          cache-from: type=gha,scope=${{ matrix.binary }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.binary }}
 
   terraform-plan:
     name: Terraform plan
