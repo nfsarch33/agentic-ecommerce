@@ -35,8 +35,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
+          cache: false
 
       - name: Download Go modules
         run: go mod download
@@ -90,8 +89,6 @@ jobs:
             TARGET=mc-api
             COMMIT=${{ github.sha }}
           tags: agentic-ecommerce:${{ github.sha }}
-          cache-from: type=gha,scope=ci-mc-api
-          cache-to: type=gha,mode=max,scope=ci-mc-api
 
       - name: Build wc-sync image
         uses: docker/build-push-action@v7
@@ -103,8 +100,6 @@ jobs:
             TARGET=wc-sync
             COMMIT=${{ github.sha }}
           tags: agentic-ecommerce:${{ github.sha }}-wc-sync
-          cache-from: type=gha,scope=ci-wc-sync
-          cache-to: type=gha,mode=max,scope=ci-wc-sync
 
       - name: Build content-worker image
         uses: docker/build-push-action@v7
@@ -116,8 +111,6 @@ jobs:
             TARGET=content-worker
             COMMIT=${{ github.sha }}
           tags: agentic-ecommerce:${{ github.sha }}-content-worker
-          cache-from: type=gha,scope=ci-content-worker
-          cache-to: type=gha,mode=max,scope=ci-content-worker
 
       - name: Build agent-worker image
         uses: docker/build-push-action@v7
@@ -129,8 +122,6 @@ jobs:
             TARGET=agent-worker
             COMMIT=${{ github.sha }}
           tags: agentic-ecommerce:${{ github.sha }}-agent-worker
-          cache-from: type=gha,scope=ci-agent-worker
-          cache-to: type=gha,mode=max,scope=ci-agent-worker
 
       - name: Build temporal-worker image
         uses: docker/build-push-action@v7
@@ -142,8 +133,6 @@ jobs:
             TARGET=temporal-worker
             COMMIT=${{ github.sha }}
           tags: agentic-ecommerce:${{ github.sha }}-temporal-worker
-          cache-from: type=gha,scope=ci-temporal-worker
-          cache-to: type=gha,mode=max,scope=ci-temporal-worker
 
       - name: Verify image sizes under 30MB
         run: |
