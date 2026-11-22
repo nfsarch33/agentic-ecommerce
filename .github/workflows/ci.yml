@@ -156,6 +156,7 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
+          cache: false
 
       - name: Scan wc-sync image with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
@@ -166,6 +167,7 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
+          cache: false
 
       - name: Scan content-worker image with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
@@ -176,6 +178,7 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
+          cache: false
 
       - name: Scan agent-worker image with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
@@ -186,6 +189,7 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
+          cache: false
 
       - name: Scan temporal-worker image with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
@@ -196,3 +200,4 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
+          cache: false
