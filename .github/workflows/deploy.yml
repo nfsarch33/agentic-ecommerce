@@ -13,6 +13,9 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # build-push-action uploads a .dockerbuild record artifact on every build;
+  # the build summary still shows in the job summary (Actions storage, 24 Nov).
+  DOCKER_BUILD_RECORD_UPLOAD: false
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
