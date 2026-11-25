@@ -17,6 +17,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # This repository is public: CI runs on standard GitHub-hosted runners only.
+  # A self-hosted runner would execute a fork's pull request on its own machine.
+  runner-labels:
+    name: Runner labels
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - run: bash scripts/check-runner-labels.sh --self-test
+      - run: bash scripts/check-runner-labels.sh
+
   go:
     name: Go gates
     runs-on: ubuntu-24.04
